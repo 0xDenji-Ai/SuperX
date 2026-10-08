@@ -1,12 +1,12 @@
 # Release channels
 
-SuperX uses one source tree and one version sequence, with two distribution channels. GitHub is the project home for code, downloads, documentation and support. The Chrome Web Store distributes versions that have completed browser acceptance.
+SuperX uses one source tree and one version sequence, with two distribution channels. GitHub is the project home for code, downloads, documentation and support. The Chrome Web Store provides the stable installation channel with Chrome-managed updates; acceptance results and remaining checks are recorded separately.
 
 ## Choose a channel
 
 | Channel | Who it serves | Installation and updates |
 | --- | --- | --- |
-| Chrome Web Store — Stable | People who want the tested version | Install from the verified store listing; Chrome manages updates |
+| Chrome Web Store — Stable | Chrome users who want store installation and automatic updates | Install from the verified store listing; Chrome manages updates |
 | GitHub Releases — Preview | People who want the newest changes and can report problems | Download the attached extension ZIP, load it unpacked and update it manually |
 | GitHub Releases — Stable archive | People who need a particular tested release or its source | Download the same installation ZIP used for that store release, plus source and checksums |
 
@@ -29,7 +29,7 @@ Use these destinations on the README, website and store support entry:
 
 | Entry | Destination |
 | --- | --- |
-| Install stable | The actual Chrome Web Store listing |
+| Install stable | `https://chromewebstore.google.com/detail/superx/clcflilaihhnnglfamdblhopokpnlioo` |
 | Website | `https://superx.vip/` |
 | Source | `https://github.com/bwjoke/SuperX` |
 | Get the latest preview | `https://github.com/bwjoke/SuperX/releases`, with explicitly labelled previews and direct installation links in their notes |
@@ -53,7 +53,7 @@ The workflow refuses to overwrite a published release. CI also produces reviewab
 
 ## Promote the same candidate to stable
 
-1. Select an existing candidate version, complete clean Chrome/Edge installation and upgrade acceptance, and record the evidence. Test the candidate that will actually be uploaded, including direct Key setup, remembered-Key restoration after restart, session-only expiry, clear/replacement cancellation and language switches.
+1. Select an existing candidate version, complete its Chrome core installation and upgrade acceptance, and record the evidence. Track Edge acceptance, session-only expiry, credential migration, clear/replacement cancellation and other advanced checks separately; record any untested scope rather than inferring it passed. Test the candidate that will actually be uploaded.
 2. Download its versioned installation ZIP from the release and verify its SHA-256 against the published checksum. Upload that exact ZIP to create the first Chrome Web Store item, or update the existing item on later releases. Do not upload the source ZIP or rebuild a different package under the same tag.
 3. Keep the GitHub release labelled Preview while the store reviews it. Record the status as submitted, approved or published; these are different states. The dashboard can defer publication after approval if a coordinated release is wanted.
 4. Once the same version is actually available from the store, verify the installed version and listing, then change that GitHub release from Pre-release to Stable and mark it Latest. Preserve its tag, installation files and hashes. This is a deliberate maintainer action, not an automatic result of merging a PR.
@@ -75,7 +75,7 @@ For each promotion, record this information in its release notes or release repo
 
 ## Moving between installations
 
-An unpacked GitHub installation does not become a store installation automatically. In the current preparation there is no store public key in the manifest, so its development ID can differ from the eventual store ID. Settings and remembered Keys belong to the extension's storage and are not automatically migrated between different IDs or browser profiles. Removing an extension clears its local storage.
+An unpacked GitHub installation does not become a store installation automatically. Its development ID can differ from the published store ID, `clcflilaihhnnglfamdblhopokpnlioo`. Settings and remembered Keys belong to the extension's storage and are not automatically migrated between different IDs or browser profiles. Removing an extension clears its local storage.
 
 When switching channels, keep any custom prompt text you need, disable the old installation to avoid duplicate paid analysis, install the desired channel and configure its Key. Do not promise a seamless migration until it has been tested with the real store item. A future explicit settings export should exclude credentials; it is not currently implemented.
 
@@ -91,19 +91,23 @@ Until Discussions is enabled, the **Usage question** issue form provides a suppo
 
 On October 7, 2026, [bwjoke/SuperX](https://github.com/bwjoke/SuperX) and [0.7.26 Preview](https://github.com/bwjoke/SuperX/releases/tag/v0.7.26) were published. The release uses reviewed commit `254cade96e210e3faef4ca7e08fb67f6bc8c8e90`; its 76-file public source excludes the independently maintained website. Local and exported-source validation passed 642 tests, and both [CI](https://github.com/bwjoke/SuperX/actions/runs/37581481369) and [release packaging](https://github.com/bwjoke/SuperX/actions/runs/37581507805) succeeded on GitHub. The anonymous installation download matches the accepted ZIP byte for byte. Private vulnerability reporting is enabled. The website's GitHub, Preview download and Issues entries are live, and [privacy/](https://superx.vip/privacy/) serves its own bilingual policy without signing in.
 
+On October 8, 2026, the [Chrome Web Store listing](https://chromewebstore.google.com/detail/superx/clcflilaihhnnglfamdblhopokpnlioo) was verified as publicly available at version 0.7.26, item ID `clcflilaihhnnglfamdblhopokpnlioo`. The Google-delivered CRX contains 30 files versus 29 in the accepted GitHub ZIP. All non-manifest files are byte-identical; the store adds `_metadata/verified_contents.json` and only `update_url` to the manifest. CRX and ZIP are different package formats, so whole-package hashes are not compared as equal. The user confirmed store installation, explanations, Fact Check, Key saving and restoration after restart. The existing [0.7.26 release](https://github.com/bwjoke/SuperX/releases/tag/v0.7.26) is now Stable/Latest; its tag and original attachments remain unchanged. The [latest stable ZIP](https://github.com/bwjoke/SuperX/releases/latest/download/SuperX.zip) provides the accepted installation package. There is no newer Preview currently; future previews use the Releases list.
+
 The user confirmed core functionality on Windows 11 Chrome: upgrade operation, Key restoration after restarting Windows, fresh-profile Enable/Remember Key/Auto defaults, no-Key history, first own-Key save, explanations and Fact Check, independent language switches, Auto original/translation following, and three comment drafts with copying into Notepad.
 
-Edge installed-extension acceptance and advanced manual credential, storage, deletion and race scenarios remain pending, as recorded in [the checklist](RELEASE_CHECKLIST.md). They are disclosed limitations of this GitHub Preview; broader acceptance and store review belong to Stable promotion. The Chrome Web Store listing is Coming Soon, and there is no Stable/Latest release yet. Documentation status updates do not move the published tag or replace its installation/source attachments.
+Edge installed-extension acceptance and advanced manual credential, storage, deletion and race scenarios remain pending, as recorded in [the checklist](RELEASE_CHECKLIST.md). Store publication and the confirmed Chrome core checks do not mark these other scenarios as passed. Stable describes the distribution channel; it does not certify every browser or the correctness of model output. Documentation status updates do not move the published tag or replace its installation/source attachments.
 
 ## 简体中文
 
-一套源码，两条渠道：GitHub 是代码、文档、最新预览下载与 Issues 支持的项目主页；Chrome 商店负责经过安装验收的稳定版。GitHub 同时保留稳定版的原始安装包与源码存档。
+一套源码，两条渠道：GitHub 是代码、文档、预览下载与 Issues 支持的项目主页；Chrome 商店提供稳定安装与自动更新。GitHub 同时保留稳定版的原始安装包与源码存档，验收结果及待测范围单独记录。
 
 所有安装候选都使用递增的数字版本及匹配 tag，预览身份用 GitHub 的 Pre-release 标记表示。新 tag 只生成预览草稿，审核附件后再主动公开；通过验收的同一份 ZIP 原样上传商店，商店实际发布后再将对应 GitHub Release 晋升为 Stable/Latest，保留附件和 SHA-256。GitHub `latest` 不含预览版，最新预览入口必须单独指向 Releases 列表。
 
 GitHub 解压版需要手动更新，商店版由 Chrome 更新。当前不同安装 ID 之间不自动迁移 Key 和设置，切换渠道时先停用旧版，避免重复分析。官网 [superx.vip](https://superx.vip/) 独立维护，源码不纳入扩展开源；隐私路径保持为 `/privacy/`。仓库、下载、Issues 及商店入口以实际公开状态为准，最终安装验收需单独完成。
 
-0.7.26 已由用户在 Windows 11 Chrome 中确认升级正常、重启电脑后 Key 恢复、新配置默认值、无 Key 浏览历史、首次保存 Key 后的解释与 Fact Check、两项语言独立切换、Auto 跟随原文／翻译，以及三条评论的生成与复制。首次 GitHub Preview 可以依据这些核心验收及本地校验发布，同时明确说明 Edge 实际安装及更深入的手工存储／迁移等检查仍待完成。它不代表商店稳定版或所有浏览器已验收。
+2026-10-08 已核验 Chrome 商店公开版本为 0.7.26，商品 ID 为 `clcflilaihhnnglfamdblhopokpnlioo`。Google CRX 与 GitHub ZIP 的非 manifest 文件逐字节相同，仅多出商店验证元数据，manifest 仅增加 `update_url`。用户已确认商店安装后的解释、Fact Check、Key 保存及重启恢复正常；GitHub 同一版本已晋升 Stable/Latest，标签及附件保持不变。目前没有更新的预览版，后续仍通过 Releases 列表提供。
+
+此前用户已在 Windows 11 Chrome 中确认升级、新配置默认值、无 Key 浏览历史、语言独立切换、Auto 跟随原文／翻译及评论生成复制。Edge 实际安装及更深入的手工存储／迁移等检查仍待完成，商店上架不能代替这些检查，也不保证模型回答准确。
 
 ## Official references
 

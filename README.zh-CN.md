@@ -2,7 +2,7 @@
 
 **读懂 X，边刷边核查。**
 
-[官网](https://superx.vip/) · [下载预览版](https://github.com/bwjoke/SuperX/releases/download/v0.7.26/SuperX.zip) · [支持](https://github.com/bwjoke/SuperX/issues) · [English](README.md) · [隐私说明](PRIVACY.md)
+[Chrome 商店安装](https://chromewebstore.google.com/detail/superx/clcflilaihhnnglfamdblhopokpnlioo) · [下载 ZIP](https://github.com/bwjoke/SuperX/releases/latest/download/SuperX.zip) · [官网](https://superx.vip/) · [支持](https://github.com/bwjoke/SuperX/issues) · [English](README.md) · [隐私说明](PRIVACY.md)
 
 SuperX 是 Chrome / Edge 扩展，通过 xAI API 自动解释当前可见的 X 帖子，并核查其中的事实主张。答案流式显示在紧贴信息流的完整右栏，跟随 X 的主题、字体和界面语言，保留左栏及原帖布局。
 
@@ -16,15 +16,16 @@ SuperX 是 Chrome / Edge 扩展，通过 xAI API 自动解释当前可见的 X �
 
 | 入口 | 用途 | 当前状态 |
 | --- | --- | --- |
-| Chrome 商店 · 稳定版 | 经过验收，由 Chrome 安装与更新 | 即将上线（Coming Soon） |
-| [预览版 0.7.26 ZIP](https://github.com/bwjoke/SuperX/releases/download/v0.7.26/SuperX.zip) | 最新预览版，解压安装 ZIP，手动更新 | 已发布 |
+| [Chrome 商店 · 稳定版](https://chromewebstore.google.com/detail/superx/clcflilaihhnnglfamdblhopokpnlioo) | 通过 Chrome 安装与更新 | 0.7.26 已上架 |
+| [稳定版 0.7.26 ZIP](https://github.com/bwjoke/SuperX/releases/download/v0.7.26/SuperX.zip) | 同一版本的手动安装包 | 已发布 |
+| [最新预览版](https://github.com/bwjoke/SuperX/releases) | 有更新候选时提供，手动更新 | 目前没有更新的预览版 |
 | [所有 GitHub Releases](https://github.com/bwjoke/SuperX/releases) | 各版本安装包、源码及校验值 | 已开放 |
-| 最新稳定版 ZIP | 与最新商店稳定版相同的安装包 | 首次稳定发布后提供 |
+| [最新稳定版 ZIP](https://github.com/bwjoke/SuperX/releases/latest/download/SuperX.zip) | GitHub 最新稳定版本的安装包 | 0.7.26 |
 | [GitHub Issues](https://github.com/bwjoke/SuperX/issues) | 两个渠道共用的报错、需求与支持入口 | 已开放 |
 
-[SuperX.vip](https://superx.vip/) 是官网；[bwjoke/SuperX](https://github.com/bwjoke/SuperX) 是代码、更新说明和支持的项目主页。预览与稳定版使用同一套源码和递增版本，商店版可以落后于更新的预览版。**GitHub 的 Latest 指最新稳定版，不包含预览版。** 最新预览版请从 Releases 列表下载，发布和晋升流程见 [双渠道说明](docs/RELEASE_CHANNELS.md)。[0.7.26 预览版](https://github.com/bwjoke/SuperX/releases/tag/v0.7.26) 已发布，Chrome 商店版即将上线。
+[SuperX.vip](https://superx.vip/) 是官网；[bwjoke/SuperX](https://github.com/bwjoke/SuperX) 是代码、更新说明和支持的项目主页。预览与稳定版使用同一套源码和递增版本，商店版可以落后于更新的预览版。**GitHub 的 Latest 指最新稳定版，不包含预览版。** 预览版入口为 Releases 列表，发布和晋升流程见 [双渠道说明](docs/RELEASE_CHANNELS.md)。[0.7.26 稳定版](https://github.com/bwjoke/SuperX/releases/tag/v0.7.26) 已在 Chrome 商店和 GitHub 发布；目前没有更新的预览版。
 
-0.7.26 核心功能已由用户在 Windows 11 Chrome 中确认正常；Edge 实际安装验收仍待完成。
+0.7.26 核心功能已由用户在 Windows 11 Chrome 中确认正常；商店安装后的解释、Fact Check、Key 保存及重启恢复也已确认。Edge 实际安装验收仍待完成。
 
 ## 功能
 
@@ -43,14 +44,20 @@ AI 功能当前仅支持自备 xAI API Key；本机浏览历史无需 Key。X �
 
 需要桌面版 Chrome 或 Chromium 版 Edge 120 及以上，以及具有相应模型、搜索工具权限的 xAI API 账号。
 
-商店页面上线后，它会成为稳定版安装入口。尝试 GitHub 预览版或手动安装历史版本时：
+Chrome 优先从商店安装：
+
+1. 打开 [Chrome 商店中的 SuperX](https://chromewebstore.google.com/detail/superx/clcflilaihhnnglfamdblhopokpnlioo)，点击「添加至 Chrome」。
+2. 打开 SuperX 设置，填写自己的 xAI API Key，保存并启用 SuperX，再打开 X。
+3. Chrome 自动管理扩展更新。如果已有解压安装的旧副本，先停用它以避免重复分析，再单独配置商店副本。
+
+使用 Edge 或从 GitHub 手动安装时：
 
 1. 打开 [**Releases**](https://github.com/bwjoke/SuperX/releases) 列表，选择标明预览或稳定状态的版本，下载附加的 `SuperX-<版本>.zip` 或内容完全相同的 `SuperX.zip` 并解压。也可下载源码，使用其中的 `extension/` 文件夹。
 2. 打开 `chrome://extensions` 或 `edge://extensions`，开启「开发者模式」。
 3. 点击「加载已解压的扩展程序」，选择包含 `manifest.json` 的文件夹。
 4. 在 SuperX 设置中填写自己的 xAI API Key。保存、启用 SuperX 并刷新 X。
 
-升级时，将新版文件覆盖到实际加载的目录，重新加载扩展，再刷新 X。请把该目录放在固定位置。GitHub 自动生成的源码压缩包与 Release 附加的扩展安装包不同。
+手动安装版升级时，将新版文件覆盖到实际加载的目录，重新加载扩展，再刷新 X。请把该目录放在固定位置。GitHub 自动生成的源码压缩包与 Release 附加的扩展安装包不同。
 
 从解压版切到商店版属于另一安装，当前不自动迁移设置与 Key。请先停用旧安装，避免重复分析，再配置新安装。
 

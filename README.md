@@ -2,7 +2,7 @@
 
 **Understand X. Fact-check as you scroll.**
 
-[Website](https://superx.vip/) · [Download Preview](https://github.com/bwjoke/SuperX/releases/download/v0.7.26/SuperX.zip) · [Support](https://github.com/bwjoke/SuperX/issues) · [简体中文](README.zh-CN.md) · [Privacy](PRIVACY.md)
+[Install for Chrome](https://chromewebstore.google.com/detail/superx/clcflilaihhnnglfamdblhopokpnlioo) · [Download ZIP](https://github.com/bwjoke/SuperX/releases/latest/download/SuperX.zip) · [Website](https://superx.vip/) · [Support](https://github.com/bwjoke/SuperX/issues) · [简体中文](README.zh-CN.md) · [Privacy](PRIVACY.md)
 
 SuperX is a Chrome / Edge extension that uses the xAI API to explain visible X posts and check their factual claims. Answers stream into a right-hand column that follows X's theme, font and interface language. Your left navigation and original feed keep their layout.
 
@@ -16,15 +16,16 @@ The extension uses Manifest V3 and plain JavaScript. Installation needs no build
 
 | Entry | Purpose | Current status |
 | --- | --- | --- |
-| Chrome Web Store — Stable | Tested releases, installed and updated by Chrome | Coming Soon |
-| [Preview 0.7.26 ZIP](https://github.com/bwjoke/SuperX/releases/download/v0.7.26/SuperX.zip) | Newest preview; extract the installation ZIP and update manually | Published |
+| [Chrome Web Store — Stable](https://chromewebstore.google.com/detail/superx/clcflilaihhnnglfamdblhopokpnlioo) | Install and update through Chrome | 0.7.26 published |
+| [Stable 0.7.26 ZIP](https://github.com/bwjoke/SuperX/releases/download/v0.7.26/SuperX.zip) | The same release for manual installation | Published |
+| [Latest Preview](https://github.com/bwjoke/SuperX/releases) | Newer candidates when available; update manually | No newer Preview currently |
 | [All GitHub Releases](https://github.com/bwjoke/SuperX/releases) | Versioned installation packages, source and checksums | Available |
-| Latest stable ZIP | The exact installation package of the latest stable release | Available after the first stable release |
+| [Latest stable ZIP](https://github.com/bwjoke/SuperX/releases/latest/download/SuperX.zip) | Installation package of the latest stable GitHub release | 0.7.26 |
 | [GitHub Issues](https://github.com/bwjoke/SuperX/issues) | Bugs, feature requests and shared support for both channels | Open |
 
-[SuperX.vip](https://superx.vip/) is the website; [bwjoke/SuperX](https://github.com/bwjoke/SuperX) is the project home for source, release notes and support. Preview and Stable use the same code and version sequence; the store can lag behind newer previews. **GitHub's Latest entry means the latest stable release, not the latest preview.** Use the Releases list for the newest preview. See [release channels](docs/RELEASE_CHANNELS.md) for the release and promotion process. [0.7.26 Preview](https://github.com/bwjoke/SuperX/releases/tag/v0.7.26) is published; the Chrome Web Store listing is coming soon.
+[SuperX.vip](https://superx.vip/) is the website; [bwjoke/SuperX](https://github.com/bwjoke/SuperX) is the project home for source, release notes and support. Preview and Stable use the same code and version sequence; the store can lag behind newer previews. **GitHub's Latest entry means the latest stable release, not the latest preview.** Use the Releases list for previews. See [release channels](docs/RELEASE_CHANNELS.md) for the release and promotion process. [0.7.26 Stable](https://github.com/bwjoke/SuperX/releases/tag/v0.7.26) is available from the Chrome Web Store and GitHub; there is currently no newer Preview.
 
-The user confirmed 0.7.26's core features on Chrome for Windows 11. Installed Edge acceptance remains pending.
+The user confirmed 0.7.26's core features on Chrome for Windows 11, and confirmed explanations, Fact Check and Key saving/restoration after installing the store version. Installed Edge acceptance remains pending.
 
 ## Features
 
@@ -43,14 +44,20 @@ SuperX's AI features require your own xAI API Key; local browsing history works 
 
 Requirements: desktop Chrome or Chromium-based Edge, version 120 or newer, and an xAI API account with access to your chosen model and search tools.
 
-When the store listing is live, it will be the stable installation entry. To try a GitHub preview or install an archived version manually:
+For Chrome, install from the store:
+
+1. Open [SuperX in the Chrome Web Store](https://chromewebstore.google.com/detail/superx/clcflilaihhnnglfamdblhopokpnlioo) and choose **Add to Chrome**.
+2. Open SuperX settings, add your own xAI API Key and save. Enable SuperX and open X.
+3. Chrome manages extension updates. If replacing an unpacked installation, disable the old copy first to avoid duplicate analysis and configure the store copy separately.
+
+For Edge or a manual GitHub installation:
 
 1. Open [**Releases**](https://github.com/bwjoke/SuperX/releases), choose a labelled Preview or Stable release and download the attached `SuperX-<version>.zip` or identical `SuperX.zip`. Extract it. Alternatively, download the source and use its `extension/` folder.
 2. Open `chrome://extensions` or `edge://extensions` and enable **Developer mode**.
 3. Choose **Load unpacked** and select the folder containing `manifest.json`.
 4. Open SuperX settings, add your own xAI API Key and save. Enable SuperX and refresh X.
 
-To upgrade, replace the files in the folder you actually loaded, reload the extension, then refresh X. Keep that folder in a permanent location. The GitHub-generated source archive is different from the extension ZIP attached to a release.
+To upgrade a manual installation, replace the files in the folder you actually loaded, reload the extension, then refresh X. Keep that folder in a permanent location. The GitHub-generated source archive is different from the extension ZIP attached to a release.
 
 Switching from an unpacked installation to the store is a separate installation, with no automatic settings or Key migration currently provided. Disable the old installation first to avoid duplicate analysis, then configure the new one.
 

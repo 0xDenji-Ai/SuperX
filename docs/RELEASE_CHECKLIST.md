@@ -6,7 +6,7 @@ This checklist separates reproducible checks from manual browser and service che
 
 - [x] Review and publish the first public Git commit: no credentials, browser profiles, private screenshots, workstation paths, temporary SDKs or unrelated production files. The independently maintained website and internal store-preparation files are excluded. The `v0.7.26` release contains 76 public source files.
 - [x] Enable GitHub private vulnerability reporting and confirm the process in `SECURITY.md`; the repository API reports it enabled.
-- [x] Review the English and Chinese README installation steps and configured release/support URLs. Preview download and Issues are publicly available; the stable ZIP remains unavailable until a stable release exists.
+- [x] Review the English and Chinese README installation steps and configured release/support URLs. The initial Preview download and Issues were publicly available; 0.7.26 is now available through the store and GitHub Stable/Latest as recorded below.
 - [x] Run local validation: 642 automated tests passed. Validate and package the exported public source separately; its installation ZIP matches the working-source build byte for byte.
 - [x] Confirm the installation ZIP has `manifest.json` at its root, includes project and Marked license notices, and matches the generated inventory and SHA-256 checksums.
 - [x] Review release notes, privacy documentation and API billing information; verify the independently hosted privacy page separately.
@@ -17,7 +17,14 @@ This checklist separates reproducible checks from manual browser and service che
 
 The first Preview uses the completed Chrome core checks plus local validation. It does not require every Edge or advanced manual scenario below to be complete. Keep untested scenarios explicit; a Preview is not Stable or store approval.
 
-## Before Stable / store submission
+## 0.7.26 store publication and remaining checks — 2026-10-08
+
+- [x] Verify the public [Chrome Web Store listing](https://chromewebstore.google.com/detail/superx/clcflilaihhnnglfamdblhopokpnlioo), item ID `clcflilaihhnnglfamdblhopokpnlioo`, and version 0.7.26.
+- [x] Compare the delivered CRX with the accepted GitHub ZIP: 30 versus 29 files, all non-manifest files byte-identical, only store verification metadata added, and the manifest differs only by `update_url`. This is a file-content comparison, not a claim that CRX and ZIP hashes match.
+- [x] Confirm actual Chrome store installation with the user: explanations, Fact Check, Key saving and restoration after restart work.
+- [x] Promote the existing 0.7.26 GitHub release to Stable/Latest and verify the anonymous latest ZIP download. Preserve the tag, installation/source attachments and accepted installation SHA-256.
+
+Stable records the completed Chrome publishing and core functional checks. It does not turn the remaining scenarios below into passes or guarantee model accuracy.
 
 - [ ] Complete the remaining installed-browser acceptance for the supported release scope, including Edge and advanced credential/storage scenarios below. Record any unsupported or deferred scope explicitly.
 - [ ] Match the Chrome Web Store privacy declarations to the actual website content, post URLs, author labels and API credential handling. No remote executable code is used.
@@ -40,6 +47,8 @@ The user confirmed the following on installed Chrome on Windows 11. These are us
 
 Edge's actual installed-extension checks remain pending. Successful Key restoration does not mean the user inspected ciphertext, IndexedDB, old-format migration or failure races; those scenarios retain their separate evidence and pending manual status.
 
+The user separately confirmed the store-installed 0.7.26 on 2026-10-08: installation, explanation, Fact Check, Key saving and restart restoration passed. This confirmation does not extend the earlier language, clipboard or history checks to a new store-installation test.
+
 ## Detailed installed-browser checks
 
 Complete each scenario in a fresh browser profile, separately from an upgrade of an existing installation. A Pending entry has not been established by the core check above, even if an automated fixture covers it. Enter API credentials yourself in the extension settings; never include them in an issue, screenshot, recording, or test fixture.
@@ -52,6 +61,8 @@ Complete each scenario in a fresh browser profile, separately from an upgrade of
 | Fresh-profile defaults: Enable and Remember Key on; both languages Auto | User-confirmed pass | Pending |
 | Save and reopen settings; choices remain | Pending | Pending |
 | First save of an own Key allows enabled explanation and Fact Check | User-confirmed pass | Pending |
+| Install 0.7.26 from the Chrome Web Store; explanation and Fact Check work | User-confirmed pass (2026-10-08) | Pending |
+| Store-installed Key saves and restores after restart | User-confirmed pass (2026-10-08) | Pending |
 | No API requests without a usable Key; inspect the no-Key failure path | Pending | Pending |
 | Remembered Key restores after Windows/browser restart without re-entry | User-confirmed pass (Windows reboot) | Pending |
 | Inspect saved ciphertext, absence of a plaintext local API Key and the separate IndexedDB encryption key | Pending | Pending |
@@ -95,9 +106,9 @@ Use the shared [release channels](RELEASE_CHANNELS.md) procedure. GitHub hosts p
 6. Complete browser acceptance for a chosen candidate. Verify its published installation ZIP checksum and upload that exact package to the store. Keep its GitHub status Preview during review.
 7. Once the same version is actually available from the store, verify it and promote the existing GitHub release to Stable/Latest without replacing attachments or moving its tag. Update the channel entries and release report together.
 
-- [ ] Record the store item ID, review status, published version and actual listing URL; approval alone is not publication.
-- [ ] Confirm the stable `SuperX.zip` alias has the same bytes as the versioned ZIP and is included in its checksums.
-- [ ] Check the latest-preview entry separately from GitHub's stable `/releases/latest` entry.
+- [x] Record the public store item ID, version 0.7.26 and actual listing URL; the page is published, not merely approved.
+- [x] Confirm the stable `SuperX.zip` alias has the same bytes as the versioned ZIP, is included in its checksums and is available through `/releases/latest/download/SuperX.zip`.
+- [x] Keep the Preview entry on the Releases list separately from Stable/Latest. No newer Preview is available at this promotion.
 - [ ] Check that store support points to the repository's public Issues and privacy links use the verified public policy URL.
 - [ ] Keep manual update and channel-switch instructions accurate; do not promise automatic Key/settings migration across installation IDs.
 
