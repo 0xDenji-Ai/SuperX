@@ -2866,6 +2866,87 @@ test('an already-running rate-limit error cannot replace the account pause or cl
   assert.equal(page.cards()[0].testShadow.querySelector('.note').textContent,'','Recovery clears stale paused notices on retained failed cards');assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,3);
 });
 
+const capacityFailure={stage:'verify',code:'SERVER',errorCode:'API_CAPACITY'};
+
+test('model capacity errors pause automatic posts, retain safe HTTP200 evidence and allow only one confirmed manual probe',()=>{
+  const page=fixture({postCount:3});page.articles[2].rect={...page.articles[2].rect,top:1200,bottom:1480};page.configure();
+  const [first,second]=page.port.sent.filter(message=>message.type==='ANALYZE');
+  page.port.onMessage.emit({type:'UPDATE',requestId:second.requestId,phase:'verify',text:'Sibling findings are still streaming.',usage:{total_tokens:21}});page.flush();
+  page.port.onMessage.emit({type:'ERROR',requestId:first.requestId,code:'API_CAPACITY',verificationFailure:capacityFailure,usage:{total_tokens:13},requestDiagnostics:{failureOrigin:'stream',transportStatus:200,providerMessage:'The model is temporarily at capacity.'}});page.flush();
+  const failed=page.cards()[0].testShadow,sibling=page.cards()[1].testShadow;
+  assert.equal(failed.querySelector('.status').textContent,ui.t('error.apiCapacity','zh-CN'));assert.equal(failed.querySelector('.status').title,ui.t('error.apiCapacity','zh-CN'));
+  const detail=failed.querySelector('.diagnostics').textContent;assert.match(detail,/"transportStatus": 200/);assert.match(detail,/"errorCode": "API_CAPACITY"/);assert.match(detail,/"code": "SERVER"/);assert.doesNotMatch(detail,/402|spending_limit|UNKNOWN/);assertTokenCount(page.cards()[0],13);
+  assert.equal(sibling.querySelector('.answer').textContent,'Sibling findings are still streaming.');assertTokenCount(page.cards()[1],21);
+  page.articles[2].rect={...page.articles[2].rect,top:650,bottom:930};page.intersect();page.tick(10000);
+  const waiting=page.cards()[2].testShadow;assert.equal(waiting.querySelector('.status').textContent,ui.t('error.apiCapacity','zh-CN'));assert.equal(waiting.querySelector('.retry').hidden,false);assert.equal(waiting.querySelector('.note').textContent,'');
+  assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,2);
+  failed.querySelector('.retry').emit('click');page.flush();let requests=page.port.sent.filter(message=>message.type==='ANALYZE');assert.equal(requests.length,3);assert.equal(requests[2].force,true);
+  assert.equal(waiting.querySelector('.retry').disabled,true);assert.equal(sibling.querySelector('.generate-comments').disabled,true);waiting.querySelector('.retry').emit('click');page.tick();assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,3);
+  page.port.onMessage.emit({type:'RESULT',requestId:second.requestId,apiCapacityRecovered:true,result:{provider:'api',text:'Sibling completed.',verificationStatus:'completed',usage:{total_tokens:30},sources:[]}});page.flush();page.tick();assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,3,'A sibling success is not the manual probe');
+  page.port.onMessage.emit({type:'RESULT',requestId:requests[2].requestId,result:{provider:'api',text:'Manual result without recovery confirmation.',verificationStatus:'completed',sources:[]}});page.flush();page.tick();assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,3);assert.equal(waiting.querySelector('.retry').disabled,false);
+  failed.querySelector('.retry').emit('click');requests=page.port.sent.filter(message=>message.type==='ANALYZE');
+  page.port.onMessage.emit({type:'RESULT',requestId:requests[3].requestId,apiCapacityRecovered:true,result:{provider:'api',text:'Confirmed capacity recovery.',verificationStatus:'completed',sources:[]}});page.flush();page.tick();
+  assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,5);assert.equal(sibling.querySelector('.answer').textContent,'Sibling completed.');assertTokenCount(page.cards()[1],30);assert.deepEqual(page.writes,[]);
+});
+
+test('capacity partial results keep their category and failed or cached probes cannot resume automatic requests',()=>{
+  for(const scenario of ['partial-error','partial-result','empty-result','cached-probe','failed-probe']){
+    const page=fixture({postCount:2});page.articles[1].rect={...page.articles[1].rect,top:1200,bottom:1480};page.configure();const first=page.port.sent.find(message=>message.type==='ANALYZE'),card=page.cards()[0].testShadow;
+    const partial={provider:'api',text:scenario==='empty-result'?'':'Available checked findings.',verificationStatus:'incomplete',verificationFailure:capacityFailure,usage:{total_tokens:8},sources:[]};
+    if(scenario==='partial-error')page.port.onMessage.emit({type:'ERROR',requestId:first.requestId,code:'API_CAPACITY',verificationFailure:capacityFailure,partialResult:partial});
+    else page.port.onMessage.emit({type:'RESULT',requestId:first.requestId,result:partial});page.flush();
+    assert.equal(card.querySelector('.status').textContent,ui.t('error.apiCapacity','zh-CN'),scenario);assert.doesNotMatch(card.querySelector('.diagnostics').textContent,/UNKNOWN|"httpStatus": 402/);assertTokenCount(page.cards()[0],8);
+    if(scenario==='cached-probe'||scenario==='failed-probe'){
+      card.querySelector('.retry').emit('click');const probe=page.port.sent.filter(message=>message.type==='ANALYZE')[1];
+      page.port.onMessage.emit(scenario==='cached-probe'?{type:'RESULT',requestId:probe.requestId,cached:true,apiCapacityRecovered:true,result:{provider:'api',text:'Cached findings.',verificationStatus:'completed',sources:[]}}:{type:'ERROR',requestId:probe.requestId,code:'API_CAPACITY',verificationFailure:capacityFailure});page.flush();
+    }
+    page.articles[1].rect={...page.articles[1].rect,top:400,bottom:680};page.intersect();page.tick(100000);
+    assert.equal(page.cards()[1].testShadow.querySelector('.status').textContent,ui.t('error.apiCapacity','zh-CN'),scenario);
+    assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,scenario.endsWith('probe')?2:1,scenario);
+  }
+});
+
+test('capacity CONFIG pauses before dispatch and ordinary settings cannot recover it or change the selected model',()=>{
+  const page=fixture({postCount:1}),settings={...core.DEFAULT_SETTINGS,interfaceLanguage:'en'};
+  page.port.onMessage.emit({type:'CONFIG',settings,ready:true,apiCapacityPaused:true});page.flush();page.intersect();page.tick();
+  assert.equal(page.port.sent.some(message=>message.type==='ANALYZE'),false);assert.equal(page.port.sent.some(message=>message.type==='HISTORY_VISIT'),true);
+  const card=page.cards()[0].testShadow;assert.equal(card.querySelector('.status').textContent,ui.t('error.apiCapacity','en'));assert.equal(card.querySelector('.retry').disabled,false);
+  page.port.onMessage.emit({type:'CONFIG',settings:{...settings,verifyPrompt:'A new future style.'},ready:true,apiCapacityPaused:false});page.flush();page.tick(10000);
+  assert.equal(page.port.sent.some(message=>message.type==='ANALYZE'),false,'A same-model settings acknowledgment is not a recovery probe');
+  page.port.onMessage.emit({type:'CONFIG',settings:{...settings,apiModel:'grok-4.5'},ready:true,apiCapacityPaused:false});page.flush();page.tick();
+  assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,1);assert.equal(page.port.sent.some(message=>['SET_LANGUAGE','SAVE_SETTINGS','SET_PROVIDER'].includes(message.type)),false);
+});
+
+test('capacity and account pauses recover independently and budget guidance takes priority',()=>{
+  for(const recovered of ['API_CAPACITY_RECOVERED','API_BUDGET_RECOVERED']){
+    const page=fixture({postCount:1});page.port.onMessage.emit({type:'CONFIG',settings:core.DEFAULT_SETTINGS,ready:true,apiBudgetPaused:true,apiCapacityPaused:true});page.flush();page.intersect();page.tick();
+    const card=page.cards()[0].testShadow;assert.equal(card.querySelector('.status').textContent,ui.t('error.apiUsage','zh-CN'));assert.equal(card.querySelector('.note').textContent,ui.t('note.accountLimit','zh-CN'));
+    page.port.onMessage.emit({type:recovered});page.flush();page.tick();assert.equal(page.port.sent.some(message=>message.type==='ANALYZE'),false);
+    assert.equal(card.querySelector('.status').textContent,ui.t(recovered==='API_CAPACITY_RECOVERED'?'error.apiUsage':'error.apiCapacity','zh-CN'));
+    if(recovered==='API_BUDGET_RECOVERED')assert.equal(card.querySelector('.note').textContent,'');
+    page.port.onMessage.emit({type:recovered==='API_CAPACITY_RECOVERED'?'API_BUDGET_RECOVERED':'API_CAPACITY_RECOVERED'});page.flush();page.tick();assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,1);
+  }
+});
+
+test('comment capacity failures preserve completed findings and recover through one explicit comment probe',()=>{
+  const page=fixture({postCount:2});page.articles[1].rect={...page.articles[1].rect,top:1200,bottom:1480};page.configure();const first=page.port.sent.find(message=>message.type==='ANALYZE');
+  page.port.onMessage.emit({type:'RESULT',requestId:first.requestId,result:{provider:'api',text:'Completed findings remain visible.',verificationStatus:'completed',usage:{total_tokens:17},sources:[]}});page.flush();
+  const card=page.cards()[0].testShadow;card.querySelector('.generate-comments').emit('click');const draft=page.port.sent.find(message=>message.type==='GENERATE_COMMENTS');
+  page.port.onMessage.emit({type:'COMMENT_ERROR',requestId:draft.requestId,code:'API_CAPACITY',verificationFailure:capacityFailure});page.flush();assert.equal(card.querySelector('.comment-status').textContent,ui.t('error.apiCapacity','zh-CN'));assert.equal(card.querySelector('.answer').textContent,'Completed findings remain visible.');assertTokenCount(page.cards()[0],17);
+  page.articles[1].rect={...page.articles[1].rect,top:400,bottom:680};page.intersect();page.tick(10000);assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,1);
+  card.querySelector('.generate-comments').emit('click');const probe=page.port.sent.filter(message=>message.type==='GENERATE_COMMENTS')[1];assert.equal(probe.force,true);assert.equal(page.cards()[1].testShadow.querySelector('.retry').disabled,true);
+  page.port.onMessage.emit({type:'COMMENT_RESULT',requestId:probe.requestId,comments:['First idea.','Second idea.','Third idea.'],apiCapacityRecovered:true});page.flush();page.tick();
+  assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,2);assert.equal(card.querySelector('.answer').textContent,'Completed findings remain visible.');assert.deepEqual(page.writes,[]);
+});
+
+test('a capacity notice does not cancel accepted requests and API-only pauses do not affect Build',()=>{
+  const page=fixture();page.configure();const requests=page.port.sent.filter(message=>message.type==='ANALYZE');
+  page.port.onMessage.emit({type:'UPDATE',requestId:requests[0].requestId,phase:'verify',text:'Retained live findings.',usage:{total_tokens:6}});page.flush();const before=page.port.sent.length;
+  page.port.onMessage.emit({type:'CONFIG',settings:core.DEFAULT_SETTINGS,ready:true,apiCapacityPaused:true});page.flush();
+  assert.equal(page.port.sent.slice(before).some(message=>['CANCEL','CANCEL_ALL'].includes(message.type)),false);assert.equal(page.cards()[0].testShadow.querySelector('.answer').textContent,'Retained live findings.');assertTokenCount(page.cards()[0],6);
+  const build=fixture();build.port.onMessage.emit({type:'CONFIG',settings:{...core.DEFAULT_SETTINGS,provider:'build'},ready:true,apiCapacityPaused:true});build.flush();build.tick();assert.equal(build.port.sent.filter(message=>message.type==='ANALYZE').length,2);
+});
+
 test('an active port disconnect marks only interrupted work and reconnect never automatically replays it',()=>{
   const page=fixture({postCount:2});page.configure();
   const requests=page.port.sent.filter(message=>message.type==='ANALYZE');assert.equal(requests.length,2);

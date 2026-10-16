@@ -11,7 +11,7 @@
   let xUILanguage = UI.normalizeLanguage(document.documentElement.getAttribute('lang') || navigator.language || 'en');
   let uiLanguage = UI.resolveLanguage('auto',xUILanguage);
   const t = (key, vars) => UI.t(key, uiLanguage, vars);
-  let settings = Core.DEFAULT_SETTINGS, providerReady = false, connected = false, port, used = 0, limited = false, pauseReason = '', collapsed = false;
+  let settings = Core.DEFAULT_SETTINGS, providerReady = false, connected = false, port, used = 0, limited = false, pauseReason = '', capacityPaused = false, collapsed = false;
   let lastPath = location.pathname, scanTimer, reconnectTimer, handshakeTimer, needsPageRefresh = false;
   let hasConfig=false,workerSleeping=false,awaitingConfig=false,reconnectFailures=0;
   const wakeActions=new Map(),wakeControls=new Map();
@@ -253,14 +253,14 @@
     const output=Core.readerOutput(result.text,{final:true});
     const invalid=output.kind!=='content';
     return {invalid,result:invalid?{...result,text:'',sources:[],verificationStart:undefined,
-      verificationStatus:'incomplete',verificationFailure:{stage:'verify',code:'INCOMPLETE'}}:{...result,text:output.text}};
+      verificationStatus:'incomplete',verificationFailure:isCapacityFailure(undefined,result.verificationFailure)?result.verificationFailure:{stage:'verify',code:'INCOMPLETE'}}:{...result,text:output.text}};
   }
   function setVerificationFailure(entry,value,incomplete) {
     const valid=value?.stage==='verify'&&typeof value.code==='string'&&Object.hasOwn(verificationFailureKeys,value.code),code=valid?value.code:'UNKNOWN';
     const failure={stage:'verify',code};
     if(valid) {
       if(['max_output_tokens','content_filter'].includes(value.reason))failure.reason=value.reason;
-      if(['API_INCOMPLETE','API_STREAM_INTERRUPTED','API_STREAM_ERROR','API_LANGUAGE_MISMATCH','RATE_LIMIT','API_ERROR','CANCELED','TIMEOUT'].includes(value.errorCode))failure.errorCode=value.errorCode;
+      if(['API_INCOMPLETE','API_STREAM_INTERRUPTED','API_STREAM_ERROR','API_LANGUAGE_MISMATCH','API_CAPACITY','RATE_LIMIT','API_ERROR','CANCELED','TIMEOUT'].includes(value.errorCode))failure.errorCode=value.errorCode;
       if(Number.isSafeInteger(value.httpStatus)&&value.httpStatus>=100&&value.httpStatus<=599)failure.httpStatus=value.httpStatus;
       const providerCode=Core.apiFailureProviderCode(value.providerCode);
       if(providerCode)failure.providerCode=providerCode;
@@ -270,13 +270,14 @@
   }
   function refreshVerificationFailure(entry) {
     const failure=entry.verificationFailure;
-    entry.ui.status.title=failure?t(verificationFailureKeys[failure.code]):'';
+    const failureKey=isCapacityFailure(undefined,failure)?'error.apiCapacity':verificationFailureKeys[failure?.code];
+    entry.ui.status.title=failure?t(failureKey):'';
     const requestDiagnostics=Core.sanitizedRequestDiagnostics(entry.requestDiagnostics),commentRequestDiagnostics=Core.sanitizedRequestDiagnostics(entry.commentRequestDiagnostics);
     if(failure||requestDiagnostics||commentRequestDiagnostics) {
       // Structured provider traces pass the same bounded sanitizer used by
       // the worker. No request body, credentials or arbitrary fields enter UI.
       const diagnostic={...failure,...(requestDiagnostics?{requestDiagnostics}:{}),...(commentRequestDiagnostics?{commentRequestDiagnostics}:{})};
-      entry.ui.diagnosticText.textContent=(failure?t(verificationFailureKeys[failure.code])+'\n':'')+JSON.stringify(diagnostic,null,2);
+      entry.ui.diagnosticText.textContent=(failure?t(failureKey)+'\n':'')+JSON.stringify(diagnostic,null,2);
       entry.ui.diagnostics.hidden=false;entry.verificationDiagnostics=true;
     } else if(entry.verificationDiagnostics) {
       entry.ui.diagnosticText.textContent='';entry.ui.diagnostics.hidden=true;entry.verificationDiagnostics=false;
@@ -294,6 +295,7 @@
     entry.ui.box.setAttribute('aria-busy',String(active));
   }
   function errorKey(code,failure) {
+    if(isCapacityFailure(code,failure))return 'error.apiCapacity';
     if(code?.startsWith('BUILD_'))return ({BUILD_LOGIN_REQUIRED:'build.login',BUILD_CANCEL_UNCONFIRMED:'build.cancelUnconfirmed',BUILD_CONNECTION_REQUIRED:'build.codeRequired',BUILD_AUTH_FAILED:'build.codeInvalid',BUILD_UNAVAILABLE:'build.missing',BUILD_DISCONNECTED:'build.missing',BUILD_NATIVE_MISSING:'build.missing',BUILD_VERSION_UNSUPPORTED:'build.unsupported',BUILD_MODEL_UNSUPPORTED:'build.unsupported',BUILD_EFFORT_UNSUPPORTED:'build.unsupported'})[code]||'build.unavailable';
     const http=failure?.httpStatus,provider=Core.apiFailureProviderCode(failure?.providerCode);
     if(code==='API_ERROR'){
@@ -336,6 +338,22 @@
       if(pending.status==='new')refreshCard(pending);
     }
   }
+  function isCapacityFailure(code,failure) {return code==='API_CAPACITY'||failure?.errorCode==='API_CAPACITY';}
+  function pauseForCapacity(code,failure) {
+    if(settings.provider!=='api'||!isCapacityFailure(code,failure))return false;
+    capacityPaused=true;queue.clear();
+    for(const pending of entries.values())if(pending.status==='new')refreshCard(pending);
+    return true;
+  }
+  function capacityProbeActive() {return capacityPaused&&[...requests.values()].some(request=>request.capacityProbe);}
+  function recoverCapacityPause(request,successful,message) {
+    if(!successful||message.cached||(message.apiCapacityRecovered!==true&&message.result?.apiCapacityRecovered!==true)||!request.force||request.provider!=='api'||settings.provider!=='api'||request.apiModel!==settings.apiModel)return;
+    clearCapacityPause();
+  }
+  function clearCapacityPause() {
+    capacityPaused=false;
+    for(const pending of entries.values())refreshCard(pending);
+  }
   function setCollapsed(value,persist=false) {
     collapsed=Boolean(value);
     if(collapsed) {
@@ -370,6 +388,10 @@
       }
       return;
     }
+    if(message.type==='API_CAPACITY_RECOVERED') {
+      if(settings.provider==='api'&&capacityPaused){clearCapacityPause();tick();}
+      return;
+    }
     if(message.type==='HISTORY_ACK') {
       const batch=historyPending.get(message.batchId);if(!batch)return;
       historyPending.delete(message.batchId);
@@ -390,7 +412,7 @@
       const allChanged=JSON.stringify(previousOptions)!==JSON.stringify(nextOptions);
       const presentationOrPromptsOnlyChanged=!allChanged&&JSON.stringify(settings)!==JSON.stringify(nextSettings);
       const identity=value=>JSON.stringify([value.provider,value.apiModel,value.apiReasoningEffort,value.buildModel,value.buildReasoningEffort,value.buildTransport,value.buildPort,value.language,value.webSearch,value.xSearch,value.apiVerification,value.explanationMode]);
-      const previous=identity(settings);
+      const previous=identity(settings),previousApiModel=settings.apiModel;
       const wasReady=providerReady;
       settings=nextSettings;
       configureHistory(message.historyEnabled,message.historyEpoch);
@@ -408,6 +430,8 @@
       if(!presentationOrPromptsOnlyChanged){queue.clear();if(pauseReason!=='error.apiUsage'){limited=false;pauseReason='';}}
       if(settings.provider==='api'&&message.apiBudgetPaused===true){limited=true;pauseReason='error.apiUsage';queue.clear();}
       else if((message.apiBudgetPaused===false||settings.provider!=='api')&&pauseReason==='error.apiUsage')clearAccountPause();
+      if(settings.provider==='api'&&message.apiCapacityPaused===true){capacityPaused=true;queue.clear();}
+      else if(settings.provider!=='api'||message.apiCapacityPaused===false&&previousApiModel!==settings.apiModel)clearCapacityPause();
       if(allChanged || !settings.enabled || (wasReady&&!providerReady)) {
         post({type:'CANCEL_ALL'});requests.clear();
         for(const entry of entries.values()) {
@@ -463,8 +487,8 @@
         if(Array.isArray(values)&&values.length===3&&values.every(text=>typeof text==='string'&&text.trim()&&Array.from(text).length<=280)&&new Set(values).size===3){entry.comments=values;entry.commentStatus='done';}
         else {entry.commentStatus='error';entry.commentError='status.failed';}
       }
-      if(message.type==='COMMENT_ERROR'){captureUsage(entry,'comments',message,request,false);entry.commentStatus='error';entry.commentError=errorKey(message.code,message.verificationFailure);entry.commentRequestDiagnostics=Core.sanitizedRequestDiagnostics(message.requestDiagnostics);pauseForAccountLimit(message.verificationFailure);}
-      if(message.type==='COMMENT_RESULT')recoverAccountPause(request,entry.commentStatus==='done',message);
+      if(message.type==='COMMENT_ERROR'){captureUsage(entry,'comments',message,request,false);entry.commentStatus='error';entry.commentError=errorKey(message.code,message.verificationFailure);entry.commentRequestDiagnostics=Core.sanitizedRequestDiagnostics(message.requestDiagnostics);pauseForAccountLimit(message.verificationFailure);pauseForCapacity(message.code,message.verificationFailure);}
+      if(message.type==='COMMENT_RESULT'){recoverAccountPause(request,entry.commentStatus==='done',message);recoverCapacityPause(request,entry.commentStatus==='done',message);}
       refreshComments(entry);refreshVerificationFailure(entry);
       if(message.type==='COMMENT_RESULT'&&entry.commentStatus==='done'&&entry.ui.box.scrollTo) {
         const end=Math.max(entry.ui.comments.offsetTop+entry.ui.comments.offsetHeight,entry.ui.tokenUsage.offsetTop+entry.ui.tokenUsage.offsetHeight);
@@ -517,11 +541,12 @@
       const incomplete=['incomplete','failed'].includes(result.verificationStatus);
       entry.requestDiagnostics=Core.sanitizedRequestDiagnostics(result.requestDiagnostics||message.requestDiagnostics);
       setVerificationFailure(entry,result.verificationFailure,incomplete);
-      const sourceKey=incomplete?'status.incomplete':result.searched?'status.searched':'status.unverified';
+      const sourceKey=isCapacityFailure(undefined,entry.verificationFailure)?'error.apiCapacity':incomplete?'status.incomplete':result.searched?'status.searched':'status.unverified';
       entry.cached=!invalid&&Boolean(message.cached);status(entry,sourceKey);
       note(entry,invalid?'':incomplete?partialResultNote(result):'note.possibleErrors');entry.ui.retry.hidden=false;
       if(pauseForAccountLimit(entry.verificationFailure))note(entry,'note.accountLimit');
       else recoverAccountPause(request,!invalid&&!incomplete,message);
+      pauseForCapacity(undefined,entry.verificationFailure);recoverCapacityPause(request,!invalid&&!incomplete,message);
       finishRequest(message);
     }
     if(message.type==='ERROR') {
@@ -532,7 +557,7 @@
       const failure=message.verificationFailure||partialResult?.verificationFailure;
       entry.requestDiagnostics=Core.sanitizedRequestDiagnostics(message.requestDiagnostics||partialResult?.requestDiagnostics);
       setVerificationFailure(entry,failure,Boolean(failure||partialVerification));
-      entry.status='error';entry.errorCode=message.code;status(entry,partialVerification?'status.incomplete':errorKey(message.code,entry.verificationFailure));note(entry,'');entry.ui.retry.hidden=false;
+      entry.status='error';entry.errorCode=message.code;status(entry,isCapacityFailure(message.code,entry.verificationFailure)?'error.apiCapacity':partialVerification?'status.incomplete':errorKey(message.code,entry.verificationFailure));note(entry,'');entry.ui.retry.hidden=false;
       if(['API_LANGUAGE_MISMATCH','BUILD_LANGUAGE_MISMATCH'].includes(message.code)){entry.cached=false;entry.result=null;renderAnswer(entry,'',true);renderSources(entry,[]);}
       if(partialResult){entry.verificationStart=partialResult.verificationStart;renderAnswer(entry,partialResult.text,true);renderSources(entry,partialResult.sources||[]);note(entry,retained.invalid?'':partialResultNote(partialResult));}
       if(!entry.verificationFailure&&!entry.requestDiagnostics&&!entry.commentRequestDiagnostics) {
@@ -548,6 +573,7 @@
         for(const pending of entries.values())if(pending.status==='new')refreshCard(pending);
       }
       if(pauseForAccountLimit(entry.verificationFailure))note(entry,'note.accountLimit');
+      pauseForCapacity(message.code,entry.verificationFailure);
       finishRequest(message);
     }
     refreshCard(entry);scheduleLayout();
@@ -555,7 +581,7 @@
   }
   // API launch spacing belongs to the shared background scheduler; this page
   // submits all visible work without waiting for earlier answers to finish.
-  function finishRequest(message) { if(!['RESULT','ERROR','COMMENT_RESULT','COMMENT_ERROR'].includes(message.type))return;requests.delete(message.requestId); }
+  function finishRequest(message) { if(!['RESULT','ERROR','COMMENT_RESULT','COMMENT_ERROR'].includes(message.type))return;const request=requests.get(message.requestId);requests.delete(message.requestId);if(request?.capacityProbe)for(const entry of entries.values())refreshCard(entry); }
   function affectsDisplayedPostBody(target) {
     // X can keep both bodies mounted and switch visibility through their own
     // or ancestor attributes. Media and metric styling do not change the body.
@@ -840,14 +866,14 @@
     entry.ui.retry.textContent=t('common.retry');entry.ui.generateComments.textContent=t('common.generateComments');
     entry.ui.diagnosticLabel.textContent=t('common.diagnostics');
     if(entry.status==='new') {
-      status(entry,!connected&&!workerSleeping?(needsPageRefresh?'status.refreshRequired':'status.connectionLost'):limited?(pauseReason||'status.disabled'):!providerReady?needsProvider():entry.pending?'status.queued':'status.waiting');
-      note(entry,limited?(pauseReason==='status.rateLimited'?'note.rateLimited':pauseReason==='error.apiUsage'?'note.accountLimit':'note.settingsRequired'):'');
-      entry.ui.retry.hidden=!limited;
+      status(entry,!connected&&!workerSleeping?(needsPageRefresh?'status.refreshRequired':'status.connectionLost'):limited&&pauseReason==='error.apiUsage'?pauseReason:capacityPaused?'error.apiCapacity':limited?(pauseReason||'status.disabled'):!providerReady?needsProvider():entry.pending?'status.queued':'status.waiting');
+      note(entry,limited&&pauseReason==='error.apiUsage'?'note.accountLimit':capacityPaused?'':limited?(pauseReason==='status.rateLimited'?'note.rateLimited':'note.settingsRequired'):'');
+      entry.ui.retry.hidden=!limited&&!capacityPaused;
     }
     else if(entry.statusKey)status(entry,entry.statusKey,entry.statusVars);
     if(entry.noteKey)entry.ui.note.textContent=t(entry.noteKey);
     if(entry.cached)entry.ui.status.prepend(document.createTextNode(t('status.cached')+' · '));
-    entry.ui.retry.disabled=!usableConnection()||!settings.enabled||['queued','running'].includes(entry.status)||wakeActions.has(wakeKey(entry,'analysis'));
+    entry.ui.retry.disabled=!usableConnection()||!settings.enabled||['queued','running'].includes(entry.status)||capacityProbeActive()||wakeActions.has(wakeKey(entry,'analysis'));
     if(!providerReady)entry.ui.retry.hidden=true;
     else if(['done','error'].includes(entry.status))entry.ui.retry.hidden=false;
     refreshComments(entry);syncLoading(entry);refreshUsage(entry);
@@ -857,7 +883,7 @@
   }
   function tick() {
     recordHistory();
-    if(document.hidden || collapsed || !settings.enabled || !providerReady || limited || !supportedPage())return;
+    if(document.hidden || collapsed || !settings.enabled || !providerReady || limited || capacityPaused || !supportedPage())return;
     if(currentRailBounds().hidden){pauseUnseenRailQueue();return;}
     if(location.pathname!==lastPath){scheduleScan();return;}
     if(!connected){
@@ -931,6 +957,7 @@
     if(force&&afterWake(entry,'analysis',()=>submit(entry,true)))return;
     if(!settings.enabled||!connected||!providerReady||currentRailBounds().hidden)return;
     if(awaitingConfig)return;
+    if(settings.provider==='api'&&capacityPaused&&(!force||capacityProbeActive()))return;
     if([...requests.values()].some(r=>r.entry===entry&&r.task==='analysis'))return;
     if(force&&!clearComments(entry))return;
     // Cancelling a comment can synchronously invalidate the shared port.
@@ -939,9 +966,9 @@
     entry.pending=false;queue.remove(entry.post.id);entry.status='queued';entry.phase='';entry.verificationBase='';entry.verificationStarted=false;entry.verificationStart=undefined;entry.result=null;entry.cached=false;entry.requestDiagnostics=undefined;setVerificationFailure(entry,null,false);status(entry,'status.queued');entry.ui.retry.hidden=true;
     if(force||!entry.ui.answer.textContent)renderAnswer(entry,'',true);
     renderSources(entry,[]);note(entry,'');entry.ui.diagnostics.hidden=true;entry.ui.diagnosticText.textContent='';
-    requests.set(requestId,{...requestSnapshot(entry,requestId),force:force===true});
+    requests.set(requestId,{...requestSnapshot(entry,requestId),force:force===true,capacityProbe:settings.provider==='api'&&capacityPaused&&force===true});
     entry.analysisUsage=null;captureUsage(entry,'analysis',{},requests.get(requestId),false,true);refreshUsage(entry);
-    post({type:'ANALYZE',requestId,post:entry.post,force});scheduleLayout();
+    post({type:'ANALYZE',requestId,post:entry.post,force});if(capacityPaused)for(const pending of entries.values())refreshCard(pending);scheduleLayout();
   }
   function clearComments(entry) {
     for(const [id,request] of requests)if(request.entry===entry&&request.task==='comments'){
@@ -953,21 +980,23 @@
   }
   function generateComments(entry) {
     if(['queued','running'].includes(entry.commentStatus))return;
+    if(capacityProbeActive())return;
     if(collapsed||document.hidden||!supportedPage()||currentRailBounds().hidden||!entry.article.isConnected||!eligibility(entry.article).eligible)return;
     if(afterWake(entry,'comments',()=>generateComments(entry)))return;
     if(!connected||!providerReady||awaitingConfig)return;
     const requestId=crypto.randomUUID(),request=requestSnapshot(entry,requestId,'comments');
     request.analysis={text:entry.latestText||'',verificationStatus:entry.result?.verificationStatus||'unverified',warning:entry.result?.warning||'',sources:entry.result?.sources||[]};
-    const force=entry.commentStatus==='error'||entry.comments.length>0;
+    const force=entry.commentStatus==='error'||entry.comments.length>0||settings.provider==='api'&&capacityPaused;
     request.force=force;
+    request.capacityProbe=settings.provider==='api'&&capacityPaused;
     entry.commentStatus='queued';entry.commentError='';entry.commentRequestDiagnostics=undefined;entry.copyStatusKey='';entry.ui.copyStatus.textContent='';requests.set(requestId,request);captureUsage(entry,'comments',{},request,false,true);refreshComments(entry);refreshVerificationFailure(entry);
-    post({type:'GENERATE_COMMENTS',requestId,post:entry.post,analysis:request.analysis,force});scheduleLayout();
+    post({type:'GENERATE_COMMENTS',requestId,post:entry.post,analysis:request.analysis,force});if(capacityPaused)for(const pending of entries.values())refreshCard(pending);scheduleLayout();
   }
   function refreshComments(entry) {
     const ui=entry.ui;if(!ui)return;
     const loading=['queued','running'].includes(entry.commentStatus);
     ui.generateComments.textContent=t(entry.commentStatus==='error'?'common.retryComments':'common.generateComments');
-    ui.generateComments.hidden=!usableConnection()||entry.status==='unsupported';ui.generateComments.disabled=loading||!usableConnection()||wakeActions.has(wakeKey(entry,'comments'));
+    ui.generateComments.hidden=!usableConnection()||entry.status==='unsupported';ui.generateComments.disabled=loading||!usableConnection()||capacityProbeActive()||wakeActions.has(wakeKey(entry,'comments'));
     ui.comments.setAttribute('aria-label',t('aria.comments'));ui.comments.setAttribute('aria-busy',String(loading));
     ui.commentHeading.textContent=t('common.comments');ui.commentHint.textContent=t('comments.copyHint');ui.commentHeading.hidden=ui.commentHint.hidden=!entry.comments.length;
     if(entry.copyStatusKey)ui.copyStatus.textContent=t(entry.copyStatusKey);

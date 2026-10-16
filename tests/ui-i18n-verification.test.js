@@ -19,6 +19,17 @@ test('local diagnostics controls are translated and explain bounded session-only
   assert.doesNotMatch(ui.t('verification.unknown','en'),/service did not return/i);
 });
 
+test('model capacity pauses have a distinct localized retry instruction without account or Key advice',()=>{
+  for(const language of ui.SUPPORTED_LANGUAGES){
+    const value=ui.catalog[language]['error.apiCapacity'];assert.ok(value?.trim(),language);
+    if(language!=='en')assert.notEqual(value,ui.catalog.en['error.apiCapacity']);
+    assert.ok(Array.from(value).length<180,language);assert.doesNotMatch(value,/API Key|quota|budget|balance|UNKNOWN|余额|额度|预算|密钥/i);
+    assert.notEqual(value,ui.t('error.apiUsage',language));assert.notEqual(value,ui.t('error.apiKeyRejected',language));
+  }
+  assert.match(ui.t('error.apiCapacity','en'),/temporarily busy.*paused.*manually later/);
+  assert.match(ui.t('error.apiCapacity','zh-CN'),/模型暂时繁忙.*暂停.*稍后手动重试/);
+});
+
 test('English UI consistently names the feature fact check while internal localization keys stay compatible', () => {
   assert.equal(ui.t('common.verification','en'),'Fact check');
   assert.equal(ui.t('status.verifying','en'),'Fact-checking…');

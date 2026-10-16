@@ -1185,3 +1185,118 @@ test('a WKE marker in a string error summary does not infer an HTTP status or an
     assert.equal(error.requestDiagnostics.failureOrigin,'stream');assert.equal(error.requestDiagnostics.transportStatus,200);assert.match(error.requestDiagnostics.providerMessage,/WKE=/);return true;
   });
 });
+
+const capacitySummary='The model is currently at capacity due to high demand. Please try again in a few minutes, or use a higher service tier for priority processing: https://docs.x.ai/developers/advanced-api-usage/priority-processing';
+
+test('the observed HTTP 200 capacity error is a local classification without an invented provider code or status',async()=>{
+  const events=[
+    {type:'error',error:capacitySummary},
+    {type:'error',data:{error:capacitySummary}},
+    {type:'response.failed',response:{status:'failed',error:{message:capacitySummary}}},
+    {type:'response.completed',response:{status:'failed',error:{message:capacitySummary}}}
+  ];
+  for(const event of events) {
+    let calls=0;
+    await assert.rejects(api.run(post,{...settings,language:'en'},'synthetic-key',{fetchImpl:async()=>{calls++;return {...responseFor([event]),status:200};}}),error=>{
+      assert.equal(error.code,'API_CAPACITY');
+      assert.deepEqual(error.verificationFailure,{stage:'verify',code:'SERVER',errorCode:'API_CAPACITY'});
+      assert.equal(error.requestDiagnostics.failureOrigin,'stream');assert.equal(error.requestDiagnostics.transportStatus,200);
+      assert.equal(error.requestDiagnostics.providerMessage,capacitySummary);assert.equal(error.partialResult,undefined);
+      assert.equal(api.publicError(error).code,'API_CAPACITY');assert.doesNotMatch(api.publicError(error).error,/priority|credits|subscription|429|529/i);return true;
+    });
+    assert.equal(calls,1);
+  }
+});
+
+test('official structured overload types and HTTP 529 preserve their real evidence',async()=>{
+  for(const providerCode of ['overloaded_error','service_unavailable_error']) {
+    assert.equal(core.apiFailureProviderCode(providerCode),providerCode);
+    for(const event of [
+      {type:'error',error:{type:providerCode,message:'Busy.'}},
+      {type:'response.failed',response:{error:{code:providerCode,message:'Busy.'}}}
+    ])await assert.rejects(api.run(post,settings,'synthetic-key',{fetchImpl:async()=>({...responseFor([event]),status:200})}),error=>{
+      assert.equal(error.code,'API_CAPACITY');assert.deepEqual(error.verificationFailure,{stage:'verify',code:'SERVER',errorCode:'API_CAPACITY',providerCode});return true;
+    });
+  }
+  for(const [status,body]of [[529,{}],[503,{error:capacitySummary}],[503,capacitySummary],[500,{error:{type:'service_unavailable_error'}}]]) {
+    let calls=0;
+    await assert.rejects(api.run(post,settings,'synthetic-key',{fetchImpl:async()=>{calls++;return new Response(JSON.stringify(body),{status});}}),error=>{
+      assert.equal(error.code,'API_CAPACITY');assert.equal(error.verificationFailure.code,'SERVER');assert.equal(error.verificationFailure.httpStatus,status);
+      assert.equal(error.requestDiagnostics.failureOrigin,'http');assert.equal(error.requestDiagnostics.transportStatus,status);return true;
+    });
+    assert.equal(calls,1);
+  }
+});
+
+test('capacity errors reject with a real partial Fact Check and server billing rather than returning a success',async()=>{
+  const usage={input_tokens:11,output_tokens:7,total_tokens:18};let calls=0;const updates=[];
+  await assert.rejects(api.run(post,{...settings,language:'en'},'synthetic-key',{onUpdate:update=>updates.push(update),fetchImpl:async()=>{
+    calls++;return {...responseFor([
+      {type:'response.output_text.delta',delta:'Evidence conflicts with that date.'},
+      {type:'response.failed',response:{status:'failed',model:'grok-4.3',usage,error:{message:capacitySummary}}}
+    ]),status:200};
+  }}),error=>{
+    assert.equal(error.code,'API_CAPACITY');assert.equal(error.usage.total_tokens,18);assert.equal(error.model,'grok-4.3');
+    assert.equal(error.partialResult.text,'Evidence conflicts with that date.');assert.equal(error.partialResult.verificationStatus,'incomplete');
+    assert.deepEqual(error.partialResult.verificationFailure,{stage:'verify',code:'SERVER',errorCode:'API_CAPACITY'});
+    assert.deepEqual(error.partialResult.usageByStage,{verify:usage});assert.equal(error.partialResult.requestDiagnostics.providerMessage,capacitySummary);
+    assert.deepEqual(error.partialResult.requestDiagnostics,error.requestDiagnostics);assert.equal(updates.at(-1).verificationStatus,'incomplete');return true;
+  });
+  assert.equal(calls,1);
+});
+
+test('capacity prose or codes cannot override explicit access and rate-limit failures',async()=>{
+  for(const [status,category]of [[400,'ACCESS'],[401,'ACCESS'],[402,'ACCESS'],[403,'ACCESS'],[429,'RATE_LIMIT']]) {
+    await assert.rejects(api.run(post,settings,'synthetic-key',{fetchImpl:async()=>new Response(JSON.stringify({error:capacitySummary}),{status})}),error=>{
+      assert.equal(error.code,category==='RATE_LIMIT'?'RATE_LIMIT':'API_ERROR');assert.equal(error.verificationFailure.code,category);assert.equal(error.verificationFailure.httpStatus,status);return true;
+    });
+    await assert.rejects(api.run(post,settings,'synthetic-key',{fetchImpl:async()=>({...responseFor([{type:'error',httpStatus:status,error:{type:'overloaded_error',message:capacitySummary}}]),status:200})}),error=>{
+      assert.equal(error.code,category==='RATE_LIMIT'?'RATE_LIMIT':'API_ERROR');assert.equal(error.verificationFailure.code,category);assert.equal(error.verificationFailure.httpStatus,status);return true;
+    });
+  }
+  for(const [code,category]of [['invalid_api_key','ACCESS'],['spending_limit','ACCESS'],['unsupported_parameter','ACCESS'],['resource_exhausted','RATE_LIMIT'],['usage_limit_exceeded','RATE_LIMIT']]) {
+    await assert.rejects(api.run(post,settings,'synthetic-key',{fetchImpl:async()=>({...responseFor([{type:'error',error:{code,message:capacitySummary}}]),status:200})}),error=>{
+      assert.equal(error.code,category==='RATE_LIMIT'?'RATE_LIMIT':'API_ERROR');assert.equal(error.verificationFailure.code,category);assert.equal(error.verificationFailure.providerCode,code);return true;
+    });
+  }
+});
+
+test('generic retry prose, quoted capacity text and unknown structures do not invent a capacity failure',async()=>{
+  for(const message of ['Please try again in a few minutes.','The server is overloaded.','The model is currently at capacity due to high demand!',
+    'A source says: '+capacitySummary,JSON.stringify(capacitySummary),capacitySummary.toLowerCase()]) {
+    await assert.rejects(api.run(post,settings,'synthetic-key',{fetchImpl:async()=>({...responseFor([{type:'error',message}]),status:200})}),error=>{
+      assert.equal(error.code,'API_ERROR');assert.equal(error.verificationFailure.code,'UNKNOWN');return true;
+    });
+  }
+  await assert.rejects(api.run(post,settings,'synthetic-key',{fetchImpl:async()=>new Response(JSON.stringify({error:'The server is overloaded.'}),{status:500})}),error=>{
+    assert.equal(error.code,'API_ERROR');assert.equal(error.verificationFailure.code,'SERVER');return true;
+  });
+  await assert.rejects(api.run(post,settings,'synthetic-key',{fetchImpl:async()=>({...responseFor([{type:'error',untrusted:{message:capacitySummary,code:'overloaded_error'}}]),status:200})}),error=>{
+    assert.equal(error.code,'API_ERROR');assert.equal(error.verificationFailure.code,'UNKNOWN');return true;
+  });
+});
+
+test('reader and tool text cannot trigger capacity classification and input echoes remain redacted',async()=>{
+  const result=await api.run(post,{...settings,language:'en'},'synthetic-key',{fetchImpl:async()=>responseFor([
+    {type:'response.output_item.done',item:{type:'function_call',name:'web_search',arguments:JSON.stringify({message:capacitySummary,error:{type:'overloaded_error'}})}},
+    completed(capacitySummary)
+  ])});
+  assert.equal(result.text,capacitySummary);assert.equal(result.verificationStatus,'unverified');
+  await assert.rejects(api.run({...post,text:capacitySummary},settings,'synthetic-key',{fetchImpl:async()=>({...responseFor([{type:'error',error:capacitySummary}]),status:200})}),error=>{
+    assert.equal(error.code,'API_ERROR');assert.equal(error.verificationFailure.code,'UNKNOWN');assert.equal(error.requestDiagnostics.providerMessage,undefined);return true;
+  });
+});
+
+test('comment capacity failures expose neither partial JSON drafts nor an automatic retry',async()=>{
+  let calls=0;
+  await assert.rejects(api.generateComments(post,{...settings,language:'en'},'synthetic-key',{fetchImpl:async()=>{
+    calls++;return {...responseFor([{type:'response.output_text.delta',delta:'["Unfinished draft"'},{type:'error',error:capacitySummary}]),status:200};
+  }}),error=>{
+    assert.equal(error.code,'API_CAPACITY');assert.equal(error.partialText,undefined);assert.equal(error.partialResult,undefined);
+    assert.equal(error.requestDiagnostics.transportStatus,200);return true;
+  });
+  assert.equal(calls,1);
+  const publicFailure=api.publicError(Object.assign(new Error('PRIVATE_NATIVE_MESSAGE'),{code:'API_CAPACITY'}));
+  assert.equal(publicFailure.code,'API_CAPACITY');assert.doesNotMatch(publicFailure.error,/PRIVATE/);
+  assert.deepEqual(api.sanitizedVerificationFailure({stage:'verify',code:'SERVER',errorCode:'API_CAPACITY',providerCode:'service_unavailable_error'}),{stage:'verify',code:'SERVER',errorCode:'API_CAPACITY',providerCode:'service_unavailable_error'});
+});

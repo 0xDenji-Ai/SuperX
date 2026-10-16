@@ -13,6 +13,7 @@ const apiSlots = new Set();
 let queue = [], pumping = false, settings, cache = {}, quotas = {}, railStates = {}, revision = 0, cacheEpoch = 0;
 let ratePaused = false, queuePause, apiAccountPause, uiLanguage = UI.browserLanguage(globalThis);
 let budgetPauseWrites = Promise.resolve(), budgetPauseWriteVersion = 0, budgetPauseMayExist = false;
+let apiCapacityPause, capacityPauseWrites = Promise.resolve(), capacityPauseMayExist = false, capacityPauseWriteVersion = 0;
 let apiDiagnostics = [], apiDiagnosticsEpoch = 0, apiDiagnosticsReady = Promise.resolve(), apiDiagnosticsWrites = Promise.resolve();
 let quotaWrites = Promise.resolve(), cacheWrites = Promise.resolve(), railStateWrites = Promise.resolve(), uiLanguageWrites = Promise.resolve();
 let securityWrites = Promise.resolve(), securityPending = 0, securityGeneration = 0;
@@ -29,11 +30,13 @@ async function initialize() {
   // analysis, the account-spending pause or normal extension startup.
   apiDiagnosticsReady=loadAPIDiagnostics();
   const local = await chrome.storage.local.get(['settings','uiLanguage','apiKey','apiKeyEncrypted','apiKeyVault','rememberApiKey','buildConnectionEncrypted']);
-  const session = await chrome.storage.session.get(['quotas','railStates','uiLanguage','apiKey','cache','securityFault','apiBudgetPause']);
+  const session = await chrome.storage.session.get(['quotas','railStates','uiLanguage','apiKey','cache','securityFault','apiBudgetPause','apiCapacityPause']);
   settings = Core.normalizeSettings(local.settings);
   budgetPauseMayExist=session.apiBudgetPause!==undefined;
   const restoredPause=budgetPauseFromRecord(session.apiBudgetPause);
   if(restoredPause)apiAccountPause=restoredPause;
+  capacityPauseMayExist=session.apiCapacityPause!==undefined;
+  apiCapacityPause=capacityPauseFromRecord(session.apiCapacityPause);
   if(BuildKeyStore.envelopePresent(local.buildConnectionEncrypted)){
     try{const secret=await BuildKeyStore.open(local.buildConnectionEncrypted);if(validBuildSecret(secret))buildSecret=secret;}catch{/* Reconnect locally; API Key remains independent. */}
   }
@@ -183,7 +186,8 @@ async function publicConfig() {
   const historyConfig=history.config();
   if(settings.provider==='build')ensureBuildStatus();
   const apiBudgetPaused=settings.provider==='api'&&Boolean(apiAccountPause);
-  return {settings,ready:providerAllowsCalls(),keyState:status.keyState,apiBudgetPaused,...(apiBudgetPaused?{apiBudgetFailure:apiAccountPause.verificationFailure}:{}),...(settings.provider==='build'?{buildStatus:{...buildStatus,ready:buildReady()}}:{}),buildConnection:{configured:validBuildSecret(buildSecret),port:settings.buildPort},historyEnabled:historyConfig.enabled,historyEpoch:historyConfig.epoch};
+  const apiCapacityPaused=capacityPausedFor(settings);
+  return {settings,ready:providerAllowsCalls(),keyState:status.keyState,apiBudgetPaused,apiCapacityPaused,...(apiBudgetPaused?{apiBudgetFailure:apiAccountPause.verificationFailure}:{}),...(settings.provider==='build'?{buildStatus:{...buildStatus,ready:buildReady()}}:{}),buildConnection:{configured:validBuildSecret(buildSecret),port:settings.buildPort},historyEnabled:historyConfig.enabled,historyEpoch:historyConfig.epoch};
 }
 async function notifyHistoryChanged(){await chrome.runtime.sendMessage({type:'HISTORY_CHANGED',...history.config()}).catch(()=>{});}
 async function broadcastHistoryConfig(){
@@ -256,7 +260,7 @@ function requestMetadata(value,provider) {
   try{diagnostics=(Core.sanitizedRequestDiagnostics||GrokFirstAPI.sanitizedRequestDiagnostics)?.(value?.requestDiagnostics);}catch{/* Invalid diagnostic data is never forwarded. */}
   return diagnostics?{requestDiagnostics:diagnostics}:{};
 }
-const API_DIAGNOSTIC_CODES=new Set(['API_INCOMPLETE','API_STREAM_INTERRUPTED','API_STREAM_ERROR','API_LANGUAGE_MISMATCH','RATE_LIMIT','API_ERROR','CANCELED','TIMEOUT','COMMENTS_INVALID_RESPONSE']);
+const API_DIAGNOSTIC_CODES=new Set(['API_INCOMPLETE','API_STREAM_INTERRUPTED','API_STREAM_ERROR','API_LANGUAGE_MISMATCH','RATE_LIMIT','API_CAPACITY','API_ERROR','CANCELED','TIMEOUT','COMMENTS_INVALID_RESPONSE']);
 function pruneAPIDiagnostics(input,now=Date.now()) {
   return (Array.isArray(input)?input:[]).slice(0,1000).flatMap(entry=>{
     if(!entry||!API_DIAGNOSTIC_CODES.has(entry.code)||!Number.isSafeInteger(entry.recordedAt)||entry.recordedAt<0||entry.recordedAt>now||now-entry.recordedAt>=CACHE_TTL)return [];
@@ -460,9 +464,10 @@ chrome.runtime.onConnect.addListener(port => {
       const key=`${client.tabId}:${requestId}`;
       if(jobs.has(key)) return;
       const budgetProbe=snapshot.provider==='api'&&apiAccountPause&&message.force===true?apiAccountPause:undefined;
-      if(queuePausedFor(snapshot) && (message.force!==true||budgetProbe&&[...jobs.values(),...apiSlots].some(job=>job.budgetProbe&&job.settings.provider===snapshot.provider))) { const paused=queuePauseError(snapshot);report(paused.error,paused.code,paused.verificationFailure?{verificationFailure:paused.verificationFailure}:{});return; }
+      const capacityProbe=capacityPausedFor(snapshot)&&message.force===true?apiCapacityPause:undefined;
+      if(queuePausedFor(snapshot) && (message.force!==true||(budgetProbe||capacityProbe)&&[...jobs.values(),...apiSlots].some(job=>(job.budgetProbe||job.capacityProbe)&&job.settings.provider===snapshot.provider))) { const paused=queuePauseError(snapshot);report(paused.error,paused.code,paused.verificationFailure?{verificationFailure:paused.verificationFailure}:{});return; }
       if(message.force===true)clearQueuePause(snapshot.provider);
-      const job={key,requestId,post,inputFingerprint,analysis,client,clientEpoch:receivedEpoch,settings:snapshot,revision:receivedRevision,fingerprint,historyTicket:ticket,historyLanguage,budgetProbe,controller:new AbortController()};
+      const job={key,requestId,post,inputFingerprint,analysis,client,clientEpoch:receivedEpoch,settings:snapshot,revision:receivedRevision,fingerprint,historyTicket:ticket,historyLanguage,budgetProbe,capacityProbe,controller:new AbortController()};
       jobs.set(key,job);
       const before=comments?queue.findIndex(waiting=>!commentsJob(waiting)):-1;
       if(before>=0)queue.splice(before,0,job);else queue.push(job);
@@ -487,7 +492,45 @@ function apiBudgetFailure(value) {
   // generic 403, or a network failure cannot pause every automatic request.
   return [supplied,fallback].find(failure=>failure&&(failure.httpStatus===402||API_BUDGET_CODES.has(failure.providerCode)));
 }
-function queuePausedFor(input) { return input.provider==='api'&&Boolean(apiAccountPause)||ratePaused&&queuePause?.provider===input.provider; }
+function apiCapacityFailure(value) {
+  return value?.code==='API_CAPACITY'||GrokFirstAPI.sanitizedVerificationFailure(value?.verificationFailure)?.errorCode==='API_CAPACITY'||GrokFirstAPI.sanitizedVerificationFailure(value?.partialResult?.verificationFailure)?.errorCode==='API_CAPACITY';
+}
+function capacityPausedFor(input) { return input.provider==='api'&&Boolean(apiCapacityPause)&&apiCapacityPause.model===input.apiModel; }
+function capacityPauseRecord(pause) {
+  const model=pause?.model;
+  return pause?.provider==='api'&&typeof model==='string'&&/^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$/.test(model)&&!/^(?:xai-|sk-)/i.test(model)?{version:1,reason:'api-capacity',model}:undefined;
+}
+function capacityPauseFromRecord(record) {
+  const safe=record?.version===1&&record.reason==='api-capacity'?capacityPauseRecord({provider:'api',model:record.model}):undefined;
+  return safe?{provider:'api',model:safe.model,code:'API_CAPACITY',error:GrokFirstAPI.publicError({code:'API_CAPACITY'}).error}:undefined;
+}
+function persistCapacityPause(record) {
+  const writeVersion=++capacityPauseWriteVersion;
+  if(record)capacityPauseMayExist=true;
+  const operation=capacityPauseWrites.catch(()=>{}).then(async()=>{
+    try{
+      if(record)await chrome.storage.session.set({apiCapacityPause:record});else await chrome.storage.session.remove('apiCapacityPause');
+      const stored=await chrome.storage.session.get('apiCapacityPause');
+      const confirmed=record?JSON.stringify(capacityPauseRecord(capacityPauseFromRecord(stored.apiCapacityPause)))===JSON.stringify(record):stored.apiCapacityPause===undefined;
+      if(confirmed&&!record&&writeVersion===capacityPauseWriteVersion)capacityPauseMayExist=false;
+      return confirmed;
+    }catch{return false;}
+  });
+  capacityPauseWrites=operation;return operation;
+}
+function clearAPICapacityPause(current=()=>true) {
+  const previous=apiCapacityPause;
+  if(!previous&&!capacityPauseMayExist)return Promise.resolve(true);
+  const removalVersion=capacityPauseWriteVersion+1;
+  return persistCapacityPause(undefined).then(async cleared=>{
+    if(cleared&&apiCapacityPause===previous&&current()){apiCapacityPause=undefined;return true;}
+    // Cancellation while optional storage confirms recovery cannot silently
+    // reopen automatic work. Do not revive a pause after a newer model reset.
+    if(cleared&&previous&&apiCapacityPause===previous&&removalVersion===capacityPauseWriteVersion)await persistCapacityPause(capacityPauseRecord(previous));
+    return false;
+  });
+}
+function queuePausedFor(input) { return input.provider==='api'&&Boolean(apiAccountPause)||capacityPausedFor(input)||ratePaused&&queuePause?.provider===input.provider; }
 function budgetPauseRecord(pause) {
   const failure=apiBudgetFailure(pause);
   return pause?.provider==='api'&&failure?{version:1,reason:'api-budget',verificationFailure:failure}:undefined;
@@ -525,7 +568,7 @@ function clearAPIBudgetPause() {
   // result can still be displayed if storage fails; it must not resume auto.
   return persistBudgetPause(undefined).then(cleared=>{if(cleared&&apiAccountPause===previous){apiAccountPause=undefined;return true;}return false;});
 }
-function queuePauseError(input=settings) { return input.provider==='api'&&apiAccountPause?apiAccountPause:queuePause??{code:'RATE_LIMIT',error:rateLimitError().message}; }
+function queuePauseError(input=settings) { return input.provider==='api'&&apiAccountPause?apiAccountPause:capacityPausedFor(input)?apiCapacityPause:queuePause??{code:'RATE_LIMIT',error:rateLimitError().message}; }
 function clearAPIDeadline(job) { clearTimeout(job.deadline);job.deadline=undefined; }
 function startAPIDeadline(job) {
   clearAPIDeadline(job);
@@ -545,18 +588,21 @@ function trackedAPICall(job,onUpdate) {
 }
 function pauseWaitingJobs(job,error) {
   const budget=job.settings.provider==='api'?apiBudgetFailure(error):undefined;
-  if(!budget&&error?.code!=='RATE_LIMIT')return;
+  const capacity=job.settings.provider==='api'&&apiCapacityFailure(error);
+  if(!budget&&!capacity&&error?.code!=='RATE_LIMIT')return;
   const safe=budget?GrokFirstAPI.publicError({code:'API_ERROR'}):{code:'RATE_LIMIT',error:rateLimitError().message};
   // Account spending is independent of short-lived provider rate limiting.
   // Switching to Build or receiving a later 429 cannot erase an API cause.
   if(budget){apiAccountPause={provider:'api',...safe,verificationFailure:budget};void persistBudgetPause(budgetPauseRecord(apiAccountPause));void broadcastConfig();}
+  else if(capacity){apiCapacityPause={provider:'api',model:job.settings.apiModel,code:'API_CAPACITY',error:GrokFirstAPI.publicError({code:'API_CAPACITY'}).error};void persistCapacityPause(capacityPauseRecord(apiCapacityPause));void broadcastConfig();}
   else{queuePause={provider:job.settings.provider,...safe};ratePaused=true;}
   const paused=queuePauseError(job.settings);
-  for(const waiting of queue.filter(value=>value.settings.provider===job.settings.provider)) {
+  const affected=value=>value.settings.provider===job.settings.provider&&(!capacity||budget||value.settings.apiModel===job.settings.apiModel);
+  for(const waiting of queue.filter(affected)) {
     jobError(waiting,paused.error,paused.code,paused.verificationFailure?{verificationFailure:paused.verificationFailure}:{});
     removeJob(waiting);
   }
-  queue=queue.filter(value=>value.settings.provider!==job.settings.provider);
+  queue=queue.filter(value=>!affected(value));
 }
 function stopUnavailableBuild(code) {
   buildStatus={...buildStatus,available:false,errorCode:code};buildStatusAt=Date.now();
@@ -607,6 +653,7 @@ async function executeJob(job) {
     job.billing=billingMetadata(result,job.settings.provider);
     if(result.requestDiagnostics)job.requestDiagnostics=result.requestDiagnostics;
     if(job.settings.provider==='api'&&apiBudgetFailure(result))pauseWaitingJobs(job,result);
+    if(job.settings.provider==='api'&&apiCapacityFailure(result))throw Object.assign(new Error('Model capacity is temporarily unavailable.'),{code:'API_CAPACITY',partialResult:result,verificationFailure:result.verificationFailure,...job.billing,...requestMetadata(result,'api')});
     if(commentsJob(job))result.comments=GrokFirstAPI.validateComments(result.comments);
     else {
       const reader=Core.readerOutput(result.text,{final:true});
@@ -623,6 +670,10 @@ async function executeJob(job) {
     let budgetRecovered=Boolean(job.budgetProbe&&apiAccountPause===job.budgetProbe&&!apiBudgetFailure(result)&&!['incomplete','failed'].includes(result.verificationStatus));
     if(budgetRecovered)budgetRecovered=await clearAPIBudgetPause();
     if(budgetRecovered){for(const peer of clients)send(peer.port,{type:'API_BUDGET_RECOVERED'});void broadcastConfig();}
+    let capacityRecovered=Boolean(job.capacityProbe&&apiCapacityPause===job.capacityProbe&&!apiBudgetFailure(result)&&!apiCapacityFailure(result)&&!GrokFirstAPI.sanitizedVerificationFailure(result.verificationFailure)&&!['incomplete','failed'].includes(result.verificationStatus));
+    if(capacityRecovered)capacityRecovered=await waitForAbort(clearAPICapacityPause(()=>liveJob(job)),signal);
+    capacityRecovered=capacityRecovered&&!capacityPausedFor(job.settings)&&liveJob(job);
+    if(capacityRecovered){for(const peer of clients)send(peer.port,{type:'API_CAPACITY_RECOVERED'});void broadcastConfig();}
     releaseAPISlot(job);pump();
     result.completedAt=Date.now();
     rememberHistoryResult(job.historyTicket,result,commentsJob(job),job.historyLanguage);
@@ -633,7 +684,8 @@ async function executeJob(job) {
       // must not leave finished requests looking as though they still run.
       void persistCache(epoch).catch(()=>{});
     }
-    if(liveJob(job))send(client.port,commentsJob(job)?{type:'COMMENT_RESULT',requestId,comments:result.comments,cached:false,...job.billing,...(budgetRecovered?{apiBudgetRecovered:true}:{})}:{type:'RESULT',requestId,result,cached:false,...(budgetRecovered?{apiBudgetRecovered:true}:{})});
+    const recovered={...(budgetRecovered?{apiBudgetRecovered:true}:{}),...(capacityRecovered?{apiCapacityRecovered:true}:{})};
+    if(liveJob(job))send(client.port,commentsJob(job)?{type:'COMMENT_RESULT',requestId,comments:result.comments,cached:false,...job.billing,...recovered}:{type:'RESULT',requestId,result,cached:false,...recovered});
   } catch(e) {
     if(job.settings.provider==='build'&&e.code==='BUILD_CANCEL_UNCONFIRMED'){stopUnavailableBuild(e.code);if(!liveJob(job)&&clients.has(client))jobError(job,SuperXBuild.publicError(e).error,e.code);}
     if(liveJob(job)) {
@@ -644,10 +696,11 @@ async function executeJob(job) {
       const partialResult=partialText?withBillingMetadata({...e.partialResult,...errorBilling,...diagnosticMetadata,text:partialText,verificationStatus:'incomplete'},job.settings.provider,job.settings.apiVerification):undefined;
       const safeError=job.settings.provider==='build'?SuperXBuild.publicError(e):GrokFirstAPI.publicError(e);
       const budgetFailure=job.settings.provider==='api'?apiBudgetFailure(e):undefined;
+      const capacityFailure=job.settings.provider==='api'&&apiCapacityFailure(e)?GrokFirstAPI.sanitizedVerificationFailure(e.verificationFailure)||GrokFirstAPI.sanitizedVerificationFailure({stage:'verify',code:'SERVER',...e.failureDetails,errorCode:'API_CAPACITY'}):undefined;
       if(partialResult)rememberHistoryResult(job.historyTicket,{...partialResult,completedAt:Date.now()},false,job.historyLanguage);
-      rememberAPIDiagnostics(job,{...diagnosticMetadata,verificationFailure:e.verificationFailure||partialResult?.verificationFailure||budgetFailure},safeError.code);
-      jobError(job,safeError.error,safeError.code,{...errorBilling,...diagnosticMetadata,...(commentsJob(job)?(budgetFailure?{verificationFailure:budgetFailure}:{}):{...verificationMetadata({verificationFailure:e.verificationFailure||partialResult?.verificationFailure||budgetFailure},job.settings.apiVerification),partialResult})});
-      if(e.code==='RATE_LIMIT'||budgetFailure)pauseWaitingJobs(job,e);
+      rememberAPIDiagnostics(job,{...diagnosticMetadata,verificationFailure:e.verificationFailure||partialResult?.verificationFailure||budgetFailure||capacityFailure},safeError.code);
+      jobError(job,safeError.error,safeError.code,{...errorBilling,...diagnosticMetadata,...(commentsJob(job)?(budgetFailure||capacityFailure?{verificationFailure:budgetFailure||capacityFailure}:{}):{...verificationMetadata({verificationFailure:e.verificationFailure||partialResult?.verificationFailure||budgetFailure||capacityFailure},job.settings.apiVerification),partialResult})});
+      if(e.code==='RATE_LIMIT'||e.code==='API_CAPACITY'||budgetFailure)pauseWaitingJobs(job,e);
       if(job.settings.provider==='build'&&['BUILD_CONNECTION_REQUIRED','BUILD_CANCEL_UNCONFIRMED','BUILD_PERMISSION_REQUIRED','BUILD_LOGIN_REQUIRED','BUILD_VERSION_UNSUPPORTED','BUILD_CONFIG_UNSUPPORTED','BUILD_TOOL_POLICY','BUILD_DISCONNECTED','BUILD_UNAVAILABLE'].includes(safeError.code))stopUnavailableBuild(safeError.code);
     } else if(signal.aborted && clients.has(client) && job.revision===revision && (!jobs.has(job.key)||jobs.get(job.key)===job)) {
       const reason=signal.reason;
@@ -755,6 +808,7 @@ function queueSecurityMutation(message) {
   const operation=securityWrites.catch(()=>{}).then(async()=>{
     await ready;
     await pauseReset;
+    const previousModel=settings.apiModel;
     let failure,changedAccountKey=!message.apiKey;
     if(message.apiKey&&(apiAccountPause||budgetPauseMayExist)){
       // Compare only in trusted worker memory, after startup restored the Key.
@@ -781,6 +835,7 @@ function queueSecurityMutation(message) {
         }
       }
       if(!failure&&generation===securityGeneration&&changedAccountKey)await clearAPIBudgetPause();
+      if(!failure&&generation===securityGeneration&&settings.apiModel!==previousModel)await clearAPICapacityPause();
     }
     finally {
       securityPending--;
@@ -794,6 +849,7 @@ function queueSecurityMutation(message) {
 async function saveSettings(input) {
   const next=Core.normalizeSettings(input);
   if(JSON.stringify(next)!==JSON.stringify(settings)) {
+    const modelChanged=next.apiModel!==settings.apiModel;
     const jobSettings=value=>{
       const {explainPrompt,verifyPrompt,commentsPrompt,interfaceLanguage,...other}=value;
       return other;
@@ -805,6 +861,7 @@ async function saveSettings(input) {
     settings=next;
     if(cancelsJobs){await clearQueuePause();pump();}
     await chrome.storage.local.set({settings});
+    if(modelChanged)await clearAPICapacityPause();
   }
   await broadcastConfig();
 }

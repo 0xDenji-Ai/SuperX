@@ -80,7 +80,7 @@
   }
   function diagnosticEntries(value){
     if(!Array.isArray(value)||typeof core.sanitizedRequestDiagnostics!=="function")throw new Error("Invalid diagnostics response");
-    const errorCodes=new Set(["API_INCOMPLETE","API_STREAM_INTERRUPTED","API_STREAM_ERROR","API_LANGUAGE_MISMATCH","RATE_LIMIT","API_ERROR","CANCELED","TIMEOUT","COMMENTS_INVALID_RESPONSE"]);
+    const errorCodes=new Set(["API_INCOMPLETE","API_STREAM_INTERRUPTED","API_STREAM_ERROR","API_LANGUAGE_MISMATCH","API_CAPACITY","RATE_LIMIT","API_ERROR","CANCELED","TIMEOUT","COMMENTS_INVALID_RESPONSE"]);
     const failureCodes=new Set(["OUTPUT_LIMIT","INCOMPLETE","CONNECTION","TIMEOUT","LANGUAGE_MISMATCH","RATE_LIMIT","ACCESS","SERVER","UNKNOWN"]);
     return value.slice(0,30).flatMap(entry=>{
       if(!entry||!Number.isSafeInteger(entry.recordedAt)||entry.recordedAt<0)return [];

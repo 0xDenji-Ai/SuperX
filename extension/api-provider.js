@@ -4,10 +4,13 @@
   const ENDPOINT = 'https://api.x.ai/v1/responses';
   const OUTPUT_LIMITS = Object.freeze({verify:1800, comments:400});
   const RATE_LIMIT_CODES = new Set(['rate_limit_exceeded','rate_limit_error','too_many_requests','resource_exhausted']);
+  const CAPACITY_PROVIDER_CODES = new Set(['overloaded_error','service_unavailable_error']);
+  const CAPACITY_MESSAGE_PREFIX = 'The model is currently at capacity due to high demand.';
+  const CAPACITY_MESSAGE = 'xAI 模型当前繁忙，请稍后手动重试。';
   const VERIFICATION_FAILURE_CODES = new Set(['OUTPUT_LIMIT','INCOMPLETE','CONNECTION','LANGUAGE_MISMATCH','RATE_LIMIT','ACCESS','SERVER','TIMEOUT','UNKNOWN']);
   // Responses-compatible incomplete reasons; never expose arbitrary backend text.
   const INCOMPLETE_REASONS = new Set(['max_output_tokens','content_filter']);
-  const SAFE_API_ERROR_CODES = new Set(['API_INCOMPLETE','API_STREAM_INTERRUPTED','API_STREAM_ERROR','API_LANGUAGE_MISMATCH','RATE_LIMIT','API_ERROR','CANCELED','TIMEOUT']);
+  const SAFE_API_ERROR_CODES = new Set(['API_INCOMPLETE','API_STREAM_INTERRUPTED','API_STREAM_ERROR','API_LANGUAGE_MISMATCH','API_CAPACITY','RATE_LIMIT','API_ERROR','CANCELED','TIMEOUT']);
   const SAFE_ERRORS = new WeakSet();
   const DIAGNOSTIC_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   const LANGUAGE_NAMES = Object.freeze({'zh-CN':'Simplified Chinese','en':'English','ja':'Japanese','ko':'Korean','zh-TW':'Traditional Chinese','es':'Spanish','fr':'French','de':'German','pt':'Portuguese','ar':'Arabic','ru':'Russian','hi':'Hindi'});
@@ -284,7 +287,7 @@
     if(SAFE_ERRORS.has(error))return {code:error.code,error:error.message};
     const messages={API_INCOMPLETE:'Grok 输出未完成，可手动重试。',API_STREAM_INTERRUPTED:'与 xAI 的连接中断，未收到完整答案，可手动重试。',
       API_STREAM_ERROR:'API 数据流损坏，未收到完整答案。',API_LANGUAGE_MISMATCH:'Grok 未遵循所选输出语言。',
-      RATE_LIMIT:'xAI 请求限速或额度耗尽，请稍后再试。',API_ERROR:'xAI 生成失败，请稍后重试。',CANCELED:'API 请求已取消。',TIMEOUT:'分析超时，Grok 未能完成响应；可手动重试。',
+      API_CAPACITY:CAPACITY_MESSAGE,RATE_LIMIT:'xAI 请求限速或额度耗尽，请稍后再试。',API_ERROR:'xAI 生成失败，请稍后重试。',CANCELED:'API 请求已取消。',TIMEOUT:'分析超时，Grok 未能完成响应；可手动重试。',
       NEEDS_KEY:'请在设置中填写 xAI API Key。',POST_INVALID:'请提供有效的 X 原帖链接。',URL_SEARCH_REQUIRED:'分析原帖需要开启 X 搜索或网页搜索，才能读取全文。',
       COMMENTS_INVALID_RESPONSE:'Grok 未返回三个有效的评论草稿。'};
     const code=Object.hasOwn(messages,error?.code)?error.code:'API_ERROR';
@@ -368,7 +371,7 @@
     return error;
   }
   function verificationFailureFor(error) {
-    const codes={API_INCOMPLETE:'INCOMPLETE',API_STREAM_INTERRUPTED:'CONNECTION',API_STREAM_ERROR:'CONNECTION',API_LANGUAGE_MISMATCH:'LANGUAGE_MISMATCH',RATE_LIMIT:'RATE_LIMIT'};
+    const codes={API_INCOMPLETE:'INCOMPLETE',API_STREAM_INTERRUPTED:'CONNECTION',API_STREAM_ERROR:'CONNECTION',API_LANGUAGE_MISMATCH:'LANGUAGE_MISMATCH',API_CAPACITY:'SERVER',RATE_LIMIT:'RATE_LIMIT'};
     return sanitizedVerificationFailure({code:codes[error?.code]||'UNKNOWN',...error?.failureDetails,errorCode:error?.code,stage:'verify'});
   }
   function incompleteError(response) {
@@ -438,11 +441,19 @@
     if(['authentication_error','invalid_api_key','unauthenticated','permission_error','permission_denied','forbidden','insufficient_quota','insufficient_credits','spending_limit','model_not_found','model_not_supported','unsupported_model','unsupported_parameter','invalid_parameter','invalid_argument','invalid_request_error','invalid_request','bad_request','context_length_exceeded','content_filter'].includes(code))return 'ACCESS';
     if(['timeout','request_timeout','gateway_timeout'].includes(code))return 'CONNECTION';
     if(status!==undefined&&status>=400)return httpFailure(status);
-    if(['server_error','internal_server_error','internal_error','service_unavailable','overloaded_error','tool_error','tool_unavailable','search_error','search_unavailable'].includes(code))return 'SERVER';
+    if(['server_error','internal_server_error','internal_error','service_unavailable','service_unavailable_error','overloaded_error','tool_error','tool_unavailable','search_error','search_unavailable'].includes(code))return 'SERVER';
     return 'UNKNOWN';
   }
-  function streamError(event) {
+  function capacityFailure(diagnostics,category,message) {
+    // Only an actual provider error boundary may call this. Prose is already
+    // redacted against the Key and input; never inspect reader/tool content or
+    // turn an access denial or a real rate limit into an overload response.
+    return ['SERVER','UNKNOWN'].includes(category)&&(diagnostics.httpStatus===529||CAPACITY_PROVIDER_CODES.has(diagnostics.providerCode)||
+      typeof message==='string'&&message.startsWith(CAPACITY_MESSAGE_PREFIX));
+  }
+  function streamError(event,message) {
     const diagnostics=failureDiagnostics(event),code=providerFailure(diagnostics),rateLimited=code==='RATE_LIMIT';
+    if(capacityFailure(diagnostics,code,message))return failed(apiError(CAPACITY_MESSAGE,'API_CAPACITY'),'SERVER',diagnostics);
     return failed(apiError(rateLimited?'xAI 请求限速或额度耗尽，请稍后再试。':'xAI 生成失败，请检查模型、额度或搜索工具支持。',rateLimited?'RATE_LIMIT':'API_ERROR'),code,diagnostics);
   }
   // Server-sent events can split at any byte, including in a UTF-8 character.
@@ -505,6 +516,7 @@
         const received=await httpFailureDiagnostics(response,signal,redaction);assertNotAborted(signal);
         const diagnostics=received.failure;Object.assign(diagnostic,received.metadata);
         const category=providerFailure(diagnostics),rateLimited=category==='RATE_LIMIT';
+        if(capacityFailure(diagnostics,category,diagnostic.providerMessage))throw failed(apiError(CAPACITY_MESSAGE,'API_CAPACITY'),'SERVER',diagnostics);
         const hints={401:'API Key 无效或已失效。',403:'此 Key 没有访问该模型的权限。',402:'xAI API 的余额、预算或用量限制阻止了本次请求。',429:'xAI 请求限速或额度耗尽，请稍后再试。'};
         throw failed(apiError(hints[response.status]||'xAI API 请求失败，请检查模型和网络。',rateLimited?'RATE_LIMIT':'API_ERROR'),category,diagnostics);
       }
@@ -538,7 +550,7 @@
         if(event.type==='response.completed') {
           completed=event.response;
           if(completed?.status==='incomplete')throw incompleteError(completed);
-          if(completed?.status==='failed')throw streamError({response:completed});
+          if(completed?.status==='failed')throw streamError({response:completed},diagnostic.providerMessage);
           if(completed?.status&&completed.status!=='completed')throw failed(apiError('Grok 未返回已完成的答案，可手动重试。','API_INCOMPLETE'),'INCOMPLETE');
           // A supplied terminal output is authoritative, including an empty
           // output or a tool/reasoning-only response. Only item-attributed
@@ -548,14 +560,14 @@
           if(stage==='verify')assertMatchingScript(text,settings.language,false,'verify');
           if(completed?.usage||completed?.model)publish();
         }
-        if(event.type==='response.failed'||event.type==='error')throw streamError(event);
+        if(event.type==='response.failed'||event.type==='error')throw streamError(event,diagnostic.providerMessage);
         if(event.type==='response.incomplete')throw incompleteError(event.response);
         return event.type==='response.completed'&&Boolean(completed);
       },{signal});
       assertNotAborted(signal);
       if(!completed)throw failed(apiError('连接提前结束，未收到完整答案；未保存为已完成结果。','API_STREAM_INTERRUPTED'),'CONNECTION');
       if(completed.status==='incomplete')throw incompleteError(completed);
-      if(completed.status==='failed')throw streamError({response:completed});
+      if(completed.status==='failed')throw streamError({response:completed},diagnostic.providerMessage);
       if(completed.status&&completed.status!=='completed')throw failed(apiError('Grok 未返回已完成的答案，可手动重试。','API_INCOMPLETE'),'INCOMPLETE');
       if(!text.trim())throw failed(apiError('Grok 返回了空答案。','API_INCOMPLETE'),'INCOMPLETE');
       return {text,sources:responseSources(completed),searched:searchedResponse(completed),usage,model,usageComplete:terminalUsageComplete};
@@ -569,7 +581,7 @@
         // Browser/network error messages and arbitrary injected error fields are
         // not trusted UI strings. Preserve a known code, never raw prose.
         const code=SAFE_API_ERROR_CODES.has(error?.code)?error.code:'API_STREAM_INTERRUPTED';
-        const messages={RATE_LIMIT:'xAI 请求限速或额度耗尽，请稍后再试。',API_INCOMPLETE:'Grok 输出未完成，可手动重试。',API_LANGUAGE_MISMATCH:'Grok 未遵循所选输出语言。',API_STREAM_ERROR:'API 数据流损坏，未收到完整答案。',API_ERROR:'xAI 生成失败，请稍后重试。'};
+        const messages={API_CAPACITY:CAPACITY_MESSAGE,RATE_LIMIT:'xAI 请求限速或额度耗尽，请稍后再试。',API_INCOMPLETE:'Grok 输出未完成，可手动重试。',API_LANGUAGE_MISMATCH:'Grok 未遵循所选输出语言。',API_STREAM_ERROR:'API 数据流损坏，未收到完整答案。',API_ERROR:'xAI 生成失败，请稍后重试。'};
         error=apiError(messages[code]||'与 xAI 的连接中断，未收到完整答案，可手动重试。',code);
       }
       const failedAt=Date.now();
@@ -701,7 +713,7 @@
       const partial=resultFor({text,sources:mergeSources(error.partialSources),searched:error.partialSearched===true,model:sanitizedModel(error.model)||sanitizedModel(settings.apiModel),verificationFailure:failure},mode,'incomplete',label.incomplete,{verify:sanitizedUsage(error.usage)},{verify:error.model},error.usageComplete===true);
       const diagnostics=sanitizedRequestDiagnostics(error.requestDiagnostics);if(diagnostics)partial.requestDiagnostics=diagnostics;
       emit(partial);
-      if(error.code==='RATE_LIMIT') {
+      if(error.code==='RATE_LIMIT'||error.code==='API_CAPACITY') {
         error.partialResult=partial;
         Object.assign(error,sanitizedMetadata(partial));
         throw error;

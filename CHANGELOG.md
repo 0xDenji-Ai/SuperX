@@ -2,6 +2,13 @@
 
 SuperX release history. The extension's `manifest.json` is the authoritative installed version. Test counts below describe those releases' recorded checks, not live provider or browser-store certification.
 
+## 0.9.7 — Distinguish model capacity and pause automatic requests (unreleased candidate)
+
+- Recognize supported overload error codes and the provider's fixed model-at-capacity error message at the error boundary. Use a local capacity classification without inventing an upstream error code or replacing the original HTTP transport status.
+- Show a localized model-busy message and pause subsequent automatic API requests. Preserve running work, completed answers and billing metadata. Permit one explicit manual probe; resume after a complete successful result, without timer-based paid retries, automatic model switching or Priority Processing.
+- Keep model-capacity protection independent of account-spending restrictions. An earlier HTTP 402 remains an account/entitlement refusal; a later HTTP-200 stream error with a capacity message does not prove another 402 or a concurrency-limit breach.
+- Retain the 0.9.6 transport-lifetime concurrency fix. Published Stable remains 0.7.26.
+
 ## 0.9.6 — Keep cancelled API transports inside the concurrency limit (unreleased candidate)
 
 - Retain shared API request slots until the underlying provider call and response-reader cancellation settle. Cancellation and timeout can update the UI promptly without allowing replacement requests to exceed the configured local transport limit while old requests are still closing.

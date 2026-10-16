@@ -276,6 +276,20 @@
     ru:['Локальный журнал диагностики','До {maxEntries} ошибок за последние {hours} часов этой сессии. Содержит очищенные сведения и ID запросов, без API Key, постов и промптов. Ничего не отправляется.','Обновить журнал','Копировать журнал','Очистить журнал','Ошибки API не записаны.','Не удалось прочитать локальный журнал.','Журнал диагностики скопирован.'],
     hi:['स्थानीय निदान लॉग','इस ब्राउज़र सत्र के पिछले {hours} घंटों की अधिकतम {maxEntries} त्रुटियाँ। संशोधित विवरण और अनुरोध ID शामिल हैं; API Key, पोस्ट और प्रॉम्प्ट नहीं। कुछ अपलोड नहीं होता।','लॉग रीफ़्रेश करें','लॉग कॉपी करें','लॉग साफ़ करें','कोई API त्रुटि दर्ज नहीं है।','स्थानीय निदान लॉग पढ़ा नहीं जा सका।','निदान लॉग कॉपी किया गया।']
   });
+  section(['error.apiCapacity'], {
+    en:['The Grok model is temporarily busy. Automatic fact-checking is paused; retry one post manually later.'],
+    'zh-CN':['Grok 模型暂时繁忙；自动核查已暂停，可稍后手动重试一条帖子。'],
+    'zh-TW':['Grok 模型暫時繁忙；自動查核已暫停，可稍後手動重試一則貼文。'],
+    ja:['Grok モデルが一時的に混み合っています。自動事実確認を停止しました。後で投稿を1件手動で再試行してください。'],
+    ko:['Grok 모델이 일시적으로 혼잡합니다. 자동 사실 확인이 일시 중지되었습니다. 나중에 게시물 하나를 수동으로 재시도하세요.'],
+    es:['El modelo Grok está ocupado temporalmente. La verificación automática está pausada; reintenta una publicación manualmente más tarde.'],
+    fr:['Le modèle Grok est temporairement occupé. La vérification automatique est suspendue ; réessayez une publication manuellement plus tard.'],
+    de:['Das Grok-Modell ist vorübergehend ausgelastet. Automatische Faktenprüfungen sind pausiert; versuche später einen Beitrag manuell erneut.'],
+    pt:['O modelo Grok está temporariamente ocupado. A verificação automática está pausada; tente uma publicação manualmente mais tarde.'],
+    ar:['نموذج Grok مشغول مؤقتًا. تم إيقاف التحقق التلقائي؛ أعد محاولة منشور واحد يدويًا لاحقًا.'],
+    ru:['Модель Grok временно перегружена. Автопроверка фактов приостановлена; повторите один пост вручную позже.'],
+    hi:['Grok मॉडल अभी व्यस्त है। स्वतः तथ्य-जाँच रुकी हुई है; बाद में एक पोस्ट पर मैन्युअल कोशिश करें।']
+  });
   section(['note.accountLimit'], {
     en:['Automatic API requests are paused. Check your account usage or budget, then retry one post manually to resume.'],
     'zh-CN':['自动 API 请求已暂停。请检查账户用量或预算，解决后手动重试一条帖子以恢复。'],

@@ -2139,3 +2139,15 @@ test('diagnostic logs preserve stream error classification without inventing an 
   const fixture=uiPageFixture('options',core.DEFAULT_SETTINGS,{}, {onMessage(message){if(message.type==='GET_API_DIAGNOSTICS')return {ok:true,entries:[record]};}});await settleUI();await settleUI();await fixture.ids.get('diagnostics-refresh').listeners.click();const shown=JSON.parse(fixture.ids.get('diagnostics-output').textContent)[0];
   assert.equal(shown.requestDiagnostics.transportStatus,200);assert.equal(shown.requestDiagnostics.failureOrigin,'stream');assert.equal(shown.verificationFailure.providerCode,'spending_limit');assert.equal(shown.verificationFailure.reason,'max_output_tokens');assert.equal(Object.hasOwn(shown.verificationFailure,'httpStatus'),false);assert.equal(Object.hasOwn(shown.verificationFailure,'apiKey'),false);
 });
+
+test('Settings diagnostics retain a local capacity classification without inventing upstream codes or statuses',async()=>{
+  const record=optionsDiagnosticRecord();record.code='API_CAPACITY';record.requestDiagnostics.failureOrigin='stream';record.requestDiagnostics.transportStatus=200;
+  record.requestDiagnostics.providerMessage='The model is currently at capacity due to high demand.';
+  record.verificationFailure={stage:'verify',code:'SERVER',errorCode:'API_CAPACITY',privateField:'PRIVATE_CAPACITY_FIELD'};
+  const fixture=uiPageFixture('options',core.DEFAULT_SETTINGS,{}, {onMessage(message){if(message.type==='GET_API_DIAGNOSTICS')return {ok:true,entries:[record]};}});
+  await settleUI();await settleUI();await fixture.ids.get('diagnostics-refresh').listeners.click();
+  const shown=JSON.parse(fixture.ids.get('diagnostics-output').textContent)[0];
+  assert.equal(shown.code,'API_CAPACITY');assert.equal(shown.requestDiagnostics.transportStatus,200);
+  assert.deepEqual(shown.verificationFailure,{stage:'verify',code:'SERVER',errorCode:'API_CAPACITY'});
+  assert.doesNotMatch(JSON.stringify(shown),/PRIVATE_CAPACITY_FIELD|ENTRY_PRIVATE_|DIAGNOSTIC_PRIVATE_/);
+});
