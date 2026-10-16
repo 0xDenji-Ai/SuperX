@@ -13,6 +13,7 @@ const apiSlots = new Set();
 let queue = [], pumping = false, settings, cache = {}, quotas = {}, railStates = {}, revision = 0, cacheEpoch = 0;
 let ratePaused = false, queuePause, apiAccountPause, uiLanguage = UI.browserLanguage(globalThis);
 let budgetPauseWrites = Promise.resolve(), budgetPauseWriteVersion = 0, budgetPauseMayExist = false;
+let apiDiagnostics = [], apiDiagnosticsEpoch = 0, apiDiagnosticsReady = Promise.resolve(), apiDiagnosticsWrites = Promise.resolve();
 let quotaWrites = Promise.resolve(), cacheWrites = Promise.resolve(), railStateWrites = Promise.resolve(), uiLanguageWrites = Promise.resolve();
 let securityWrites = Promise.resolve(), securityPending = 0, securityGeneration = 0;
 let hasSavedKey = false, rememberApiKey = true, credentialReady = false, securityFault = false, sealAttempted = false;
@@ -24,6 +25,9 @@ const ready = initialize();
 async function initialize() {
   await chrome.storage.local.setAccessLevel({accessLevel:'TRUSTED_CONTEXTS'});
   await chrome.storage.session.setAccessLevel({accessLevel:'TRUSTED_CONTEXTS'});
+  // Diagnostic storage is optional. Its reads/writes never gate credentials,
+  // analysis, the account-spending pause or normal extension startup.
+  apiDiagnosticsReady=loadAPIDiagnostics();
   const local = await chrome.storage.local.get(['settings','uiLanguage','apiKey','apiKeyEncrypted','apiKeyVault','rememberApiKey','buildConnectionEncrypted']);
   const session = await chrome.storage.session.get(['quotas','railStates','uiLanguage','apiKey','cache','securityFault','apiBudgetPause']);
   settings = Core.normalizeSettings(local.settings);
@@ -246,6 +250,68 @@ function commentCacheKey(post,s,inputFingerprint,analysis) {
 }
 function commentsJob(job) { return job.settings.task==='comments'; }
 function billingMetadata(value,provider) { return ['api','build'].includes(provider)?GrokFirstAPI.sanitizedMetadata(value):{}; }
+function requestMetadata(value,provider) {
+  if(provider!=='api')return {};
+  let diagnostics;
+  try{diagnostics=(Core.sanitizedRequestDiagnostics||GrokFirstAPI.sanitizedRequestDiagnostics)?.(value?.requestDiagnostics);}catch{/* Invalid diagnostic data is never forwarded. */}
+  return diagnostics?{requestDiagnostics:diagnostics}:{};
+}
+const API_DIAGNOSTIC_CODES=new Set(['API_INCOMPLETE','API_STREAM_INTERRUPTED','API_STREAM_ERROR','API_LANGUAGE_MISMATCH','RATE_LIMIT','API_ERROR','CANCELED','TIMEOUT','COMMENTS_INVALID_RESPONSE']);
+function pruneAPIDiagnostics(input,now=Date.now()) {
+  return (Array.isArray(input)?input:[]).slice(0,1000).flatMap(entry=>{
+    if(!entry||!API_DIAGNOSTIC_CODES.has(entry.code)||!Number.isSafeInteger(entry.recordedAt)||entry.recordedAt<0||entry.recordedAt>now||now-entry.recordedAt>=CACHE_TTL)return [];
+    const diagnostics=requestMetadata(entry,'api').requestDiagnostics;
+    const verificationFailure=GrokFirstAPI.sanitizedVerificationFailure(entry.verificationFailure);
+    return diagnostics?[{recordedAt:entry.recordedAt,code:entry.code,requestDiagnostics:diagnostics,...(verificationFailure?{verificationFailure}:{})}]:[];
+  }).sort((a,b)=>b.recordedAt-a.recordedAt).slice(0,30);
+}
+async function loadAPIDiagnostics() {
+  const epoch=apiDiagnosticsEpoch;
+  try{
+    const stored=await chrome.storage.session.get('apiRequestDiagnostics');
+    if(epoch!==apiDiagnosticsEpoch)return;
+    apiDiagnostics=pruneAPIDiagnostics(stored.apiRequestDiagnostics);
+    if(stored.apiRequestDiagnostics!==undefined&&JSON.stringify(stored.apiRequestDiagnostics)!==JSON.stringify(apiDiagnostics))await chrome.storage.session.set({apiRequestDiagnostics:apiDiagnostics});
+  }catch{/* Diagnostics must not prevent normal requests or account safety. */}
+}
+function rememberAPIDiagnostics(job,value,code) {
+  if(job.settings.provider!=='api'||job.diagnosticsRecorded||!API_DIAGNOSTIC_CODES.has(code))return;
+  const diagnostics=requestMetadata(value,'api').requestDiagnostics;
+  if(!diagnostics)return;
+  job.diagnosticsRecorded=true;
+  const verificationFailure=GrokFirstAPI.sanitizedVerificationFailure(value?.verificationFailure);
+  const epoch=apiDiagnosticsEpoch,entry={recordedAt:Date.now(),code,requestDiagnostics:diagnostics,...(verificationFailure?{verificationFailure}:{})};
+  apiDiagnosticsWrites=apiDiagnosticsWrites.catch(()=>{}).then(async()=>{
+    await apiDiagnosticsReady;
+    if(epoch!==apiDiagnosticsEpoch)return;
+    apiDiagnostics=pruneAPIDiagnostics([entry,...apiDiagnostics]);
+    try{await chrome.storage.session.set({apiRequestDiagnostics:apiDiagnostics});}catch{/* The bounded in-memory log remains available for this worker. */}
+  });
+}
+function pruneStoredAPIDiagnostics() {
+  const epoch=apiDiagnosticsEpoch;
+  const operation=apiDiagnosticsWrites.catch(()=>{}).then(async()=>{
+    await apiDiagnosticsReady;
+    if(epoch!==apiDiagnosticsEpoch)return;
+    const kept=pruneAPIDiagnostics(apiDiagnostics),changed=JSON.stringify(kept)!==JSON.stringify(apiDiagnostics);
+    apiDiagnostics=kept;
+    if(changed)try{await chrome.storage.session.set({apiRequestDiagnostics:apiDiagnostics});}catch{/* Expired records stay hidden if optional cleanup fails. */}
+  });
+  apiDiagnosticsWrites=operation;return operation;
+}
+async function getAPIDiagnostics() {
+  await pruneStoredAPIDiagnostics();
+  return {ok:true,entries:apiDiagnostics,retentionHours:24,maxEntries:30};
+}
+function clearAPIDiagnostics() {
+  apiDiagnosticsEpoch++;apiDiagnostics=[];
+  const operation=apiDiagnosticsWrites.catch(()=>{}).then(async()=>{
+    await apiDiagnosticsReady;
+    try{await chrome.storage.session.remove('apiRequestDiagnostics');return {ok:true};}
+    catch{return {ok:false,errorKey:'diagnostics.storageError'};}
+  });
+  apiDiagnosticsWrites=operation;return operation;
+}
 function verificationMetadata(value,mode,text=String(value?.text||'').slice(0,30000)) {
   const start=value?.verificationStart;
   const failure=['only','background'].includes(mode)?GrokFirstAPI.sanitizedVerificationFailure(value?.verificationFailure):undefined;
@@ -254,8 +320,8 @@ function verificationMetadata(value,mode,text=String(value?.text||'').slice(0,30
 }
 function withBillingMetadata(value,provider,verificationMode) {
   const result={...value};
-  for(const field of ['usage','usageComplete','usageByStage','model','modelByStage','verificationStart','verificationFailure'])delete result[field];
-  return {...result,...billingMetadata(value,provider),...verificationMetadata(value,verificationMode)};
+  for(const field of ['usage','usageComplete','usageByStage','model','modelByStage','verificationStart','verificationFailure','requestDiagnostics'])delete result[field];
+  return {...result,...billingMetadata(value,provider),...verificationMetadata(value,verificationMode),...requestMetadata(value,provider)};
 }
 function jobError(job,error,code,extra={}) { send(job.client.port,{type:commentsJob(job)?'COMMENT_ERROR':'ERROR',requestId:job.requestId,error,code,...extra}); }
 function freshCacheEntry(entry,now) {
@@ -516,6 +582,7 @@ async function executeJob(job) {
     send(client.port,{type:commentsJob(job)?'COMMENT_START':'START',requestId,...(commentsJob(job)?{}:{used})});
     const onUpdate=update=>{
       job.billing=billingMetadata(update,job.settings.provider);
+      const diagnostics=requestMetadata(update,job.settings.provider).requestDiagnostics;if(diagnostics)job.requestDiagnostics=diagnostics;
       const hasText=typeof update.text==='string';
       const text=hasText?Core.readerOutput(update.text).text.slice(0,30000):undefined;
       if(!commentsJob(job)&&hasText) {
@@ -528,6 +595,7 @@ async function executeJob(job) {
     const result=withBillingMetadata(await (job.settings.provider==='build'?runAPI(job,onUpdate):waitForAbort(runAPI(job,onUpdate),signal)),job.settings.provider,commentsJob(job)?undefined:job.settings.apiVerification);
     if(!liveJob(job))return;
     job.billing=billingMetadata(result,job.settings.provider);
+    if(result.requestDiagnostics)job.requestDiagnostics=result.requestDiagnostics;
     if(job.settings.provider==='api'&&apiBudgetFailure(result))pauseWaitingJobs(job,result);
     if(commentsJob(job))result.comments=GrokFirstAPI.validateComments(result.comments);
     else {
@@ -539,6 +607,7 @@ async function executeJob(job) {
       }
       result.text=reader.text.slice(0,30000);
     }
+    if(['incomplete','failed'].includes(result.verificationStatus))rememberAPIDiagnostics(job,result,result.verificationFailure?.errorCode||'API_INCOMPLETE');
     // A spending pause permits one explicitly requested probe at a time.
     // Incomplete/failed results never reopen automatic account spending.
     let budgetRecovered=Boolean(job.budgetProbe&&apiAccountPause===job.budgetProbe&&!apiBudgetFailure(result)&&!['incomplete','failed'].includes(result.verificationStatus));
@@ -557,12 +626,15 @@ async function executeJob(job) {
     if(job.settings.provider==='build'&&e.code==='BUILD_CANCEL_UNCONFIRMED'){stopUnavailableBuild(e.code);if(!liveJob(job)&&clients.has(client))jobError(job,SuperXBuild.publicError(e).error,e.code);}
     if(liveJob(job)) {
       const errorBilling={...job.billing,...billingMetadata(e.partialResult,job.settings.provider),...billingMetadata(e,job.settings.provider)};
+      const diagnostics=requestMetadata(e,job.settings.provider).requestDiagnostics||requestMetadata(e.partialResult,job.settings.provider).requestDiagnostics||job.requestDiagnostics;
+      const diagnosticMetadata=diagnostics?{requestDiagnostics:diagnostics}:{};
       const partialText=Core.readerOutput(e.partialResult?.text,{final:true}).text.slice(0,30000);
-      const partialResult=partialText?withBillingMetadata({...e.partialResult,...errorBilling,text:partialText,verificationStatus:'incomplete'},job.settings.provider,job.settings.apiVerification):undefined;
+      const partialResult=partialText?withBillingMetadata({...e.partialResult,...errorBilling,...diagnosticMetadata,text:partialText,verificationStatus:'incomplete'},job.settings.provider,job.settings.apiVerification):undefined;
       const safeError=job.settings.provider==='build'?SuperXBuild.publicError(e):GrokFirstAPI.publicError(e);
       const budgetFailure=job.settings.provider==='api'?apiBudgetFailure(e):undefined;
       if(partialResult)rememberHistoryResult(job.historyTicket,{...partialResult,completedAt:Date.now()},false,job.historyLanguage);
-      jobError(job,safeError.error,safeError.code,{...errorBilling,...(commentsJob(job)?(budgetFailure?{verificationFailure:budgetFailure}:{}):{...verificationMetadata({verificationFailure:e.verificationFailure||partialResult?.verificationFailure||budgetFailure},job.settings.apiVerification),partialResult})});
+      rememberAPIDiagnostics(job,{...diagnosticMetadata,verificationFailure:e.verificationFailure||partialResult?.verificationFailure||budgetFailure},safeError.code);
+      jobError(job,safeError.error,safeError.code,{...errorBilling,...diagnosticMetadata,...(commentsJob(job)?(budgetFailure?{verificationFailure:budgetFailure}:{}):{...verificationMetadata({verificationFailure:e.verificationFailure||partialResult?.verificationFailure||budgetFailure},job.settings.apiVerification),partialResult})});
       if(e.code==='RATE_LIMIT'||budgetFailure)pauseWaitingJobs(job,e);
       if(job.settings.provider==='build'&&['BUILD_CONNECTION_REQUIRED','BUILD_CANCEL_UNCONFIRMED','BUILD_PERMISSION_REQUIRED','BUILD_LOGIN_REQUIRED','BUILD_VERSION_UNSUPPORTED','BUILD_CONFIG_UNSUPPORTED','BUILD_TOOL_POLICY','BUILD_DISCONNECTED','BUILD_UNAVAILABLE'].includes(safeError.code))stopUnavailableBuild(safeError.code);
     } else if(signal.aborted && clients.has(client) && job.revision===revision && (!jobs.has(job.key)||jobs.get(job.key)===job)) {
@@ -772,6 +844,8 @@ chrome.runtime.onMessage.addListener((message,sender,respond)=>{
     if(message.type==='CLEAR_BUILD_CONNECTION')return queueBuildConnection(message,true);
     if(message.type==='GET_BUILD_STATUS')return checkBuildDraft(message);
     if(message.type==='GET_CONFIG'){if(settings.provider==='build')await refreshBuildStatus();return {ok:true,...await publicConfig()};}
+    if(message.type==='GET_API_DIAGNOSTICS')return getAPIDiagnostics();
+    if(message.type==='CLEAR_API_DIAGNOSTICS')return clearAPIDiagnostics();
     if(message.type==='GET_HISTORY'||message.type==='GET_HISTORY_STATUS'){
       try{return {ok:true,...await history[message.type==='GET_HISTORY'?'get':'status']()};}
       catch{return {ok:false,errorKey:'history.storageError'};}
@@ -789,7 +863,10 @@ chrome.runtime.onMessage.addListener((message,sender,respond)=>{
   return true;
 });
 chrome.alarms?.onAlarm.addListener(alarm=>{
-  if(alarm.name===HISTORY_ALARM)void ready.then(()=>history.prune()).then(()=>notifyHistoryChanged()).catch(()=>{});
+  if(alarm.name===HISTORY_ALARM){
+    void ready.then(()=>history.prune()).then(()=>notifyHistoryChanged()).catch(()=>{});
+    void ready.then(()=>pruneStoredAPIDiagnostics()).catch(()=>{});
+  }
 });
 chrome.permissions?.onRemoved?.addListener(removed=>{
   if(!removed.origins?.includes('http://127.0.0.1/*'))return;

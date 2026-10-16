@@ -201,7 +201,9 @@ test('interrupted or truncated Fact Check retains actual partial findings, safe 
     assert.equal(calls,1);assert.equal(result.text,'The audited value is lower.');assert.equal(result.verificationStatus,'incomplete');assert.equal(result.verificationFailure.code,item.code);assert.equal(result.verificationFailure.stage,'verify');
     assert.equal(result.usage.total_tokens,item.terminal==='incomplete'?27:13);assert.equal(result.usageComplete,item.terminal==='incomplete');assert.deepEqual(Object.keys(result.usageByStage),['verify']);
     assert.equal(updates.at(-1).verificationStatus,'incomplete');assert.equal(updates.at(-1).text,result.text);assert.doesNotMatch(result.warning,/explanation|解释/i);
-    assert.equal(JSON.stringify(result).includes('PRIVATE'),false);assert.equal(JSON.stringify(result).includes('synthetic-secret'),false);
+    const {requestDiagnostics,...readerResult}=result;
+    assert.equal(JSON.stringify(readerResult).includes('PRIVATE'),false);assert.equal(JSON.stringify(result).includes('synthetic-secret'),false);
+    if(item.terminal==='failed')assert.equal(requestDiagnostics.providerMessage,'PRIVATE backend secret');
     assert.equal(Object.hasOwn(result,'verificationStart'),false);
     if(item.terminal==='incomplete')assert.equal(result.sources[0].url,'https://primary.example/evidence');
   }
@@ -345,7 +347,9 @@ test('extra delta, failure or error after completion in the same SSE chunk canno
     assert.equal(updates.at(-1).verificationStatus,'incomplete');
     assert.equal(updates.at(-1).text,finding);
     assert.equal(JSON.stringify({result,updates}).includes('UNEXPECTED'),false);
-    assert.equal(JSON.stringify({result,updates}).includes('PRIVATE'),false);
+    const withoutDiagnostics=value=>{const {requestDiagnostics,...readerValue}=value;return readerValue;};
+    assert.equal(JSON.stringify({result:withoutDiagnostics(result),updates:updates.map(withoutDiagnostics)}).includes('PRIVATE'),false);
+    if(item.name!=='extra delta')assert.equal(result.requestDiagnostics.providerMessage,'PRIVATE backend prose');
     assert.equal(Object.hasOwn(result,'verificationStart'),false);
   }
 });
@@ -1025,4 +1029,104 @@ test('cancellation while reading an HTTP diagnostic body is prompt, does not ret
 test('verification-failure provider metadata accepts only the shared fixed enum and no private fields',()=>{
   assert.deepEqual(api.sanitizedVerificationFailure({stage:'verify',code:'SERVER',errorCode:'API_ERROR',providerCode:'SERVICE-UNAVAILABLE',httpStatus:503,message:'PRIVATE_CANARY',requestId:'PRIVATE_ID'}),{stage:'verify',code:'SERVER',errorCode:'API_ERROR',httpStatus:503,providerCode:'service_unavailable'});
   assert.deepEqual(api.sanitizedVerificationFailure({stage:'verify',code:'UNKNOWN',providerCode:'PRIVATE_PROVIDER_CODE',httpStatus:'403'}),{stage:'verify',code:'UNKNOWN'});
+});
+
+const diagnosticRequestId='4c73719f-9698-4a53-8858-249f18cb83ad';
+const diagnosticResponseId='6622e6fd-731d-9e8d-a8f1-9d721316e2a5';
+
+test('HTTP request diagnostics retain a safe error summary, actual transport status and trace ID without credentials',async()=>{
+  const key='unprefixed.synthetic.secret',accountId='a1111111-b222-c333-d444-e55555555555';let calls=0;
+  const message=`Monthly spend limit reached. Key ${key}; Bearer abc.def.secret; xai-privatevalue; sk-privatevalue; owner+api@example.com; account ${accountId}; account_${'Z'.repeat(40)}. See https://console.x.ai/team/${accountId}/billing?private=hidden#privatefragment`;
+  const before=Date.now();
+  await assert.rejects(api.run(post,{...settings,apiModel:'grok-4.3',apiReasoningEffort:'none'},key,{fetchImpl:async()=>{
+    calls++;return new Response(JSON.stringify({error:{code:'spending_limit',message},request_id:diagnosticRequestId,body:{fullPrompt:'MUST_NOT_COPY'}}),{status:402,headers:{'x-request-id':diagnosticRequestId}});
+  }}),error=>{
+    const value=error.requestDiagnostics;
+    assert.equal(value.failureOrigin,'http');assert.equal(value.transportStatus,402);assert.equal(value.requestId,diagnosticRequestId);
+    assert.equal(value.requestedModel,'grok-4.3');assert.equal(value.requestedEffort,'none');assert.equal(value.model,undefined);assert.equal(value.responseId,undefined);
+    assert.ok(value.startedAt>=before&&value.failedAt>=value.startedAt&&value.failedAt<=Date.now());assert.equal(value.elapsedMs,value.failedAt-value.startedAt);
+    assert.match(value.providerMessage,/Monthly spend limit reached/);assert.match(value.providerMessage,/console\.x\.ai\/team\/\[redacted ID\]\/billing/);
+    assert.doesNotMatch(JSON.stringify(value),/unprefixed|abc\.def|xai-private|sk-private|owner|example\.com|a1111111|ZZZZ|hidden|privatefragment|MUST_NOT_COPY/);
+    assert.deepEqual(error.verificationFailure,{stage:'verify',code:'ACCESS',errorCode:'API_ERROR',httpStatus:402,providerCode:'spending_limit'});
+    assert.equal(error.failureDetails.providerMessage,undefined);assert.doesNotMatch(api.publicError(error).error,/Monthly|secret/);return true;
+  });assert.equal(calls,1);
+});
+
+test('a spending stream error preserves HTTP 200 separately and never invents an event HTTP status',async()=>{
+  let calls=0;
+  await assert.rejects(api.run(post,{...settings,apiModel:'grok-4.3',apiReasoningEffort:'low'},'synthetic-key',{fetchImpl:async()=>{
+    calls++;return {...responseFor([
+      {type:'response.created',response:{id:diagnosticResponseId,model:'grok-4.3-actual'}},
+      {type:'error',error:{code:'private-account:spending_limit',message:'The monthly API budget for this credential is exhausted.'}}
+    ]),status:200,headers:new Headers({'x-request-id':diagnosticRequestId})};
+  }}),error=>{
+    assert.deepEqual(error.verificationFailure,{stage:'verify',code:'ACCESS',errorCode:'API_ERROR',providerCode:'spending_limit'});
+    assert.deepEqual(error.requestDiagnostics,{failureOrigin:'stream',transportStatus:200,requestId:diagnosticRequestId,responseId:diagnosticResponseId,
+      providerMessage:'The monthly API budget for this credential is exhausted.',startedAt:error.requestDiagnostics.startedAt,failedAt:error.requestDiagnostics.failedAt,elapsedMs:error.requestDiagnostics.elapsedMs,
+      model:'grok-4.3-actual',requestedModel:'grok-4.3',requestedEffort:'low'});
+    assert.equal(JSON.stringify(error.requestDiagnostics).includes('private-account'),false);return true;
+  });assert.equal(calls,1);
+});
+
+test('explicit stream error statuses remain distinct from successful connection status and unknown errors stay unknown',async()=>{
+  for(const eventStatus of [402,undefined])await assert.rejects(api.run(post,settings,'key',{fetchImpl:async()=>({...responseFor([
+    {type:'response.failed',response:{id:diagnosticResponseId,error:{...(eventStatus?{httpStatus:eventStatus}:{}),code:'unknown-private-code',message:'Please inspect the API account budget settings.'}}}
+  ]),status:200})}),error=>{
+    assert.equal(error.requestDiagnostics.failureOrigin,'stream');assert.equal(error.requestDiagnostics.transportStatus,200);assert.equal(error.requestDiagnostics.responseId,diagnosticResponseId);
+    assert.equal(error.requestDiagnostics.providerMessage,'Please inspect the API account budget settings.');assert.equal(error.verificationFailure.httpStatus,eventStatus);
+    assert.equal(error.verificationFailure.code,eventStatus?'ACCESS':'UNKNOWN');assert.equal(error.verificationFailure.providerCode,undefined);
+    assert.equal(JSON.stringify(error).includes('unknown-private-code'),false);return true;
+  });
+});
+
+test('network failures never copy native error prose and retain only safe request timing and configuration',async()=>{
+  let calls=0;const key='secret-without-a-known-prefix';
+  await assert.rejects(api.run(post,{...settings,apiModel:'custom-model',apiReasoningEffort:'high'},key,{fetchImpl:async()=>{calls++;throw new TypeError(`fetch ${key} owner@example.com failed`);}}),error=>{
+    assert.equal(error.code,'API_STREAM_INTERRUPTED');assert.equal(error.requestDiagnostics.failureOrigin,'network');assert.equal(error.requestDiagnostics.transportStatus,undefined);
+    assert.equal(error.requestDiagnostics.providerMessage,undefined);assert.equal(error.requestDiagnostics.requestedModel,'custom-model');assert.equal(error.requestDiagnostics.requestedEffort,'auto');
+    assert.equal(error.requestDiagnostics.model,undefined);assert.ok(error.requestDiagnostics.elapsedMs>=0);assert.doesNotMatch(JSON.stringify(error),/secret-without|owner@example/);return true;
+  });assert.equal(calls,1);
+});
+
+test('a real partial stream keeps its diagnostic context and billed usage without a retry',async()=>{
+  let calls=0;const result=await api.run(post,{...settings,language:'en'},'synthetic-key',{fetchImpl:async()=>{
+    calls++;return {...responseFor([
+      {type:'response.created',response:{id:diagnosticResponseId,model:'actual-grok'}},
+      {type:'response.output_text.delta',delta:'The primary record contradicts this date.',response:{usage:{total_tokens:12}}},
+      {type:'response.failed',response:{error:{message:'The account spending budget was reached.',code:'spending_limit'}}}
+    ]),status:200};
+  }});
+  assert.equal(result.verificationStatus,'incomplete');assert.equal(result.usage.total_tokens,12);assert.equal(result.text,'The primary record contradicts this date.');
+  assert.equal(result.requestDiagnostics.failureOrigin,'stream');assert.equal(result.requestDiagnostics.transportStatus,200);assert.equal(result.requestDiagnostics.responseId,diagnosticResponseId);
+  assert.equal(result.requestDiagnostics.providerMessage,'The account spending budget was reached.');assert.equal(calls,1);
+});
+
+test('provider messages cannot log original or quoted text, custom prompts, canonical URL or partial input echoes',async()=>{
+  const current={...post,url:'https://twitter.com/author/status/100?s=20',text:'PRIVATE_POST_TEXT a longer sentence about the unreleased prototype.',quotedContext:[{text:'PRIVATE_QUOTED_TEXT containing a private quotation that must stay local.'}]};
+  const configured={...settings,verifyPrompt:'PRIVATE_PROMPT custom instructions that must not enter diagnostic logs.'};
+  const messages=[current.text,current.quotedContext[0].text,configured.verifyPrompt,current.text.slice(10,45),'https://x.com/author/status/100'];
+  for(const message of messages)await assert.rejects(api.run(current,configured,'synthetic-key',{fetchImpl:async()=>new Response(JSON.stringify({error:{code:'spending_limit',message:'Rejected input: '+message}}),{status:402})}),error=>{
+    assert.equal(error.requestDiagnostics.providerMessage,undefined,message);assert.doesNotMatch(JSON.stringify(error.requestDiagnostics),/PRIVATE_|prototype|quotation|instructions|status\/100/);return true;
+  });
+});
+
+test('comment stream errors use the same safe diagnostic capture and remove earlier analysis and draft prompts',async()=>{
+  const analysis={text:'PRIVATE_ANALYSIS prior content that must not enter the local error log.'};
+  const configured={...settings,commentsPrompt:'PRIVATE_COMMENTS custom comment drafting instructions must stay out.'};
+  for(const message of [analysis.text,configured.commentsPrompt,'The monthly budget for this credential has been reached.'])await assert.rejects(api.generateComments(post,configured,'synthetic-key',{analysis,fetchImpl:async()=>({...responseFor([{type:'error',error:{code:'spending_limit',message}}]),status:200})}),error=>{
+    assert.equal(error.requestDiagnostics.failureOrigin,'stream');assert.equal(error.requestDiagnostics.transportStatus,200);
+    assert.equal(error.requestDiagnostics.providerMessage,message.startsWith('PRIVATE_')?undefined:message);assert.doesNotMatch(JSON.stringify(error),/PRIVATE_ANALYSIS|PRIVATE_COMMENTS/);return true;
+  });
+});
+
+test('bounded message paths preserve useful status details but never arbitrary bodies or unsupported trace IDs',async()=>{
+  const cases=[
+    [{error:{status:{details:'Monthly included API usage is unavailable for this feature.'}}},'Monthly included API usage is unavailable for this feature.'],
+    [{message:'x'.repeat(8193)},undefined],
+    [{error:{unknown:{message:'DO_NOT_COPY_ARBITRARY_BODY'}},output:[{message:'DO_NOT_COPY_OUTPUT'}]},undefined]
+  ];
+  for(const [data,expected]of cases)await assert.rejects(api.run(post,settings,'synthetic-key',{fetchImpl:async()=>new Response(JSON.stringify({...data,request_id:'unsafe-account-prefix',response_id:'resp_unknown'}),{status:402,headers:{'x-request-id':'owner@example.com'}})}),error=>{
+    assert.equal(error.requestDiagnostics.providerMessage,expected);assert.equal(error.requestDiagnostics.requestId,undefined);assert.equal(error.requestDiagnostics.responseId,undefined);
+    assert.doesNotMatch(JSON.stringify(error),/DO_NOT_COPY|unsafe-account|resp_unknown|owner@example/);return true;
+  });
 });

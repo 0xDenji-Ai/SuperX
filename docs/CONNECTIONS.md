@@ -1,6 +1,6 @@
 # Connect SuperX
 
-The unreleased **0.9.3** candidate offers two independent modes. **API Key** is the default. **Grok CLI / ACP** connects directly to the official Grok service on your computer. Neither mode automatically falls back to the other or resubmits a paid task. Published Stable remains **0.7.26**.
+The unreleased **0.9.4** candidate offers two independent modes. **API Key** is the default. **Grok CLI / ACP** connects directly to the official Grok service on your computer. Neither mode automatically falls back to the other or resubmits a paid task. Published Stable remains **0.7.26**.
 
 ## API Key
 
@@ -50,6 +50,8 @@ Visible posts enter the queue immediately. This candidate executes local Grok ta
 | Usage / account limit | A structured API 402 or account-limit code pauses automatic API work across tabs and worker sleep. Check the matching account's usage and billing; after resolving the limit, retry one post manually. A complete successful probe resumes new work; failed checks are not automatically replayed. Ordinary settings edits or saving the same Key do not reset this pause. Switching transport is not a quota workaround. |
 
 Windows and macOS command generation and protocol behavior have automated coverage. Installed-browser acceptance with a real account, including macOS devices, remains a separate release check; simulated paths are not a live-device pass.
+
+For API failures, open **Local diagnostic log** at the bottom of Settings. It keeps up to 30 failures from the last 24 hours of the current browser session, with redacted provider details and supported trace IDs. Transport HTTP status and an error event's status are separate: an HTTP 200 stream can still fail later, and a `spending_limit` event alone does not establish HTTP 402 or an exhausted subscription. Review the matching account's usage and the recorded cause before deciding what to change. Existing failures whose details were not retained cannot be reconstructed. Copying or clearing this local log does not call the provider or clear browsing history.
 
 ## 中文快速引导
 

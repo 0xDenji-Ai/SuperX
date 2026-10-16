@@ -49,6 +49,35 @@
     const code=value.toLowerCase().replace(/-/g,'_');
     return API_FAILURE_PROVIDER_CODES.has(code)?code:undefined;
   }
+  const REQUEST_FAILURE_ORIGINS=new Set(['http','stream','network']);
+  const REQUEST_EFFORTS=new Set(['auto','none','minimal','low','medium','high','xhigh','max']);
+  const DIAGNOSTIC_UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  function safeProviderMessage(value) {
+    if(typeof value!=='string'||value.length>8192)return undefined;
+    const text=value.normalize('NFKC').replace(/[\u200b-\u200f\u202a-\u202e\u2066-\u2069]/g,'').replace(/https?:\/\/[^\s<>"')]+/gi,raw=>{
+      try{const url=new URL(raw);return url.origin+url.pathname;}catch{return '[redacted URL]';}
+    }).replace(/\bBearer\s+[A-Za-z0-9._~+\/-]+=*/gi,'Bearer [redacted]')
+      .replace(/\b(?:xai-|sk-)[A-Za-z0-9_./+=-]*/gi,'[redacted]')
+      .replace(/[\p{L}\p{N}.!#$%&'*+\/=?^_`{|}~-]+@[\p{L}\p{N}.-]+\.[\p{L}]{2,}/gu,'[redacted email]')
+      .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi,'[redacted ID]')
+      .replace(/[A-Za-z0-9_-]{24,}/g,'[redacted ID]')
+      .replace(/\b\d{8,}\b/g,'[redacted ID]')
+      .replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u202a-\u202e\u2066-\u2069]/g,' ')
+      .replace(/\s+/g,' ').trim();
+    return text?Array.from(text).slice(0,600).join(''):undefined;
+  }
+  function sanitizedRequestDiagnostics(value) {
+    if(!value||typeof value!=='object'||!REQUEST_FAILURE_ORIGINS.has(value.failureOrigin))return undefined;
+    const result={failureOrigin:value.failureOrigin};
+    if(Number.isInteger(value.transportStatus)&&value.transportStatus>=100&&value.transportStatus<=599)result.transportStatus=value.transportStatus;
+    for(const field of ['requestId','responseId'])if(typeof value[field]==='string'&&DIAGNOSTIC_UUID.test(value[field]))result[field]=value[field].toLowerCase();
+    const message=safeProviderMessage(value.providerMessage);if(message)result.providerMessage=message;
+    for(const field of ['startedAt','failedAt'])if(Number.isSafeInteger(value[field])&&value[field]>=0&&value[field]<=8_640_000_000_000_000)result[field]=value[field];
+    if(Number.isSafeInteger(value.elapsedMs)&&value.elapsedMs>=0&&value.elapsedMs<=86_400_000)result.elapsedMs=value.elapsedMs;
+    for(const field of ['model','requestedModel'])if(typeof value[field]==='string'&&/^[A-Za-z0-9][A-Za-z0-9._:/-]{0,119}$/.test(value[field])&&!/^(?:xai-|sk-)/i.test(value[field]))result[field]=value[field];
+    if(REQUEST_EFFORTS.has(value.requestedEffort))result.requestedEffort=value.requestedEffort;
+    return result;
+  }
 
   const MAX_PROMPT_LENGTH = 12000;
   const DEFAULT_PROMPTS = Object.freeze({
@@ -527,5 +556,5 @@
     clear() { this.items.clear(); }
   }
 
-  return Object.freeze({ LANGUAGES, API_MODELS, modelProfile, reasoningEffort, buildReasoningEffort, apiFailureProviderCode, DEFAULT_SETTINGS, DEFAULT_PROMPTS, MAX_PROMPT_LENGTH, normalizePrompt, readerOutput, explanationMode, normalizeSettings, resolvePostLanguage, canonicalPostUrl, extractPost, postFingerprint, nativePostIdentity, apiPostIdentity, visibilityEligibility, BoundedPostQueue });
+  return Object.freeze({ LANGUAGES, API_MODELS, modelProfile, reasoningEffort, buildReasoningEffort, apiFailureProviderCode, sanitizedRequestDiagnostics, DEFAULT_SETTINGS, DEFAULT_PROMPTS, MAX_PROMPT_LENGTH, normalizePrompt, readerOutput, explanationMode, normalizeSettings, resolvePostLanguage, canonicalPostUrl, extractPost, postFingerprint, nativePostIdentity, apiPostIdentity, visibilityEligibility, BoundedPostQueue });
 });

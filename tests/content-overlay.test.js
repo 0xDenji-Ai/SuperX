@@ -2774,6 +2774,27 @@ test('unknown upstream codes are not copied to diagnostics and generic API error
   page.port.onMessage.emit({type:'ERROR',requestId:request.requestId,code:'API_ERROR',error:'Safe generic error',verificationFailure:{stage:'verify',code:'UNKNOWN',providerCode:'PRIVATE_CREDENTIAL_CANARY'}});page.flush();
   assert.equal(card.testShadow.querySelector('.status').textContent,ui.t('error.apiFailed','zh-CN'));assert.doesNotMatch(card.testShadow.querySelector('.diagnostics').textContent,/PRIVATE_CREDENTIAL_CANARY/);
 });
+test('stream failure traces retain useful reasons without inventing HTTP 402 or leaking arbitrary fields',()=>{
+  const page=fixture({postCount:1});page.configure();const request=page.port.sent.find(message=>message.type==='ANALYZE'),card=page.cards()[0].testShadow;
+  const requestId='ad5663da-63e6-86c6-e0be-ff15effa8357';
+  page.port.onMessage.emit({type:'ERROR',requestId:request.requestId,code:'API_ERROR',verificationFailure:{stage:'verify',code:'ACCESS',errorCode:'API_ERROR',providerCode:'spending_limit'},requestDiagnostics:{failureOrigin:'stream',transportStatus:200,requestId,providerMessage:'A provider tool rejected this request at its spending limit.',startedAt:1800000000000,failedAt:1800000002100,elapsedMs:2100,requestedModel:'grok-4.3',requestedEffort:'none',apiKey:'PRIVATE_KEY_CANARY',prompt:'PRIVATE_PROMPT_CANARY',responseBody:'PRIVATE_BODY_CANARY'}});page.flush();
+  const details=card.querySelector('.diagnostics');assert.equal(details.hidden,false);assert.match(details.textContent,/"failureOrigin": "stream"/);assert.match(details.textContent,/"transportStatus": 200/);assert.match(details.textContent,new RegExp(requestId));assert.match(details.textContent,/provider tool rejected/);assert.match(details.textContent,/requestedModel/);
+  assert.doesNotMatch(details.textContent,/PRIVATE_KEY|PRIVATE_PROMPT|PRIVATE_BODY|"httpStatus": 402/);assert.equal(card.querySelector('.status').textContent,ui.t('error.apiUsage','zh-CN'));
+  card.querySelector('.retry').emit('click');page.flush();assert.doesNotMatch(card.querySelector('.diagnostics').textContent,/provider tool rejected|ad5663da/,'A new request cannot inherit a previous failure trace');
+});
+test('uncategorized failures can display a safe upstream reason without claiming the service supplied none',()=>{
+  const page=fixture({postCount:1});page.configure();const request=page.port.sent.find(message=>message.type==='ANALYZE'),card=page.cards()[0].testShadow;
+  page.port.onMessage.emit({type:'ERROR',requestId:request.requestId,code:'API_ERROR',verificationFailure:{stage:'verify',code:'UNKNOWN',errorCode:'API_ERROR'},requestDiagnostics:{failureOrigin:'stream',transportStatus:200,providerMessage:'The provider returned an unfamiliar failure condition.'}});page.flush();
+  const text=card.querySelector('.diagnostics').textContent;assert.match(text,/unfamiliar failure condition/);assert.doesNotMatch(text,/服务未返回具体失败原因|service did not return a specific failure reason/i);assert.match(text,new RegExp(ui.t('verification.unknown','zh-CN')));
+  assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,1);
+});
+test('quoted-post hydration clears obsolete comment diagnostics without redoing a completed fact check',()=>{
+  const page=fixture({postCount:1});page.configure();const request=page.port.sent.find(message=>message.type==='ANALYZE'),card=page.cards()[0].testShadow;
+  page.port.onMessage.emit({type:'RESULT',requestId:request.requestId,result:{provider:'api',text:'Preserved completed findings.',verificationStatus:'completed',sources:[]}});page.flush();card.querySelector('.generate-comments').emit('click');
+  const comments=page.port.sent.find(message=>message.type==='GENERATE_COMMENTS');page.port.onMessage.emit({type:'COMMENT_ERROR',requestId:comments.requestId,code:'API_ERROR',requestDiagnostics:{failureOrigin:'stream',transportStatus:200,providerMessage:'Obsolete comment request trace.'}});page.flush();assert.match(card.querySelector('.diagnostics').textContent,/Obsolete comment/);
+  page.articles[0].postData={...page.articles[0].postData,quotedContext:[{id:'300',url:'https://x.com/quote/status/300',text:'The quoted context has now loaded.'}]};page.mutate();page.intersect();page.tick(1000);
+  assert.equal(card.querySelector('.answer').textContent,'Preserved completed findings.');assert.doesNotMatch(card.querySelector('.diagnostics').textContent,/Obsolete comment/);assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,1);assert.equal(page.port.sent.filter(message=>message.type==='GENERATE_COMMENTS').length,1);
+});
 
 const spendingFailure={stage:'verify',code:'ACCESS',errorCode:'API_ERROR',httpStatus:402,providerCode:'spending_limit'};
 test('account limits pause new visible API posts and only a worker-confirmed manual probe resumes them',()=>{

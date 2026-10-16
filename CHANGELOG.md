@@ -2,6 +2,14 @@
 
 SuperX release history. The extension's `manifest.json` is the authoritative installed version. Test counts below describe those releases' recorded checks, not live provider or browser-store certification.
 
+## 0.9.4 — Trace API failures without guessing account exhaustion (unreleased candidate)
+
+- Distinguish HTTP rejection, errors inside an accepted stream and network failure. Keep transport status separate from an error event's explicit status; a stream's `spending_limit` is not by itself proof of HTTP 402.
+- Capture bounded, redacted provider error details, supported request/response trace IDs, local timing, requested model/effort and a server-confirmed model when supplied. Keep request bodies, API Keys, prompts and arbitrary provider fields out of the structured log.
+- Add a collapsed local diagnostic log at the bottom of Settings, with explicit refresh, copy and clear controls. Retain at most 30 API failures for 24 hours within the current browser session. Nothing is automatically uploaded; clearing this log does not clear posts, history, answer caches or account-limit protection.
+- Correct the unknown-error wording: an unrecognized category does not prove the service supplied no explanation. Previous failures cannot be reconstructed when their original details were discarded.
+- A reported spending error does not identify which allowance or upstream check caused it. Do not claim that a subscription was exhausted without supporting account evidence. Published Stable remains 0.7.26.
+
 ## 0.9.3 — Pause automatic work at API account limits (unreleased candidate)
 
 - Installed 0.9.2 diagnostics identified a live HTTP 402 / `spending_limit` rejection alongside successful Grok 4.3 checks. This identifies a provider account spending or usage restriction, not which balance, budget or allowance was exhausted.

@@ -42,7 +42,7 @@
   window.chrome={
     permissions:{request:()=>Promise.resolve(query.get('permission')!=='denied')},
     runtime:{
-      getManifest:()=>({version:'0.9.3-preview'}),reload:()=>location.reload(),
+      getManifest:()=>({version:'0.9.4-preview'}),reload:()=>location.reload(),
       onMessage:{addListener:fn=>runtimeListeners.push(fn)},
       async sendMessage(message){
         if(message.type==='GET_UI_LANGUAGE')return {ok:true,language:state.uiLanguage};

@@ -23,6 +23,7 @@
   let optionsFocusPending = false;
   let lastOptionsFocusNonce;
   let historyReady=false, historyBusy=false,historyStatusKey=null;
+  let diagnosticsBusy=false,diagnosticsStatusKey=null,diagnosticsText="",diagnosticsRetentionHours=24,diagnosticsMaxEntries=30;
   let buildStatus = null, buildChecking = false, buildCheckRevision = 0;
   let buildConnection={configured:false,port:2419},buildSecretChanged=false,buildGenerating=false;
   const advertisedBuildModels = new Set();
@@ -70,6 +71,44 @@
   function requestLocalAccess(){try{return chrome.permissions?.request({origins:["http://127.0.0.1/*"]}) || Promise.resolve(false);}catch{return Promise.resolve(false);}}
 
   function setHistoryStatus(key) {historyStatusKey=key;$("history-status").textContent=key?ui.t(key,uiLanguage):"";}
+  function renderDiagnostics(){
+    $("diagnostics-help").textContent=ui.t("options.diagnosticsHelp",uiLanguage,{hours:diagnosticsRetentionHours,maxEntries:diagnosticsMaxEntries});
+    $("diagnostics-status").textContent=diagnosticsStatusKey?ui.t(diagnosticsStatusKey,uiLanguage):"";
+    $("diagnostics-output").textContent=diagnosticsText;$("diagnostics-output").hidden=!diagnosticsText;
+    for(const id of ["diagnostics-refresh","diagnostics-clear"])$(id).disabled=busy||diagnosticsBusy;
+    $("diagnostics-copy").disabled=busy||diagnosticsBusy||!diagnosticsText;
+  }
+  function diagnosticEntries(value){
+    if(!Array.isArray(value)||typeof core.sanitizedRequestDiagnostics!=="function")throw new Error("Invalid diagnostics response");
+    const errorCodes=new Set(["API_INCOMPLETE","API_STREAM_INTERRUPTED","API_STREAM_ERROR","API_LANGUAGE_MISMATCH","RATE_LIMIT","API_ERROR","CANCELED","TIMEOUT","COMMENTS_INVALID_RESPONSE"]);
+    const failureCodes=new Set(["OUTPUT_LIMIT","INCOMPLETE","CONNECTION","TIMEOUT","LANGUAGE_MISMATCH","RATE_LIMIT","ACCESS","SERVER","UNKNOWN"]);
+    return value.slice(0,30).flatMap(entry=>{
+      if(!entry||!Number.isSafeInteger(entry.recordedAt)||entry.recordedAt<0)return [];
+      const requestDiagnostics=core.sanitizedRequestDiagnostics(entry.requestDiagnostics);
+      if(!requestDiagnostics||!Object.keys(requestDiagnostics).length)return [];
+      const code=errorCodes.has(entry.code)?entry.code:"API_ERROR",failure=entry.verificationFailure;
+      let verificationFailure;
+      if(failure?.stage==="verify"&&failureCodes.has(failure.code)){
+        verificationFailure={stage:"verify",code:failure.code};
+        if(errorCodes.has(failure.errorCode))verificationFailure.errorCode=failure.errorCode;
+        if(Number.isInteger(failure.httpStatus)&&failure.httpStatus>=100&&failure.httpStatus<=599)verificationFailure.httpStatus=failure.httpStatus;
+        const providerCode=core.apiFailureProviderCode(failure.providerCode);if(providerCode)verificationFailure.providerCode=providerCode;
+        if(["max_output_tokens","content_filter"].includes(failure.reason))verificationFailure.reason=failure.reason;
+      }
+      return [{recordedAt:entry.recordedAt,code,requestDiagnostics,...(verificationFailure?{verificationFailure}:{})}];
+    });
+  }
+  async function refreshDiagnostics(){
+    if(busy||diagnosticsBusy)return;diagnosticsBusy=true;diagnosticsStatusKey="common.loading";renderDiagnostics();
+    try{
+      const result=await send({type:"GET_API_DIAGNOSTICS"}),entries=diagnosticEntries(result.entries);
+      diagnosticsText=entries.length?JSON.stringify(entries,null,2):"";
+      diagnosticsRetentionHours=Number.isInteger(result.retentionHours)&&result.retentionHours>0&&result.retentionHours<=168?result.retentionHours:24;
+      diagnosticsMaxEntries=Number.isInteger(result.maxEntries)&&result.maxEntries>0&&result.maxEntries<=30?result.maxEntries:30;
+      diagnosticsStatusKey=entries.length?null:"options.diagnosticsEmpty";
+    }catch{diagnosticsStatusKey="options.diagnosticsUnavailable";}
+    finally{diagnosticsBusy=false;renderDiagnostics();}
+  }
 
   function setStatus(key, state = "success", vars = {}) {
     statusMessage = {key,state,vars};
@@ -82,6 +121,7 @@
     $("history-enabled").disabled=value||!historyReady||historyBusy;
     renderSecurity();
     renderProvider();
+    renderDiagnostics();
     if (!value && optionsFocusPending) void consumeOptionsFocus();
   }
   function keyInputClear() {
@@ -271,6 +311,7 @@
     showExplanationMode();
     renderSecurity();
     renderProvider();
+    renderDiagnostics();
     if (statusMessage) setStatus(statusMessage.key,statusMessage.state,statusMessage.vars);
   }
   function populate(settings) {
@@ -527,6 +568,20 @@
   $("open-history").addEventListener("click",async () => {
     try {await send({type:"OPEN_HISTORY"});}
     catch {setHistoryStatus("history.error");}
+  });
+  $("diagnostics-summary").addEventListener("click",()=>{if(!$("api-diagnostics").open)void refreshDiagnostics();});
+  $("diagnostics-refresh").addEventListener("click",()=>refreshDiagnostics());
+  $("diagnostics-copy").addEventListener("click",async()=>{
+    if(busy||diagnosticsBusy||!diagnosticsText)return;
+    diagnosticsBusy=true;renderDiagnostics();
+    try{await navigator.clipboard.writeText(diagnosticsText);diagnosticsStatusKey="options.diagnosticsCopied";}
+    catch{diagnosticsStatusKey="common.copyFailed";}finally{diagnosticsBusy=false;renderDiagnostics();}
+  });
+  $("diagnostics-clear").addEventListener("click",async()=>{
+    if(busy||diagnosticsBusy)return;diagnosticsBusy=true;diagnosticsText="";diagnosticsStatusKey="common.loading";renderDiagnostics();
+    try{await send({type:"CLEAR_API_DIAGNOSTICS"});diagnosticsText="";diagnosticsStatusKey="options.diagnosticsEmpty";}
+    catch{diagnosticsStatusKey="options.diagnosticsUnavailable";}
+    finally{diagnosticsBusy=false;renderDiagnostics();}
   });
   chrome.runtime.onMessage.addListener(message => {
     if (message?.type === "UI_LANGUAGE_CHANGED") { localeRevision++;applyLanguage(message.language); }

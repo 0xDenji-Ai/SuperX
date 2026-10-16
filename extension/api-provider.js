@@ -9,6 +9,7 @@
   const INCOMPLETE_REASONS = new Set(['max_output_tokens','content_filter']);
   const SAFE_API_ERROR_CODES = new Set(['API_INCOMPLETE','API_STREAM_INTERRUPTED','API_STREAM_ERROR','API_LANGUAGE_MISMATCH','RATE_LIMIT','API_ERROR','CANCELED','TIMEOUT']);
   const SAFE_ERRORS = new WeakSet();
+  const DIAGNOSTIC_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   const LANGUAGE_NAMES = Object.freeze({'zh-CN':'Simplified Chinese','en':'English','ja':'Japanese','ko':'Korean','zh-TW':'Traditional Chinese','es':'Spanish','fr':'French','de':'German','pt':'Portuguese','ar':'Arabic','ru':'Russian','hi':'Hindi'});
   function languageKey(value) {
     if(typeof value!=='string'||value==='auto')return 'auto';
@@ -298,6 +299,66 @@
     const providerCode=Core.apiFailureProviderCode(value.providerCode);if(providerCode)result.providerCode=providerCode;
     return result;
   }
+  function diagnosticModel(value) {
+    const model=sanitizedModel(value);
+    return model.length<=120&&!/^(?:xai-|sk-)/i.test(model)?model:'';
+  }
+  function diagnosticId(value) {
+    // The official Responses examples use bare UUIDs. Unknown opaque strings
+    // are not a license to preserve account IDs or arbitrary error content.
+    return typeof value==='string'&&DIAGNOSTIC_UUID.test(value)?value.toLowerCase():undefined;
+  }
+  function providerMessage(value,{secrets=[],inputs=[]}={}) {
+    // Process a complete bounded string before truncating its safe output;
+    // truncating first could leave a cut-off credential or echoed post behind.
+    if(typeof value!=='string'||value.length>8192)return undefined;
+    let text=value.normalize('NFKC').replace(/[\u200b-\u200f\u202a-\u202e\u2066-\u2069]/g,'');
+    for(const secret of secrets)if(typeof secret==='string'&&secret) {
+      for(const form of new Set([secret,encodeURIComponent(secret),JSON.stringify(secret).slice(1,-1)]))text=text.split(form).join('[redacted]');
+    }
+    const folded=text.toLowerCase().replace(/\s+/g,' ');
+    const messageGrams=new Set();for(let index=0;index+24<=folded.length;index++)messageGrams.add(folded.slice(index,index+24));
+    for(const input of inputs) {
+      if(typeof input!=='string'||!input.trim())continue;
+      const normalized=input.normalize('NFKC').toLowerCase().replace(/\s+/g,' ').trim();
+      // Error messages must not become a second copy of supplied posts,
+      // custom instructions or earlier answers, including a partial echo.
+      if(normalized.length>=24) {
+        for(let index=0;index+24<=normalized.length;index++)if(messageGrams.has(normalized.slice(index,index+24)))return undefined;
+      } else if(normalized.length&&folded.includes(normalized))return undefined;
+    }
+    return Core.sanitizedRequestDiagnostics({failureOrigin:'stream',providerMessage:text})?.providerMessage;
+  }
+  function sanitizedRequestDiagnostics(value) {
+    return Core.sanitizedRequestDiagnostics(value);
+  }
+  function errorRequestMetadata(value,redaction) {
+    const at=path=>path.reduce((node,key)=>node&&typeof node==='object'&&!Array.isArray(node)?node[key]:undefined,value);
+    const metadata={};
+    for(const path of [['request_id'],['error','request_id'],['data','request_id'],['response','request_id'],['response','error','request_id']]) {
+      const id=diagnosticId(at(path));if(id){metadata.requestId=id;break;}
+    }
+    for(const path of [['response_id'],['response','id'],['response','response_id'],['data','response','id']]) {
+      const id=diagnosticId(at(path));if(id){metadata.responseId=id;break;}
+    }
+    for(const path of [['error','message'],['response','error','message'],['data','error','message'],['message'],['data','message'],['response','message'],
+      ['status','message'],['status','details','message'],['status','details'],['error','details','message'],['error','details'],['error','status','message'],['error','status','details','message'],['error','status','details'],['response','error','details','message']]) {
+      const message=providerMessage(at(path),redaction);if(message){metadata.providerMessage=message;break;}
+    }
+    return metadata;
+  }
+  function diagnosticRedaction(post,settings,analysis,apiKey,request) {
+    const inputs=[];
+    function collectPost(value,depth=0) {
+      if(!value||typeof value!=='object'||depth>2)return;
+      for(const field of ['text','url'])if(typeof value[field]==='string')inputs.push(value[field]);
+      for(const image of Array.isArray(value.images)?value.images.slice(0,4):[])if(typeof image?.alt==='string')inputs.push(image.alt);
+      for(const quote of Array.isArray(value.quotedContext)?value.quotedContext.slice(0,2):[])collectPost(quote,depth+1);
+    }
+    collectPost(post);inputs.push(analysis?.text,request.instructions,settings.verifyPrompt,settings.commentsPrompt);
+    for(const input of request.input||[])if(typeof input.content==='string')inputs.push(input.content);
+    return {secrets:[apiKey],inputs};
+  }
   function failed(error,code,details={}) {
     error.failureDetails={code,...details,errorCode:error.code};
     return error;
@@ -339,10 +400,11 @@
     }
     return {...(foundStatus!==undefined?{httpStatus:foundStatus}:{}),...(providerCode?{providerCode}:{})};
   }
-  async function httpFailureDiagnostics(response,signal) {
+  async function httpFailureDiagnostics(response,signal,redaction) {
     // Error bodies are untrusted, bounded input. Extract fixed classifications
     // without exposing prose, account IDs, request URLs, or the response body.
-    const body=response.body;if(!body||typeof body.getReader!=='function')return failureDiagnostics(null,response.status);
+    const fallback=()=>({failure:failureDiagnostics(null,response.status),metadata:{}});
+    const body=response.body;if(!body||typeof body.getReader!=='function')return fallback();
     let reader,timer;const timeout=Symbol('error-body-timeout');
     const cancel=()=>{try{void reader?.cancel().catch(()=>{});}catch{}};
     try {
@@ -357,10 +419,10 @@
         }
       })();
       const text=await Promise.race([reading,new Promise(resolve=>{timer=setTimeout(()=>resolve(timeout),1000);})]);
-      if(text===timeout)return failureDiagnostics(null,response.status);
-      let data;try{data=JSON.parse(text);}catch{return failureDiagnostics(null,response.status);}
-      return failureDiagnostics(data,response.status);
-    } catch {return failureDiagnostics(null,response.status);}
+      if(text===timeout)return fallback();
+      let data;try{data=JSON.parse(text);}catch{return fallback();}
+      return {failure:failureDiagnostics(data,response.status),metadata:errorRequestMetadata(data,redaction)};
+    } catch {return fallback();}
     finally{clearTimeout(timer);signal?.removeEventListener('abort',cancel);cancel();try{reader?.releaseLock();}catch{}}
   }
   function providerFailure(diagnostics) {
@@ -409,16 +471,26 @@
   async function runStage(post,settings,apiKey,stage,analysis,{signal,onUpdate,fetchImpl}) {
     assertNotAborted(signal);
     let text='',completed=null,usage={},sources=[],searched=false,model=sanitizedModel(settings.apiModel),terminalUsageComplete=false;
+    if(model.includes(apiKey))model='';
+    const request=buildRequest(post,settings,stage,analysis),redaction=diagnosticRedaction(post,settings,analysis,apiKey,request);
+    const startedAt=Date.now(),diagnostic={failureOrigin:'network',startedAt,requestedModel:diagnosticModel(settings.apiModel),requestedEffort:Core.reasoningEffort(settings.apiModel,settings.apiReasoningEffort)};
     const tracker=textTracker();
     const publish=()=>onUpdate({text,usage,model,usageComplete:terminalUsageComplete,usageByStage:{[stage]:usage},modelByStage:{[stage]:model}});
     try {
       const response=await fetchImpl(ENDPOINT,{
         method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${apiKey}`},
-        body:JSON.stringify(buildRequest(post,settings,stage,analysis)),signal
+        body:JSON.stringify(request),signal
       });
       assertNotAborted(signal);
+      if(Number.isInteger(response.status))diagnostic.transportStatus=response.status;
+      for(const header of ['x-request-id','request-id']) {
+        let value;try{value=response.headers?.get(header);}catch{/* Metadata cannot hide the actual provider failure. */}
+        const id=diagnosticId(value);if(id&&value!==apiKey){diagnostic.requestId=id;break;}
+      }
       if(!response.ok) {
-        const diagnostics=await httpFailureDiagnostics(response,signal);assertNotAborted(signal);
+        diagnostic.failureOrigin='http';
+        const received=await httpFailureDiagnostics(response,signal,redaction);assertNotAborted(signal);
+        const diagnostics=received.failure;Object.assign(diagnostic,received.metadata);
         const category=providerFailure(diagnostics),rateLimited=category==='RATE_LIMIT';
         const hints={401:'API Key 无效或已失效。',403:'此 Key 没有访问该模型的权限。',402:'xAI API 的余额、预算或用量限制阻止了本次请求。',429:'xAI 请求限速或额度耗尽，请稍后再试。'};
         throw failed(apiError(hints[response.status]||'xAI API 请求失败，请检查模型和网络。',rateLimited?'RATE_LIMIT':'API_ERROR'),category,diagnostics);
@@ -426,6 +498,11 @@
       if(!response.body)throw failed(apiError('API 未返回可读取的响应。','API_STREAM_INTERRUPTED'),'CONNECTION');
       await readEvents(response.body,event=>{
         assertNotAborted(signal);
+        const responseId=diagnosticId(event.response?.id)||diagnosticId(event.response_id);
+        if(responseId&&responseId!==apiKey)diagnostic.responseId=responseId;
+        if(['response.failed','response.incomplete','error'].includes(event.type)||event.response?.status==='failed'||event.response?.status==='incomplete') {
+          diagnostic.failureOrigin='stream';Object.assign(diagnostic,errorRequestMetadata(event,redaction));
+        }
         tracker.ingest(event);
         if(event.response?.usage)usage=sanitizedUsage(event.response.usage);
         if(event.response) {
@@ -433,7 +510,7 @@
           searched ||= searchedResponse(event.response);
           if(['response.completed','response.failed','response.incomplete'].includes(event.type)&&Object.hasOwn(event.response,'output'))text=responseText(event.response,{final:true});
         }
-        const actualModel=sanitizedModel(event.response?.model);if(actualModel)model=actualModel;
+        const actualModel=sanitizedModel(event.response?.model);if(actualModel&&!actualModel.includes(apiKey)){model=actualModel;diagnostic.model=diagnosticModel(actualModel);}
         if(['response.completed','response.failed','response.incomplete','error'].includes(event.type))terminalUsageComplete=usageComplete(event.response?.usage);
         if(['response.completed','response.failed','response.incomplete'].includes(event.type)&&Object.hasOwn(event.response||{},'output')&&!text.trim())publish();
         if(event.type==='response.output_text.delta') {
@@ -470,6 +547,7 @@
       if(!text.trim())throw failed(apiError('Grok 返回了空答案。','API_INCOMPLETE'),'INCOMPLETE');
       return {text,sources:responseSources(completed),searched:searchedResponse(completed),usage,model,usageComplete:terminalUsageComplete};
     } catch(error) {
+      if(error instanceof SyntaxError||SAFE_ERRORS.has(error)&&!['CANCELED','API_STREAM_INTERRUPTED'].includes(error.code)&&diagnostic.failureOrigin!=='http')diagnostic.failureOrigin='stream';
       if(signal?.aborted||error.name==='AbortError')error=abortError();
       // Preserve only server-reported billing metadata. Stream snapshots replace
       // earlier snapshots; they must not be added to the same request twice.
@@ -481,6 +559,11 @@
         const messages={RATE_LIMIT:'xAI 请求限速或额度耗尽，请稍后再试。',API_INCOMPLETE:'Grok 输出未完成，可手动重试。',API_LANGUAGE_MISMATCH:'Grok 未遵循所选输出语言。',API_STREAM_ERROR:'API 数据流损坏，未收到完整答案。',API_ERROR:'xAI 生成失败，请稍后重试。'};
         error=apiError(messages[code]||'与 xAI 的连接中断，未收到完整答案，可手动重试。',code);
       }
+      const failedAt=Date.now();
+      // These are local request times, not a claim about provider billing time.
+      // The exact Key and input data never leave this closure as diagnostics.
+      for(const field of ['requestId','responseId','model','requestedModel'])if(typeof diagnostic[field]==='string'&&diagnostic[field].includes(apiKey))delete diagnostic[field];
+      error.requestDiagnostics=sanitizedRequestDiagnostics({...diagnostic,failedAt,elapsedMs:Math.max(0,failedAt-startedAt)});
       error.usage=usage;
       error.usageComplete=terminalUsageComplete;
       error.usageByStage={[stage]:usage};
@@ -603,6 +686,7 @@
         throw languageError;
       }
       const partial=resultFor({text,sources:mergeSources(error.partialSources),searched:error.partialSearched===true,model:sanitizedModel(error.model)||sanitizedModel(settings.apiModel),verificationFailure:failure},mode,'incomplete',label.incomplete,{verify:sanitizedUsage(error.usage)},{verify:error.model},error.usageComplete===true);
+      const diagnostics=sanitizedRequestDiagnostics(error.requestDiagnostics);if(diagnostics)partial.requestDiagnostics=diagnostics;
       emit(partial);
       if(error.code==='RATE_LIMIT') {
         error.partialResult=partial;
@@ -612,7 +696,7 @@
       return partial;
     }
   }
-  const api={run,generateComments,buildRequest,buildCommentsRequest,parseComments,validateComments,readEvents,responseText,responseSources,safeUrl,verificationMode,sanitizedUsage,sanitizedModel,sanitizedMetadata,sanitizedVerificationFailure,publicError,usageComplete,mergeUsage,searchedResponse,OUTPUT_LIMITS,languageInstruction,resolveLanguage,assertMatchingScript,labels};
+  const api={run,generateComments,buildRequest,buildCommentsRequest,parseComments,validateComments,readEvents,responseText,responseSources,safeUrl,verificationMode,sanitizedUsage,sanitizedModel,sanitizedMetadata,sanitizedVerificationFailure,sanitizedRequestDiagnostics,publicError,usageComplete,mergeUsage,searchedResponse,OUTPUT_LIMITS,languageInstruction,resolveLanguage,assertMatchingScript,labels};
   root.GrokFirstAPI=api;
   if(typeof module!=='undefined')module.exports=api;
 })(globalThis);

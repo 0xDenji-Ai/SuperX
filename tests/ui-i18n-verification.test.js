@@ -12,6 +12,12 @@ test('API failure statuses explain recovery in every interface language without 
   for(const language of ui.SUPPORTED_LANGUAGES){assert.ok(ui.catalog[language]['note.accountLimit']?.trim());if(language!=='en')assert.notEqual(ui.t('note.accountLimit',language),ui.t('note.accountLimit','en'));}
   assert.match(ui.t('note.accountLimit','en'),/paused.*manually/);assert.match(ui.t('note.accountLimit','zh-CN'),/暂停.*预算.*手动/);
 });
+test('local diagnostics controls are translated and explain bounded session-only retention',()=>{
+  const keys=['diagnosticsTitle','diagnosticsHelp','diagnosticsRefresh','diagnosticsCopy','diagnosticsClear','diagnosticsEmpty','diagnosticsUnavailable','diagnosticsCopied'];
+  for(const language of ui.SUPPORTED_LANGUAGES)for(const suffix of keys){const value=ui.catalog[language]['options.'+suffix];assert.ok(value?.trim(),`${language}: ${suffix}`);if(language!=='en')assert.notEqual(value,ui.catalog.en['options.'+suffix]);}
+  const help=ui.t('options.diagnosticsHelp','en',{hours:24,maxEntries:30});assert.match(help,/30.*24.*session/);assert.doesNotMatch(help,/\{hours\}|\{maxEntries\}/);
+  assert.doesNotMatch(ui.t('verification.unknown','en'),/service did not return/i);
+});
 
 test('English UI consistently names the feature fact check while internal localization keys stay compatible', () => {
   assert.equal(ui.t('common.verification','en'),'Fact check');
@@ -39,7 +45,7 @@ test('incomplete verification describes the unfinished fact check without claimi
   assert.equal(ui.t('note.preserved','zh-CN'),'已保留部分结果。');
   assert.equal(ui.t('verification.outputLimit','en'),'Response reached its output limit.');
   assert.equal(ui.t('verification.languageMismatch','en'),'Fact-check output did not match the requested language.');
-  assert.equal(ui.t('verification.unknown','en'),'The service did not return a specific failure reason.');
+  assert.equal(ui.t('verification.unknown','en'),'No specific failure category was identified. See the diagnostic details.');
   assert.equal(ui.t('verification.timeout','en'),'Fact-check request timed out.');
   assert.equal(ui.t('verification.timeout','zh-CN'),'求证请求超时。');
   assert.doesNotMatch(ui.t('status.incomplete','en'),/Partial answer/);

@@ -7,6 +7,28 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 
+test('shared request diagnostics preserve only traceable fixed fields and redact credentials, identities and URL parameters',()=>{
+  const requestId='4C73719F-9698-4A53-8858-249F18CB83AD',responseId='6622e6fd-731d-9e8d-a8f1-9d721316e2a5';
+  const value={failureOrigin:'stream',transportStatus:200,requestId,responseId,startedAt:1792151999800,failedAt:1792152000000,elapsedMs:200,
+    requestedModel:'grok-4.3',model:'grok-4.3-actual',requestedEffort:'none',providerMessage:`<b>Monthly budget reached.</b> Bearer abc.def.secret xai-privatevalue sk-privatevalue owner@example.com ${requestId} acct_${'Z'.repeat(32)} https://console.x.ai/billing?private=hidden#fragment`,
+    apiKey:'DO_NOT_COPY',authorization:'DO_NOT_COPY',post:{text:'DO_NOT_COPY'},prompt:'DO_NOT_COPY',body:'DO_NOT_COPY',httpStatus:402};
+  const clean=core.sanitizedRequestDiagnostics(value);
+  assert.deepEqual({...clean,providerMessage:undefined},{failureOrigin:'stream',transportStatus:200,requestId:requestId.toLowerCase(),responseId,startedAt:1792151999800,failedAt:1792152000000,elapsedMs:200,requestedModel:'grok-4.3',model:'grok-4.3-actual',requestedEffort:'none',providerMessage:undefined});
+  assert.match(clean.providerMessage,/<b>Monthly budget reached\.<\/b>/);assert.match(clean.providerMessage,/console\.x\.ai\/billing/);
+  assert.doesNotMatch(clean.providerMessage,/abc\.def|xai-private|sk-private|owner@example|4C73719F|ZZZZ|hidden|fragment/);assert.equal(JSON.stringify(clean).includes('DO_NOT_COPY'),false);
+  assert.deepEqual(core.sanitizedRequestDiagnostics(clean),clean);assert.equal(clean.httpStatus,undefined);
+});
+
+test('shared request diagnostics reject malformed provenance and IDs and bound full-string redaction before truncation',()=>{
+  for(const value of [undefined,null,{},[],{failureOrigin:'sse'},{failureOrigin:'PRIVATE_ORIGIN'}])assert.equal(core.sanitizedRequestDiagnostics(value),undefined);
+  const invalid={failureOrigin:'network',transportStatus:'402',requestId:'owner@example.com',responseId:'resp_unknown',startedAt:-1,failedAt:NaN,elapsedMs:Infinity,requestedEffort:'PRIVATE_EFFORT',requestedModel:'xai-PRIVATE_KEY',model:'<script>PRIVATE</script>',providerMessage:'x'.repeat(8193)};
+  assert.deepEqual(core.sanitizedRequestDiagnostics(invalid),{failureOrigin:'network'});
+  const value=core.sanitizedRequestDiagnostics({failureOrigin:'http',providerMessage:'🔎 '.repeat(295)+'xai-'+ 'Z'.repeat(80)+' trailing'});
+  assert.ok(Array.from(value.providerMessage).length<=600);assert.doesNotMatch(value.providerMessage,/ZZZZ|xai-/);
+  assert.match(core.sanitizedRequestDiagnostics({failureOrigin:'stream',providerMessage:'xai-\u200bprivatecredential'}).providerMessage,/\[redacted\]/);
+  assert.equal(core.sanitizedRequestDiagnostics({failureOrigin:'stream',providerMessage:'xai-\u200bprivatecredential'}).providerMessage.includes('privatecredential'),false);
+});
+
 // A small selector-capable DOM fixture avoids third-party installs and keeps these
 // tests focused on the feed structures the extension actually consumes.
 class Element {
@@ -713,6 +735,8 @@ function uiPageFixture(file, settings=core.DEFAULT_SETTINGS, storage={}, environ
         }
         if(message.type==='GET_SECURITY_STATUS')return environment.securityFailure?{ok:false,errorKey:'errors.noResponse'}:security();
         if(message.type==='GET_HISTORY_STATUS')return {ok:true,enabled:local.superxHistoryEnabled!==false,count:0,epoch:0};
+        if(message.type==='GET_API_DIAGNOSTICS')return {ok:true,entries:[],retentionHours:24,maxEntries:30};
+        if(message.type==='CLEAR_API_DIAGNOSTICS')return {ok:true};
         if(message.type==='SET_HISTORY_ENABLED') {local.superxHistoryEnabled=message.enabled;return {ok:true,enabled:message.enabled};}
         if(message.type==='OPEN_HISTORY') {openedHistory.push(true);return {ok:true};}
         if(message.type==='GET_BUILD_STATUS')return {ok:true,modelCatalog:[{id:'grok-4.7',efforts:['minimal','low','medium','high','xhigh']}],...environment.buildStatus || {installed:false,available:false,ready:false}};
@@ -743,7 +767,7 @@ function uiPageFixture(file, settings=core.DEFAULT_SETTINGS, storage={}, environ
       session:{get:async keys=>pick(session,keys),remove:async keys=>{for(const key of Array.isArray(keys)?keys:[keys])delete session[key];}},onChanged:{addListener:listener=>storageListeners.push(listener)}}
   };
   if(Object.hasOwn(environment,'browserLanguage'))chrome.i18n={getUILanguage:()=>environment.browserLanguage};
-  const context=vm.createContext({document,chrome,XGrokCore:core,GrokFirstUI:ui,navigator:{language:environment.navigatorLanguage || 'en-US'}});
+  const context=vm.createContext({document,chrome,XGrokCore:core,GrokFirstUI:ui,navigator:{language:environment.navigatorLanguage || 'en-US',clipboard:{async writeText(value){if(environment.copyFailure)throw new Error('Clipboard unavailable');environment.onCopy?.(value);}}}});
   vm.runInContext(fs.readFileSync(path.join(__dirname,'../extension',`${file}.js`),'utf8'),context);
   return {document,ids,messages,reads,runtimeListeners,storageListeners,local,session,openedOptions,openedHistory,permissionRequests};
 }
@@ -2070,4 +2094,48 @@ test('Build reasoning choices use concrete ACP levels independently of API model
   assert.deepEqual(fixture.ids.get('build-reasoning-effort').children.map(option=>option.value),['minimal','low','medium','high','xhigh']);assert.equal(fixture.ids.get('build-reasoning-effort').value,'low');assert.equal(fixture.ids.get('api-reasoning-effort').value,'none');
   for(const language of ui.SUPPORTED_LANGUAGES){assert.ok(ui.catalog[language]['options.reasoning.minimal']);assert.ok(ui.catalog[language]['build.chooseModel']);}
   const html=fs.readFileSync(path.join(__dirname,'../extension/setup.html'),'utf8');for(const id of ['model','reasoning'])assert.match(html,new RegExp('<select id="'+id+'" required'));
+});
+
+const optionsDiagnosticRecord=()=>({recordedAt:1792152000000,code:'API_ERROR',apiKey:'ENTRY_PRIVATE_KEY',post:'ENTRY_PRIVATE_POST',verificationFailure:{stage:'verify',code:'ACCESS',errorCode:'API_ERROR',httpStatus:402,providerCode:'spending_limit',prompt:'DIAGNOSTIC_PRIVATE_PROMPT'},requestDiagnostics:{failureOrigin:'http',transportStatus:402,requestId:'123e4567-e89b-12d3-a456-426614174000',responseId:'123e4567-e89b-12d3-a456-426614174001',providerMessage:'<img src=x onerror=alert(1)> Spending limit reached; '+['xai','privatefixturetoken'].join('-')+'0'.repeat(19),startedAt:1792151999800,failedAt:1792152000000,elapsedMs:200,requestedModel:'grok-4.3',requestedEffort:'none',apiKey:'DIAGNOSTIC_PRIVATE_KEY',post:'DIAGNOSTIC_PRIVATE_POST',prompt:'DIAGNOSTIC_PRIVATE_PROMPT'}});
+
+test('local API diagnostics load only on explicit expansion and render a safe JSON snapshot as text',async()=>{
+  const record=optionsDiagnosticRecord(),fixture=uiPageFixture('options',core.DEFAULT_SETTINGS,{}, {onMessage(message){if(message.type==='GET_API_DIAGNOSTICS')return Promise.resolve({ok:true,entries:[record],retentionHours:24,maxEntries:30});}});await settleUI();await settleUI();
+  assert.equal(fixture.messages.some(message=>message.type==='GET_API_DIAGNOSTICS'),false);assert.equal(fixture.ids.get('diagnostics-copy').disabled,true);
+  fixture.ids.get('diagnostics-summary').listeners.click();await settleUI();await settleUI();
+  const text=fixture.ids.get('diagnostics-output').textContent,shown=JSON.parse(text);assert.equal(shown.length,1);assert.equal(shown[0].requestDiagnostics.transportStatus,402);assert.equal(shown[0].requestDiagnostics.requestedModel,'grok-4.3');assert.match(text,/<img src=x onerror=alert\(1\)>/);assert.doesNotMatch(text,/ENTRY_PRIVATE_|DIAGNOSTIC_PRIVATE_|xai-privatefixture/);
+  assert.deepEqual(shown[0].verificationFailure,{stage:'verify',code:'ACCESS',errorCode:'API_ERROR',httpStatus:402,providerCode:'spending_limit'});
+  assert.equal(fixture.ids.get('diagnostics-output').children.length,0);assert.equal(fixture.ids.get('diagnostics-output').hidden,false);assert.equal(fixture.ids.get('diagnostics-copy').disabled,false);
+  assert.equal(fixture.messages.filter(message=>message.type==='GET_API_DIAGNOSTICS').length,1);assert.equal(fixture.messages.some(message=>['SAVE_KEY','SAVE_SETTINGS','SAVE_BUILD_CONNECTION','ANALYZE','GENERATE_COMMENTS'].includes(message.type)),false);
+  const html=fs.readFileSync(path.join(__dirname,'../extension/options.html'),'utf8');assert.match(html,/<details id="api-diagnostics">/);assert.doesNotMatch(html,/<details id="api-diagnostics"[^>]*\bopen\b/);
+});
+
+test('copying and clearing diagnostics are explicit actions that preserve Key, settings, cache and history',async()=>{
+  let entries=[optionsDiagnosticRecord()],copied;
+  const fixture=uiPageFixture('options',core.DEFAULT_SETTINGS,{}, {onCopy(value){copied=value;},onMessage(message){if(message.type==='GET_API_DIAGNOSTICS')return {ok:true,entries};if(message.type==='CLEAR_API_DIAGNOSTICS'){entries=[];return {ok:true};}}});await settleUI();await settleUI();await fixture.ids.get('diagnostics-refresh').listeners.click();
+  const before=fixture.ids.get('diagnostics-output').textContent;assert.equal(copied,undefined);await fixture.ids.get('diagnostics-copy').listeners.click();assert.equal(copied,before);assert.equal(fixture.ids.get('diagnostics-status').textContent,ui.t('options.diagnosticsCopied','en'));
+  await fixture.ids.get('diagnostics-clear').listeners.click();assert.equal(fixture.ids.get('diagnostics-output').textContent,'');assert.equal(fixture.ids.get('diagnostics-output').hidden,true);assert.equal(fixture.ids.get('diagnostics-copy').disabled,true);assert.equal(fixture.ids.get('diagnostics-status').textContent,ui.t('options.diagnosticsEmpty','en'));
+  assert.equal(fixture.session.apiKey,'session-secret');assert.equal(fixture.local.settings,core.DEFAULT_SETTINGS);assert.equal(fixture.messages.some(message=>['CLEAR_CACHE','CLEAR_HISTORY','SAVE_KEY','SAVE_SETTINGS','SET_HISTORY_ENABLED'].includes(message.type)),false);assert.equal(fixture.messages.filter(message=>message.type==='CLEAR_API_DIAGNOSTICS').length,1);
+});
+
+test('diagnostic loading, failures and locale changes remain local and do not replace form drafts',async()=>{
+  let resolveLogs,fail=false;
+  const fixture=uiPageFixture('options',core.DEFAULT_SETTINGS,{}, {copyFailure:true,onMessage(message){if(message.type==='GET_API_DIAGNOSTICS')return fail?{ok:false}:new Promise(resolve=>{resolveLogs=resolve;});}});await settleUI();await settleUI();
+  fixture.ids.get('api-key').value='keep-unsaved-api-draft';fixture.ids.get('api-key').listeners.input();const pending=fixture.ids.get('diagnostics-refresh').listeners.click();assert.equal(fixture.ids.get('diagnostics-status').textContent,ui.t('common.loading','en'));assert.equal(fixture.ids.get('diagnostics-refresh').disabled,true);await fixture.ids.get('diagnostics-refresh').listeners.click();assert.equal(fixture.messages.filter(message=>message.type==='GET_API_DIAGNOSTICS').length,1);
+  resolveLogs({ok:true,entries:[optionsDiagnosticRecord()]});await pending;const before=fixture.ids.get('diagnostics-output').textContent;
+  fixture.runtimeListeners.forEach(listener=>listener({type:'UI_LANGUAGE_CHANGED',language:'zh-CN'}));assert.equal(fixture.ids.get('diagnostics-output').textContent,before);assert.equal(fixture.ids.get('api-key').value,'keep-unsaved-api-draft');assert.equal(fixture.messages.filter(message=>message.type==='GET_API_DIAGNOSTICS').length,1);
+  await fixture.ids.get('diagnostics-copy').listeners.click();assert.equal(fixture.ids.get('diagnostics-status').textContent,ui.t('common.copyFailed','zh-CN'));
+  fail=true;await fixture.ids.get('diagnostics-refresh').listeners.click();assert.equal(fixture.ids.get('diagnostics-status').textContent,ui.t('options.diagnosticsUnavailable','zh-CN'));assert.equal(fixture.ids.get('api-key').value,'keep-unsaved-api-draft');assert.equal(fixture.ids.get('diagnostics-refresh').disabled,false);
+});
+
+test('diagnostics are bounded and malformed snapshots or failed clears cannot expose stale private fields',async()=>{
+  let mode='many';const records=Array.from({length:40},()=>optionsDiagnosticRecord());
+  const fixture=uiPageFixture('options',core.DEFAULT_SETTINGS,{}, {onMessage(message){if(message.type==='GET_API_DIAGNOSTICS')return {ok:true,entries:mode==='many'?records:{apiKey:'PRIVATE_FAILURE'}};if(message.type==='CLEAR_API_DIAGNOSTICS')return {ok:false};}});await settleUI();await settleUI();await fixture.ids.get('diagnostics-refresh').listeners.click();assert.equal(JSON.parse(fixture.ids.get('diagnostics-output').textContent).length,30);
+  await fixture.ids.get('diagnostics-clear').listeners.click();assert.equal(fixture.ids.get('diagnostics-output').textContent,'');assert.equal(fixture.ids.get('diagnostics-copy').disabled,true);assert.equal(fixture.ids.get('diagnostics-status').textContent,ui.t('options.diagnosticsUnavailable','en'));
+  mode='malformed';await fixture.ids.get('diagnostics-refresh').listeners.click();assert.equal(fixture.ids.get('diagnostics-status').textContent,ui.t('options.diagnosticsUnavailable','en'));assert.doesNotMatch(fixture.ids.get('diagnostics-output').textContent,/PRIVATE_FAILURE/);
+});
+
+test('diagnostic logs preserve stream error classification without inventing an HTTP status',async()=>{
+  const record=optionsDiagnosticRecord();record.requestDiagnostics.failureOrigin='stream';record.requestDiagnostics.transportStatus=200;record.verificationFailure={stage:'verify',code:'ACCESS',errorCode:'API_ERROR',providerCode:'spending_limit',reason:'max_output_tokens',apiKey:'PRIVATE_VF_KEY'};
+  const fixture=uiPageFixture('options',core.DEFAULT_SETTINGS,{}, {onMessage(message){if(message.type==='GET_API_DIAGNOSTICS')return {ok:true,entries:[record]};}});await settleUI();await settleUI();await fixture.ids.get('diagnostics-refresh').listeners.click();const shown=JSON.parse(fixture.ids.get('diagnostics-output').textContent)[0];
+  assert.equal(shown.requestDiagnostics.transportStatus,200);assert.equal(shown.requestDiagnostics.failureOrigin,'stream');assert.equal(shown.verificationFailure.providerCode,'spending_limit');assert.equal(shown.verificationFailure.reason,'max_output_tokens');assert.equal(Object.hasOwn(shown.verificationFailure,'httpStatus'),false);assert.equal(Object.hasOwn(shown.verificationFailure,'apiKey'),false);
 });

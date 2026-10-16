@@ -221,6 +221,20 @@
           <button id="reload-extension" class="secondary-button" type="button" data-i18n="common.reload">Reload extension</button>
         </section>
 
+        <section class="settings-section diagnostics-section">
+          <details id="api-diagnostics">
+            <summary id="diagnostics-summary" data-i18n="options.diagnosticsTitle">Troubleshooting logs</summary>
+            <p id="diagnostics-help" class="help" data-i18n="options.diagnosticsHelp" data-i18n-vars='{"hours":24,"maxEntries":30}'>Local session diagnostics are retained for 24 hours, up to 30 entries.</p>
+            <div class="diagnostics-actions">
+              <button id="diagnostics-refresh" class="secondary-button" type="button" data-i18n="options.diagnosticsRefresh">Refresh logs</button>
+              <button id="diagnostics-copy" class="secondary-button" type="button" data-i18n="options.diagnosticsCopy" disabled>Copy logs</button>
+              <button id="diagnostics-clear" class="text-button" type="button" data-i18n="options.diagnosticsClear">Clear logs</button>
+            </div>
+            <p id="diagnostics-status" class="help" role="status" aria-live="polite"></p>
+            <pre id="diagnostics-output" dir="ltr" tabindex="0" aria-labelledby="diagnostics-summary" hidden></pre>
+          </details>
+        </section>
+
       </form>
       <footer class="settings-footer">
         <p class="footer-note"><span data-i18n="note.possibleErrors">Grok can make mistakes; check the sources.</span><a href="privacy.html" target="_blank" rel="noopener noreferrer" data-i18n="options.privacyLink">SuperX privacy notice</a></p>

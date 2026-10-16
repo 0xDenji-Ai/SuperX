@@ -271,10 +271,12 @@
   function refreshVerificationFailure(entry) {
     const failure=entry.verificationFailure;
     entry.ui.status.title=failure?t(verificationFailureKeys[failure.code]):'';
-    if(failure) {
-      // Only public categories are displayed. Backend messages and arbitrary
-      // response fields never enter the preserved-answer diagnostics.
-      entry.ui.diagnosticText.textContent=t(verificationFailureKeys[failure.code])+'\n'+JSON.stringify(failure,null,2);
+    const requestDiagnostics=Core.sanitizedRequestDiagnostics(entry.requestDiagnostics),commentRequestDiagnostics=Core.sanitizedRequestDiagnostics(entry.commentRequestDiagnostics);
+    if(failure||requestDiagnostics||commentRequestDiagnostics) {
+      // Structured provider traces pass the same bounded sanitizer used by
+      // the worker. No request body, credentials or arbitrary fields enter UI.
+      const diagnostic={...failure,...(requestDiagnostics?{requestDiagnostics}:{}),...(commentRequestDiagnostics?{commentRequestDiagnostics}:{})};
+      entry.ui.diagnosticText.textContent=(failure?t(verificationFailureKeys[failure.code])+'\n':'')+JSON.stringify(diagnostic,null,2);
       entry.ui.diagnostics.hidden=false;entry.verificationDiagnostics=true;
     } else if(entry.verificationDiagnostics) {
       entry.ui.diagnosticText.textContent='';entry.ui.diagnostics.hidden=true;entry.verificationDiagnostics=false;
@@ -409,8 +411,8 @@
       if(allChanged || !settings.enabled || (wasReady&&!providerReady)) {
         post({type:'CANCEL_ALL'});requests.clear();
         for(const entry of entries.values()) {
-          if(changed||['queued','running'].includes(entry.status)){entry.status='new';entry.pending=false;entry.since=0;entry.result=null;entry.analysisUsage=null;setVerificationFailure(entry,null,false);renderAnswer(entry,'',true);renderSources(entry,[]);note(entry,'');entry.ui.retry.hidden=true;}
-          if(changed||['queued','running'].includes(entry.commentStatus)){entry.commentStatus='idle';entry.comments=[];entry.commentUsage=null;refreshComments(entry);}
+          if(changed||['queued','running'].includes(entry.status)){entry.status='new';entry.pending=false;entry.since=0;entry.result=null;entry.analysisUsage=null;entry.requestDiagnostics=undefined;setVerificationFailure(entry,null,false);renderAnswer(entry,'',true);renderSources(entry,[]);note(entry,'');entry.ui.retry.hidden=true;}
+          if(changed||['queued','running'].includes(entry.commentStatus)){entry.commentStatus='idle';entry.comments=[];entry.commentUsage=null;entry.commentRequestDiagnostics=undefined;refreshComments(entry);}
         }
       }
       if(typeof message.collapsed==='boolean')setCollapsed(message.collapsed);
@@ -461,9 +463,9 @@
         if(Array.isArray(values)&&values.length===3&&values.every(text=>typeof text==='string'&&text.trim()&&Array.from(text).length<=280)&&new Set(values).size===3){entry.comments=values;entry.commentStatus='done';}
         else {entry.commentStatus='error';entry.commentError='status.failed';}
       }
-      if(message.type==='COMMENT_ERROR'){captureUsage(entry,'comments',message,request,false);entry.commentStatus='error';entry.commentError=errorKey(message.code,message.verificationFailure);pauseForAccountLimit(message.verificationFailure);}
+      if(message.type==='COMMENT_ERROR'){captureUsage(entry,'comments',message,request,false);entry.commentStatus='error';entry.commentError=errorKey(message.code,message.verificationFailure);entry.commentRequestDiagnostics=Core.sanitizedRequestDiagnostics(message.requestDiagnostics);pauseForAccountLimit(message.verificationFailure);}
       if(message.type==='COMMENT_RESULT')recoverAccountPause(request,entry.commentStatus==='done',message);
-      refreshComments(entry);
+      refreshComments(entry);refreshVerificationFailure(entry);
       if(message.type==='COMMENT_RESULT'&&entry.commentStatus==='done'&&entry.ui.box.scrollTo) {
         const end=Math.max(entry.ui.comments.offsetTop+entry.ui.comments.offsetHeight,entry.ui.tokenUsage.offsetTop+entry.ui.tokenUsage.offsetHeight);
         const top=Math.max(0,end-entry.ui.box.clientHeight+16);
@@ -513,6 +515,7 @@
       if(invalid)entry.errorCode='API_INCOMPLETE';
       renderAnswer(entry,result.text,true);renderSources(entry,result.sources||[]);
       const incomplete=['incomplete','failed'].includes(result.verificationStatus);
+      entry.requestDiagnostics=Core.sanitizedRequestDiagnostics(result.requestDiagnostics||message.requestDiagnostics);
       setVerificationFailure(entry,result.verificationFailure,incomplete);
       const sourceKey=incomplete?'status.incomplete':result.searched?'status.searched':'status.unverified';
       entry.cached=!invalid&&Boolean(message.cached);status(entry,sourceKey);
@@ -527,11 +530,12 @@
       captureUsage(entry,'analysis',{...partialResult,...message},request,false);
       const partialVerification=partialResult&&(['incomplete','failed'].includes(partialResult.verificationStatus)||partialResult.verificationFailure);
       const failure=message.verificationFailure||partialResult?.verificationFailure;
+      entry.requestDiagnostics=Core.sanitizedRequestDiagnostics(message.requestDiagnostics||partialResult?.requestDiagnostics);
       setVerificationFailure(entry,failure,Boolean(failure||partialVerification));
       entry.status='error';entry.errorCode=message.code;status(entry,partialVerification?'status.incomplete':errorKey(message.code,entry.verificationFailure));note(entry,'');entry.ui.retry.hidden=false;
       if(['API_LANGUAGE_MISMATCH','BUILD_LANGUAGE_MISMATCH'].includes(message.code)){entry.cached=false;entry.result=null;renderAnswer(entry,'',true);renderSources(entry,[]);}
       if(partialResult){entry.verificationStart=partialResult.verificationStart;renderAnswer(entry,partialResult.text,true);renderSources(entry,partialResult.sources||[]);note(entry,retained.invalid?'':partialResultNote(partialResult));}
-      if(!entry.verificationFailure) {
+      if(!entry.verificationFailure&&!entry.requestDiagnostics&&!entry.commentRequestDiagnostics) {
         entry.ui.diagnostics.hidden=!message.diagnostics&&!message.error;
         entry.ui.diagnosticText.textContent=JSON.stringify({code:message.code,error:message.error,...message.diagnostics,...(message.usage?{usage:message.usage}:{})},null,2).slice(0,4000);
       }
@@ -817,7 +821,7 @@
         // the supplied text, so cancel/clear only those when their input changes.
         if(Core.apiPostIdentity(data)!==Core.apiPostIdentity(entry.post)) {
           for(const [id,request] of requests)if(request.entry===entry&&request.task==='comments'){post({type:'CANCEL',requestId:id});requests.delete(id);}
-          entry.commentStatus='idle';entry.comments=[];entry.commentUsage=null;refreshComments(entry);
+          entry.commentStatus='idle';entry.comments=[];entry.commentUsage=null;entry.commentRequestDiagnostics=undefined;refreshComments(entry);refreshVerificationFailure(entry);
         }
         entry.post=data;entry.signature=signature;continue;
       }
@@ -932,7 +936,7 @@
     // Cancelling a comment can synchronously invalidate the shared port.
     if(!connected||!providerReady)return;
     const requestId=crypto.randomUUID();
-    entry.pending=false;queue.remove(entry.post.id);entry.status='queued';entry.phase='';entry.verificationBase='';entry.verificationStarted=false;entry.verificationStart=undefined;entry.result=null;entry.cached=false;setVerificationFailure(entry,null,false);status(entry,'status.queued');entry.ui.retry.hidden=true;
+    entry.pending=false;queue.remove(entry.post.id);entry.status='queued';entry.phase='';entry.verificationBase='';entry.verificationStarted=false;entry.verificationStart=undefined;entry.result=null;entry.cached=false;entry.requestDiagnostics=undefined;setVerificationFailure(entry,null,false);status(entry,'status.queued');entry.ui.retry.hidden=true;
     if(force||!entry.ui.answer.textContent)renderAnswer(entry,'',true);
     renderSources(entry,[]);note(entry,'');entry.ui.diagnostics.hidden=true;entry.ui.diagnosticText.textContent='';
     requests.set(requestId,{...requestSnapshot(entry,requestId),force:force===true});
@@ -944,7 +948,7 @@
       if(!post({type:'CANCEL',requestId:id}))return false;
       requests.delete(id);
     }
-    entry.comments=[];entry.commentUsage=null;entry.commentStatus='idle';entry.commentError='';entry.copyStatusKey='';entry.ui.copyStatus.textContent='';refreshComments(entry);
+    entry.comments=[];entry.commentUsage=null;entry.commentRequestDiagnostics=undefined;entry.commentStatus='idle';entry.commentError='';entry.copyStatusKey='';entry.ui.copyStatus.textContent='';refreshComments(entry);refreshVerificationFailure(entry);
     return true;
   }
   function generateComments(entry) {
@@ -956,7 +960,7 @@
     request.analysis={text:entry.latestText||'',verificationStatus:entry.result?.verificationStatus||'unverified',warning:entry.result?.warning||'',sources:entry.result?.sources||[]};
     const force=entry.commentStatus==='error'||entry.comments.length>0;
     request.force=force;
-    entry.commentStatus='queued';entry.commentError='';entry.copyStatusKey='';entry.ui.copyStatus.textContent='';requests.set(requestId,request);captureUsage(entry,'comments',{},request,false,true);refreshComments(entry);
+    entry.commentStatus='queued';entry.commentError='';entry.commentRequestDiagnostics=undefined;entry.copyStatusKey='';entry.ui.copyStatus.textContent='';requests.set(requestId,request);captureUsage(entry,'comments',{},request,false,true);refreshComments(entry);refreshVerificationFailure(entry);
     post({type:'GENERATE_COMMENTS',requestId,post:entry.post,analysis:request.analysis,force});scheduleLayout();
   }
   function refreshComments(entry) {

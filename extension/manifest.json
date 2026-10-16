@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "SuperX",
-  "version": "0.9.3",
+  "version": "0.9.4",
   "homepage_url": "https://superx.vip/",
   "description": "浏览 X 时，通过自己的 API Key 或本机 Grok Build 自动核查帖子，在右栏展示简洁结论与证据。",
   "minimum_chrome_version": "120",
