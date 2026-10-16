@@ -1226,6 +1226,64 @@ function beginVerification(page,request,card) {
   page.flush();return verificationUI(card);
 }
 
+const toolCommandChain='{"absolute_path":"x_thread_fetch","post_id":"123"}\n{"absolute_path":"web_search","query":"primary evidence"}\n{"absolute_path":"view_image","image_url":"https://example.com/image.png"}';
+
+test('tool-command-only streams never become reader text or stop the fact-check waiting animation',()=>{
+  const page=fixture({postCount:1});page.configure({apiVerification:'only'});
+  const request=page.port.sent.find(message=>message.type==='ANALYZE'),card=page.cards()[0],progress=verificationUI(card);
+  for(const text of ['{','{"absolute_path":"web_search","query":',toolCommandChain]) {
+    page.port.onMessage.emit({type:'UPDATE',requestId:request.requestId,phase:'verify',apiVerification:'only',text});page.flush();
+    assert.equal(progress.answer.textContent,'');assert.equal(progress.wait.hidden,false);
+    assert.equal(progress.status.classList.contains('shimmer'),true);assert.equal(progress.divider,null);
+    assert.doesNotMatch(card.testShadow.textContent,/absolute_path|primary evidence|image\.png/);
+  }
+  assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,1);assert.deepEqual(page.writes,[]);
+});
+
+test('missing or non-string text is progress only, while explicit empty text retracts a streamed answer',()=>{
+  const page=fixture({postCount:1});page.configure({apiVerification:'only'});
+  const request=page.port.sent.find(message=>message.type==='ANALYZE'),progress=verificationUI(page.cards()[0]);
+  page.port.onMessage.emit({type:'UPDATE',requestId:request.requestId,phase:'verify',text:'A useful evidence finding.'});page.flush();
+  for(const value of [undefined,{absolute_path:'web_search',query:'not reader text'},42,null]) {
+    page.port.onMessage.emit({type:'UPDATE',requestId:request.requestId,phase:'verify',...(value===undefined?{}:{text:value}),usage:{total_tokens:17}});page.flush();
+    assert.equal(progress.answer.textContent,'A useful evidence finding.');assert.equal(progress.wait.hidden,true);
+  }
+  page.port.onMessage.emit({type:'UPDATE',requestId:request.requestId,phase:'verify',text:''});page.flush();
+  assert.equal(progress.answer.textContent,'');assert.equal(progress.wait.hidden,false);assert.equal(progress.status.classList.contains('shimmer'),true);
+  page.port.onMessage.emit({type:'UPDATE',requestId:request.requestId,phase:'verify',text:'A corrected finding.'});page.flush();
+  assert.equal(progress.answer.textContent,'A corrected finding.');assert.equal(progress.wait.hidden,true);
+  assert.deepEqual(page.writes,[]);
+});
+
+test('tool-only cached results and partial failures are incomplete rather than successful fact checks',()=>{
+  for(const type of ['RESULT','ERROR'])for(const text of [toolCommandChain,{absolute_path:'web_search',query:'not reader text'},'']) {
+    const page=fixture({postCount:1});page.configure({apiVerification:'only'});
+    const request=page.port.sent.find(message=>message.type==='ANALYZE'),card=page.cards()[0],progress=verificationFailureUI(card);
+    const result={provider:'api',apiVerification:'only',text,searched:true,verificationStatus:'completed',sources:[{url:'https://example.com/tool-progress',title:'Tool progress'}],usage:{total_tokens:17},model:'grok-4.3'};
+    page.port.onMessage.emit(type==='RESULT'?{type,requestId:request.requestId,cached:true,result}:{type,requestId:request.requestId,code:'NETWORK_ERROR',partialResult:result});page.flush();
+    assert.equal(progress.answer.textContent,'');assert.equal(progress.status.hidden,false);
+    assert.equal(progress.status.textContent,ui.t('status.incomplete','zh-CN'));
+    assert.equal(progress.status.title,ui.t('verification.incomplete','zh-CN'));
+    assert.equal(progress.wait.hidden,true);assert.equal(progress.retry.hidden,false);assert.equal(progress.note.textContent,'');
+    assert.match(progress.detail.textContent,/INCOMPLETE/);assert.doesNotMatch(card.testShadow.textContent,/absolute_path|Tool progress|primary evidence|\[object Object\]/);
+    assert.equal(card.testShadow.querySelector('.sources').textContent,'');
+    assert.match(card.testShadow.querySelector('.token-usage').textContent,/17/,'Reported consumption remains visible even when output is rejected');
+    assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,1,'Invalid output never causes an automatic paid retry');assert.deepEqual(page.writes,[]);
+  }
+});
+
+test('ordinary JSON, code samples and mixed natural-language evidence are preserved',()=>{
+  for(const text of ['{"current":8,"previous":6}','```json\n{"count":8,"label":"reported"}\n```','```js\nconst source = {absolute_path:"web_search"};\n```','The quoted diagnostic is not evidence:\n\n'+toolCommandChain]) {
+    const page=fixture({postCount:1});page.configure({apiVerification:'only'});
+    const request=page.port.sent.find(message=>message.type==='ANALYZE'),card=page.cards()[0];
+    page.port.onMessage.emit({type:'RESULT',requestId:request.requestId,result:{provider:'api',apiVerification:'only',text,verificationStatus:'completed',sources:[]}});page.flush();
+    const answer=card.testShadow.querySelector('.answer').textContent;
+    assert.ok(answer.trim());assert.doesNotMatch(card.testShadow.querySelector('.diagnostics').textContent,/INCOMPLETE/);
+    if(text.includes('absolute_path'))assert.match(answer,/absolute_path/);else assert.match(answer,/8/);
+    assert.deepEqual(page.writes,[]);
+  }
+});
+
 test('fact-check-only requests stream directly into one answer with no explanation divider',()=>{
   const page=fixture({postCount:1});page.configure({apiVerification:'only'});
   const request=page.port.sent.find(message=>message.type==='ANALYZE'),card=page.cards()[0],progress=verificationUI(card);

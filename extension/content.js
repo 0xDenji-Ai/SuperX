@@ -242,6 +242,13 @@
     // previous-answer narrative to show beneath its partial output.
     return result?.apiVerification==='only'?'':'note.preserved';
   }
+  function readerResult(value) {
+    const result=value&&typeof value==='object'?value:{};
+    const output=Core.readerOutput(result.text,{final:true});
+    const invalid=output.kind!=='content';
+    return {invalid,result:invalid?{...result,text:'',sources:[],verificationStart:undefined,
+      verificationStatus:'incomplete',verificationFailure:{stage:'verify',code:'INCOMPLETE'}}:{...result,text:output.text}};
+  }
   function setVerificationFailure(entry,value,incomplete) {
     const valid=value?.stage==='verify'&&typeof value.code==='string'&&Object.hasOwn(verificationFailureKeys,value.code),code=valid?value.code:'UNKNOWN';
     const failure={stage:'verify',code};
@@ -415,49 +422,58 @@
     if(message.type==='UPDATE'){
       captureUsage(entry,'analysis',message,request,false);
       entry.status='running';
+      // Progress without a text snapshot leaves accepted prose intact. An
+      // explicit empty snapshot retracts obsolete text, including a tool-only
+      // fragment that an older worker may have exposed before classification.
+      const suppliedText=typeof message.text==='string';
+      const readerText=suppliedText?Core.readerOutput(message.text).text:undefined;
       const verifying=['verification_queued','verify','verification'].includes(message.phase);
       if(verifying&&!['verification_queued','verify','verification'].includes(entry.phase)) {
         entry.verificationBase=entry.latestText||'';entry.verificationStarted=false;entry.verificationStart=undefined;
       }
-      if(message.phase==='verification_queued'&&typeof message.text==='string')entry.verificationBase=message.text;
-      if(validVerificationBoundary(message.text,message.verificationStart)) {
+      if(message.phase==='verification_queued'&&suppliedText)entry.verificationBase=readerText;
+      if(validVerificationBoundary(readerText,message.verificationStart)) {
         entry.verificationStart=message.verificationStart;
-        entry.verificationBase=message.text.slice(0,message.verificationStart-2);
+        entry.verificationBase=readerText.slice(0,message.verificationStart-2);
       }
-      if(verifying&&message.phase!=='verification_queued') {
+      if(verifying&&message.phase!=='verification_queued'&&suppliedText) {
         // API progress identifies the actual check text separately from the
         // preserved explanation.
-        const checkText=typeof message.verificationText==='string'?message.verificationText:
-          typeof message.text==='string'&&message.text.startsWith(entry.verificationBase||'')?
-            message.text.slice((entry.verificationBase||'').length):message.text||'';
-        if(checkText.trim())entry.verificationStarted=true;
+        const checkText=typeof message.verificationText==='string'?Core.readerOutput(message.verificationText).text:
+          readerText.startsWith(entry.verificationBase||'')?
+            readerText.slice((entry.verificationBase||'').length):readerText;
+        entry.verificationStarted=Boolean(readerText.trim()&&checkText.trim());
       }
       entry.phase=request.phase=message.phase;
       const phases={starting:'status.verifying',explain:'status.explaining',verification_queued:'status.verificationQueued',verify:'status.verifying',inline:'status.inline'};
       status(entry,phases[message.phase]||'status.verifying');
-      if(message.text)renderAnswer(entry,message.text);
+      if(suppliedText)renderAnswer(entry,readerText);
       else if(verifying&&entry.latestText)renderAnswer(entry,entry.latestText);
       if(message.sources)renderSources(entry,message.sources);
       if(message.warning)note(entry,['explain','verification_queued'].includes(message.phase)?'note.checkIncomplete':'note.possibleErrors');
     }
     if(message.type==='RESULT') {
-      captureUsage(entry,'analysis',message.result,request,Boolean(message.cached),true);
-      entry.status='done';entry.result=message.result;entry.verificationStart=message.result.verificationStart;
-      renderAnswer(entry,message.result.text,true);renderSources(entry,message.result.sources||[]);
-      const incomplete=['incomplete','failed'].includes(message.result.verificationStatus);
-      setVerificationFailure(entry,message.result.verificationFailure,incomplete);
-      const sourceKey=incomplete?'status.incomplete':message.result.searched?'status.searched':'status.unverified';
-      entry.cached=Boolean(message.cached);status(entry,sourceKey);
-      note(entry,incomplete?partialResultNote(message.result):'note.possibleErrors');entry.ui.retry.hidden=false;
+      const {result,invalid}=readerResult(message.result);
+      captureUsage(entry,'analysis',result,request,Boolean(message.cached),true);
+      entry.status=invalid?'error':'done';entry.result=result;entry.verificationStart=result.verificationStart;
+      if(invalid)entry.errorCode='API_INCOMPLETE';
+      renderAnswer(entry,result.text,true);renderSources(entry,result.sources||[]);
+      const incomplete=['incomplete','failed'].includes(result.verificationStatus);
+      setVerificationFailure(entry,result.verificationFailure,incomplete);
+      const sourceKey=incomplete?'status.incomplete':result.searched?'status.searched':'status.unverified';
+      entry.cached=!invalid&&Boolean(message.cached);status(entry,sourceKey);
+      note(entry,invalid?'':incomplete?partialResultNote(result):'note.possibleErrors');entry.ui.retry.hidden=false;
       finishRequest(message);
     }
     if(message.type==='ERROR') {
-      captureUsage(entry,'analysis',{...message.partialResult,...message},request,false);
-      const partialVerification=message.partialResult&&(['incomplete','failed'].includes(message.partialResult.verificationStatus)||message.partialResult.verificationFailure);
-      setVerificationFailure(entry,message.partialResult?.verificationFailure,Boolean(partialVerification));
+      const retained=message.partialResult?readerResult(message.partialResult):null;
+      const partialResult=retained?.result;
+      captureUsage(entry,'analysis',{...partialResult,...message},request,false);
+      const partialVerification=partialResult&&(['incomplete','failed'].includes(partialResult.verificationStatus)||partialResult.verificationFailure);
+      setVerificationFailure(entry,partialResult?.verificationFailure,Boolean(partialVerification));
       entry.status='error';entry.errorCode=message.code;status(entry,partialVerification?'status.incomplete':errorKey(message.code));note(entry,'');entry.ui.retry.hidden=false;
       if(message.code==='API_LANGUAGE_MISMATCH'){entry.cached=false;entry.result=null;renderAnswer(entry,'',true);renderSources(entry,[]);}
-      if(message.partialResult){entry.verificationStart=message.partialResult.verificationStart;renderAnswer(entry,message.partialResult.text,true);renderSources(entry,message.partialResult.sources||[]);note(entry,partialResultNote(message.partialResult));}
+      if(partialResult){entry.verificationStart=partialResult.verificationStart;renderAnswer(entry,partialResult.text,true);renderSources(entry,partialResult.sources||[]);note(entry,retained.invalid?'':partialResultNote(partialResult));}
       if(!partialVerification) {
         entry.ui.diagnostics.hidden=!message.diagnostics&&!message.error;
         entry.ui.diagnosticText.textContent=JSON.stringify({code:message.code,error:message.error,...message.diagnostics,...(message.usage?{usage:message.usage}:{})},null,2).slice(0,4000);
@@ -1059,7 +1075,7 @@
     syncLoading(entry);
   }
   function renderAnswer(entry,text,immediate=false) {
-    entry.latestText=String(text||'');
+    entry.latestText=typeof text==='string'?text:'';
     if(!entry.latestText){entry.verificationStart=undefined;entry.verificationBase='';}
     syncLoading(entry);
     if(immediate){if(entry.answerFrame!==undefined)cancelAnimationFrame(entry.answerFrame);entry.answerFrame=undefined;renderAnswerContent(entry);renderSources(entry);return;}

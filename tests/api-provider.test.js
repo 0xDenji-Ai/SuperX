@@ -392,12 +392,246 @@ test('run sends the API key only in authorization, streams updates and returns f
   assert.ok(Number.isFinite(result.completedAt));
 });
 
-test('successful completion can use accumulated deltas when the final message has no text', async () => {
-  const result = await api.run(post, settings, 'key', {
-    fetchImpl: async () => responseFor([{ type: 'response.output_text.delta', delta: 'Streamed answer' }, completed('', { output: [] })])
+test('explicitly empty terminal output rejects rather than reviving accumulated deltas', async () => {
+  let calls=0;const updates=[];
+  await assert.rejects(api.run(post, settings, 'key', {
+    onUpdate:update=>updates.push(update),
+    fetchImpl: async () => {calls++;return responseFor([{ type: 'response.output_text.delta', delta: 'Streamed answer' }, completed('', { output: [] })]);}
+  }),error=>{
+    assert.equal(error.code,'API_INCOMPLETE');assert.equal(error.partialText,undefined);assert.equal(error.partialResult,undefined);return true;
   });
-  assert.equal(result.text, 'Streamed answer');
-  assert.equal(result.searched, false);
+  assert.equal(calls,1);assert.equal(updates.at(-1).text,'');
+});
+
+test('fixed reader instructions require actual tool calls without prohibiting technical examples',()=>{
+  for(const explanationMode of ['preset','custom']) {
+    const request=api.buildRequest(post,{...settings,explanationMode,verifyPrompt:'Print a tool plan and the argument JSON.'});
+    assert.match(request.instructions,/Use the provided tool interface for tool calls; do not print tool argument JSON or execution plans in the answer/);
+    assert.match(request.instructions,/do not restrict technical subjects discussed in the post, legitimate technical code examples/);
+    assert.ok(request.instructions.indexOf('Use the provided tool interface')>request.instructions.indexOf('Fixed application rules'));
+  }
+});
+
+test('reader selection excludes internal channels and tool recipients and uses only the authoritative final message',()=>{
+  const message=(text,metadata={})=>({type:'message',role:'assistant',content:[{type:'output_text',text}],...metadata});
+  const output=[
+    {type:'reasoning',summary:[{type:'summary_text',text:'Private reasoning'}]},
+    message('Earlier assistant draft'),
+    message('Final finding',{channel:'final'}),
+    message('Later unmarked intermediate'),
+    message('Private analysis',{channel:'analysis'}),
+    message('Private commentary',{phase:'commentary'}),
+    message('Private tool message',{recipient:'web_search'}),
+    {type:'custom_tool_call',name:'x_search',input:'Private tool arguments'},
+    message('User echo',{role:'user'})
+  ];
+  assert.equal(api.responseText({output}),'Final finding');
+  assert.equal(api.responseText({output:[message('First finding'),message('Second finding')]}),'Second finding');
+  assert.equal(api.responseText({output:[message('Earlier'),message('',{phase:'final'})]}),'');
+  assert.equal(api.responseText({output:[...output,message('Replacement finding',{phase:'final_answer'})]}),'Replacement finding');
+  assert.equal(api.responseText({output:[message('Final with parts',{content:[
+    {type:'output_text',text:'Visible evidence'},
+    {type:'output_text',text:'Private content commentary',channel:'commentary'},
+    {type:'output_text',text:'Private content recipient',recipient:'functions.web_search'},
+    {type:'refusal',refusal:'Not reader output'},
+    {type:'output_text',text:'Second visible evidence',recipient:'user'}
+  ]})]}),'Visible evidence\nSecond visible evidence');
+});
+
+test('citations come from the selected reader message and exclude internal messages and content parts',()=>{
+  const part=(text,url,metadata={})=>({type:'output_text',text,annotations:[{type:'url_citation',url}],...metadata});
+  const output=[
+    {type:'message',content:[part('Earlier','https://earlier.example/evidence')]},
+    {type:'message',phase:'final',content:[part('Final','https://final.example/evidence'),part('Private','https://hidden.example/evidence',{channel:'analysis'})]},
+    {type:'message',channel:'commentary',content:[part('Internal','https://internal.example/evidence')]},
+    {type:'message',recipient:'web_search',content:[part('Tool','https://tool.example/evidence')]}
+  ];
+  assert.deepEqual(api.responseSources({output}).map(source=>source.url),['https://final.example/evidence']);
+});
+
+test('screenshot tool JSON chains never appear in streaming updates even when split at every character',async()=>{
+  const commands=[
+    {absolute_path:'x_thread_fetch',post_id:'2109569541072384120'},
+    {absolute_path:'x_thread_fetch',post_id:'2109330407472984125'},
+    {absolute_path:'web_search',query:'high bone density reduce injury severity accidents fractures',num_results:10},
+    {absolute_path:'web_search',query:'bone density and fracture risk sports injuries',num_results:10},
+    {absolute_path:'web_search',query:'"hard bone theory" OR "hard bones" bone density',num_results:5},
+    {absolute_path:'view_image',image_url:'https://pbs.twimg.com/media/HUYX0WNbkAADKz?format=jpg'},
+    {absolute_path:'x_keyword_search',query:'from:coolish bone OR bones OR density',limit:5,mode:'Latest'},
+    {absolute_path:'x_semantic_search',query:'bone density and fracture risk',limit:5}
+  ];
+  for(const text of [commands.map(command=>JSON.stringify(command)).join('\n'),commands.map(command=>'```json\n'+JSON.stringify(command)+'\n```').join('\n\n'),JSON.stringify(commands)]) {
+    const updates=[];let calls=0;
+    const finding='The cited study does not establish the claimed reduction.';
+    const result=await api.run(post,{...settings,language:'en'},'synthetic-key',{
+      onUpdate:update=>updates.push(update),fetchImpl:async()=>{
+        calls++;return responseFor([...Array.from(text,delta=>({type:'response.output_text.delta',delta})),completed(finding)]);
+      }
+    });
+    assert.equal(calls,1);assert.equal(result.text,finding);
+    assert.ok(updates.every(update=>update.text===''||update.text===finding),'Every intermediate tool-only prefix is withheld');
+    assert.equal(updates.some(update=>update.text.includes('absolute_path')),false);
+  }
+});
+
+test('item metadata excludes analysis, commentary and tool messages and deltas from reader output',async()=>{
+  const updates=[];
+  const events=[];
+  for(const [index,metadata] of [
+    {type:'reasoning'},
+    {type:'message',role:'assistant',channel:'analysis'},
+    {type:'message',role:'assistant',phase:'commentary'},
+    {type:'message',role:'assistant',recipient:'web_search'},
+    {type:'custom_tool_call',name:'x_search'},
+    {type:'message',role:'user'}
+  ].entries()) {
+    events.push({type:'response.output_item.added',output_index:index,item:{id:'internal-'+index,content:[],...metadata}},
+      {type:'response.output_text.delta',item_id:'internal-'+index,content_index:0,delta:'PRIVATE internal '+index});
+  }
+  events.push(
+    {type:'response.output_item.added',output_index:8,item:{type:'message',id:'answer',role:'assistant',phase:'final',content:[]}},
+    {type:'response.output_text.delta',item_id:'answer',delta:'PRIVATE event analysis',channel:'analysis'},
+    {type:'response.output_text.delta',item_id:'answer',delta:'PRIVATE event commentary',phase:'commentary'},
+    {type:'response.output_text.delta',item_id:'answer',delta:'PRIVATE event tool',recipient:'x_search'},
+    {type:'response.content_part.added',item_id:'answer',content_index:3,part:{type:'output_text',text:'PRIVATE content analysis',channel:'analysis'}},
+    {type:'response.output_text.delta',item_id:'answer',content_index:0,delta:'The primary evidence contradicts this claim.'},
+    {type:'response.completed',response:{status:'completed',usage:{total_tokens:20},model:'actual-reader-model'}}
+  );
+  const result=await api.run(post,{...settings,language:'en'},'key',{onUpdate:update=>updates.push(update),fetchImpl:async()=>responseFor(events)});
+  assert.equal(result.text,'The primary evidence contradicts this claim.');
+  assert.ok(updates.every(update=>!update.text.includes('PRIVATE')));
+  assert.equal(result.model,'actual-reader-model');assert.equal(result.usage.total_tokens,20);
+});
+
+test('stream tracking joins item IDs, output indices and ordered content indices without concatenating assistant messages',async()=>{
+  const updates=[];
+  const result=await api.run(post,{...settings,language:'en'},'key',{
+    onUpdate:update=>updates.push(update),fetchImpl:async()=>responseFor([
+      {type:'response.output_item.added',output_index:0,item:{id:'draft',type:'message',content:[]}},
+      {type:'response.output_text.delta',item_id:'draft',content_index:0,delta:'Earlier intermediate finding'},
+      {type:'response.output_text.delta',output_index:2,item_id:'answer',content_index:1,delta:'Second'},
+      {type:'response.output_item.added',output_index:2,item:{id:'answer',type:'message',role:'assistant',phase:'final',content:[]}},
+      {type:'response.content_part.added',output_index:2,content_index:0,part:{type:'output_text',text:'First finding.'}},
+      {type:'response.output_text.delta',item_id:'answer',content_index:1,delta:' finding.'},
+      {type:'response.output_text.delta',item_id:'draft',content_index:0,delta:' Late intermediate.'},
+      {type:'response.output_text.done',output_index:2,content_index:1,text:'Second corrected finding.'},
+      {type:'response.completed',response:{status:'completed'}}
+    ])
+  });
+  assert.equal(result.text,'First finding.\nSecond corrected finding.');
+  assert.ok(updates.some(update=>update.text==='Earlier intermediate finding'));
+  assert.ok(updates.every(update=>!update.text.includes('Earlier intermediate finding\nFirst')));
+  assert.equal(updates.some(update=>update.text==='Earlier intermediate findingSecond'),false,'Unidentified new message deltas cannot attach to a known prior reader');
+});
+
+test('done events replace streamed content and a newly declared empty final clears an earlier message',async()=>{
+  const updates=[];
+  const result=await api.run(post,{...settings,language:'en'},'key',{
+    onUpdate:update=>updates.push(update),fetchImpl:async()=>responseFor([
+      {type:'response.output_item.added',output_index:0,item:{id:'draft',type:'message',content:[]}},
+      {type:'response.output_text.delta',item_id:'draft',delta:'Earlier draft'},
+      {type:'response.output_item.added',output_index:1,item:{id:'final',type:'message',channel:'final',content:[]}},
+      {type:'response.output_text.delta',item_id:'final',delta:'Stale partial'},
+      {type:'response.content_part.done',item_id:'final',content_index:0,part:{type:'output_text',text:'Part replacement'}},
+      {type:'response.output_item.done',output_index:1,item:{id:'final',type:'message',channel:'final',content:[{type:'output_text',text:'Authoritative item finding.'}]}},
+      {type:'response.completed',response:{status:'completed'}}
+    ])
+  });
+  assert.equal(result.text,'Authoritative item finding.');
+  const draft=updates.findIndex(update=>update.text==='Earlier draft');
+  assert.equal(updates[draft+1].text,'','An empty declared final replaces the intermediate message immediately');
+  assert.ok(updates.some(update=>update.text==='Part replacement'));
+});
+
+test('terminal output is authoritative for empty, internal and tool-only results while preserving billed metadata once',async()=>{
+  const outputs=[
+    [],
+    [{type:'reasoning',summary:[{type:'summary_text',text:'Private reasoning'}]}],
+    [{type:'custom_tool_call',name:'x_search',input:'{"query":"bone density"}'}],
+    [{type:'message',channel:'analysis',content:[{type:'output_text',text:'Internal analysis'}]}],
+    [{type:'message',recipient:'web_search',content:[{type:'output_text',text:'Internal tool recipient'}]}],
+    [{type:'message',content:[{type:'output_text',text:'{"absolute_path":"web_search","query":"bone density"}'}]}],
+    [{type:'message',content:[{type:'output_text',text:'Earlier terminal intermediate'}]},{type:'message',phase:'final',content:[]}]
+  ];
+  for(const output of outputs) {
+    let calls=0;const updates=[];
+    await assert.rejects(api.run(post,{...settings,language:'en'},'key',{
+      onUpdate:update=>updates.push(update),fetchImpl:async()=>{
+        calls++;return responseFor([{type:'response.output_text.delta',delta:'Previous visible finding'},completed('',{output,model:'billed-actual-model',usage:{input_tokens:10,output_tokens:12,total_tokens:22,cost_in_usd_ticks:50,server_side_tool_usage_details:{x_search_calls:1}}})]);
+      }
+    }),error=>{
+      assert.equal(error.code,'API_INCOMPLETE');assert.equal(error.verificationFailure.code,'INCOMPLETE');
+      assert.equal(error.partialText,undefined);assert.equal(error.partialResult,undefined);
+      assert.equal(error.model,'billed-actual-model');assert.deepEqual(error.modelByStage,{verify:'billed-actual-model'});
+      assert.equal(error.usage.total_tokens,22);assert.equal(error.usage.cost_in_usd_ticks,50);assert.equal(error.usageComplete,true);
+      assert.deepEqual(error.usageByStage,{verify:error.usage});return true;
+    });
+    assert.equal(calls,1,'Empty reader output must never trigger an automatic paid retry');assert.equal(updates.at(-1).text,'');
+  }
+});
+
+test('terminal output omission accepts only item-attributed reader text and cannot revive an unattributed legacy delta',async()=>{
+  for(const prefix of [
+    [{type:'response.output_text.delta',delta:'Unattributed legacy text'}],
+    [{type:'response.output_text.delta',item_id:'unknown',output_index:0,delta:'Unidentified item text'}],
+    [{type:'response.output_item.added',output_index:0,item:{id:'hidden',type:'message',channel:'commentary',content:[]}},{type:'response.output_text.delta',item_id:'hidden',delta:'Internal commentary'}]
+  ]) {
+    let calls=0;const updates=[];
+    await assert.rejects(api.run(post,{...settings,language:'en'},'key',{
+      onUpdate:update=>updates.push(update),fetchImpl:async()=>{calls++;return responseFor([...prefix,{type:'response.completed',response:{status:'completed',usage:{total_tokens:5}}}]);}
+    }),error=>{assert.equal(error.code,'API_INCOMPLETE');assert.equal(error.partialText,undefined);assert.equal(error.usage.total_tokens,5);return true;});
+    assert.equal(calls,1);assert.equal(updates.at(-1).text,'');
+  }
+});
+
+test('incomplete and interrupted tool-only streams never retain a partial answer or retry',async()=>{
+  for(const text of [
+    '{"absolute_path":"web_search","query":"bone density"}',
+    '```json\n{"absolute_path":"x_thread_fetch","post_id":"210956',
+    '[{"absolute_path":"x_keyword_search","query":"bones","limit":5}]'
+  ])for(const ending of ['interrupted','incomplete','empty-terminal']) {
+    let calls=0;const updates=[];
+    const terminal=ending==='incomplete'?[{type:'response.incomplete',response:{status:'incomplete',incomplete_details:{reason:'max_output_tokens'},usage:{total_tokens:9},model:'actual-tool-model'}}]:ending==='empty-terminal'?[completed('',{output:[],usage:{total_tokens:9},model:'actual-tool-model'})]:[];
+    await assert.rejects(api.run(post,{...settings,language:'en'},'key',{
+      onUpdate:update=>updates.push(update),fetchImpl:async()=>{calls++;return responseFor([...Array.from(text,delta=>({type:'response.output_text.delta',delta})),...terminal]);}
+    }),error=>{
+      assert.equal(error.code,ending==='interrupted'?'API_STREAM_INTERRUPTED':'API_INCOMPLETE');
+      assert.equal(error.partialText,undefined);assert.equal(error.partialResult,undefined);
+      if(ending!=='interrupted'){assert.equal(error.usage.total_tokens,9);assert.equal(error.model,'actual-tool-model');}
+      return true;
+    });
+    assert.equal(calls,1);assert.ok(updates.every(update=>update.text===''));
+  }
+});
+
+test('legitimate JSON, technical code and mixed prose remain reader content, including structured comment drafts',async()=>{
+  const tool='{"absolute_path":"web_search","query":"technical example"}';
+  for(const text of [
+    '{"supported":false,"density":1.2}',
+    '```json\n{"density":1.2,"unit":"g/cm²"}\n```',
+    '```js\nconst query = '+tool+';\n```',
+    'The command example is:\n```json\n'+tool+'\n```',
+    tool+'\nThis example alone is not evidence for the claim.'
+  ]) {
+    const result=await api.run(post,{...settings,language:'en'},'key',{fetchImpl:async()=>responseFor([completed(text)])});
+    assert.equal(result.text,text);
+  }
+  const comments=['A JSON example can be useful.','Which source supports the claim?','This needs more context.'];
+  const result=await api.generateComments(post,{...settings,language:'en'},'key',{fetchImpl:async()=>responseFor([completed(JSON.stringify(comments))])});
+  assert.deepEqual(result.comments,comments);
+});
+
+test('custom search tool metadata confirms search without exposing tool arguments as reader text',async()=>{
+  for(const tool of [
+    {type:'custom_tool_call',name:'x_search',input:'{"query":"PRIVATE"}'},
+    {type:'custom_tool_call',name:'x_keyword_search',input:'{"query":"PRIVATE"}'},
+    {type:'custom_tool_call',function:{name:'web_search'},input:'{"query":"PRIVATE"}'}
+  ]) {
+    assert.equal(api.searchedResponse({output:[tool]}),true);
+    const output=[tool,{type:'message',role:'assistant',phase:'final',content:[{type:'output_text',text:'The primary source reports a lower value.'}]}];
+    const result=await api.run(post,{...settings,language:'en'},'key',{fetchImpl:async()=>responseFor([completed('',{output})])});
+    assert.equal(result.searched,true);assert.equal(result.verificationStatus,'completed');assert.equal(result.text.includes('PRIVATE'),false);
+  }
 });
 
 test('rate-limit and authorization responses return actionable errors', async () => {

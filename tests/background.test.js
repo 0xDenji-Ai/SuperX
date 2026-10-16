@@ -692,7 +692,7 @@ test('old API answers with mixed output languages are regenerated and the new la
   const refreshed=await analyze(bg,port,'regenerate-old-mixed-answer');
   assert.equal(refreshed.cached,false);assert.equal(bg.apiCalls.length,1);
   assert.equal(refreshed.result.text,'Quick meaning: An English post.\n\nFact check: English evidence.');
-  const newKey=Object.keys(bg.session.data.cache).find(key=>key.includes('api-v8-fact-check-only'));
+  const newKey=Object.keys(bg.session.data.cache).find(key=>key.includes('api-v9-reader-items'));
   assert.ok(newKey);assert.equal(bg.session.data.cache[newKey].text,refreshed.result.text);
   assert.equal((await analyze(bg,port,'new-answer-cached')).cached,true);
   assert.equal(bg.apiCalls.length,1);
@@ -725,7 +725,7 @@ test('0.6.1 API analysis caches regenerate naturally in every mode and fresh ans
     const storedKeys=Object.keys(bg.session.data.cache);
     assert.ok(storedKeys.includes(oldKey),'The migration does not destructively remove unrelated stored data');
     const freshKey=storedKeys.find(key=>key!==oldKey);
-    assert.ok(freshKey);assert.equal(JSON.parse(freshKey)[6],'api-v8-fact-check-only');
+    assert.ok(freshKey);assert.equal(JSON.parse(freshKey)[6],'api-v9-reader-items');
         assert.equal((await analyze(bg,port,'natural-cache-hit-'+mode,100,{post:input})).cached,true);
     assert.equal(bg.apiCalls.length,1);
     const restarted=createBackground({settings:s,session:bg.session.data});
@@ -769,7 +769,7 @@ test('0.6.2 excerpt-based caches cannot substitute for full-post answers in any 
     assert.equal(fresh.cached,false,mode);assert.equal(fresh.result.text,freshText);assert.equal(bg.apiCalls.length,1);
     const keys=Object.keys(bg.session.data.cache),freshKey=keys.find(key=>key!==oldKey);
     assert.ok(keys.includes(oldKey));assert.ok(freshKey);
-    assert.equal(JSON.parse(freshKey)[6],'api-v8-fact-check-only');
+    assert.equal(JSON.parse(freshKey)[6],'api-v9-reader-items');
     assert.deepEqual(JSON.parse(JSON.parse(freshKey)[9]),['post-input-v3-full-url',input.url,'en']);
     assert.equal((await analyze(bg,port,'full-hit-'+mode,100,{post:input})).cached,true);
     const restarted=createBackground({settings:s,session:bg.session.data});await restarted.ready();
@@ -803,7 +803,7 @@ test('0.6.4 API process narration caches regenerate in every mode and reader-fac
     assert.equal(first.result.text,freshText);assert.equal(bg.apiCalls.length,1);
     const keys=Object.keys(bg.session.data.cache),freshKey=keys.find(key=>key!==oldKey);
     assert.ok(keys.includes(oldKey),'Changing answer policy does not destructively remove stored data');
-    assert.ok(freshKey);assert.equal(JSON.parse(freshKey)[6],'api-v8-fact-check-only');
+    assert.ok(freshKey);assert.equal(JSON.parse(freshKey)[6],'api-v9-reader-items');
         assert.deepEqual(JSON.parse(JSON.parse(freshKey)[9]),['post-input-v3-full-url',input.url,'en']);
     const cached=await analyze(bg,port,'reader-output-hit-'+mode,100,{post:input});
     assert.equal(cached.cached,true);assert.equal(cached.result.text,freshText);assert.equal(bg.apiCalls.length,1);
@@ -2155,6 +2155,95 @@ test('failed result statuses are never admitted to the cache',async()=>{
   const bg=createBackground({apiRun:async()=>({text:'Retained explanation.',verificationStatus:'failed',provider:'api'})});await bg.ready();const port=bg.connect();
   assert.equal((await analyze(bg,port,'failed-result')).cached,false);assert.equal((await analyze(bg,port,'failed-result-again')).cached,false);
   assert.equal(bg.apiCalls.length,2);assert.equal(Object.keys(bg.session.data.cache||{}).length,0);
+});
+
+const toolOnlyReply='```json\n{"absolute_path":"x_thread_fetch","post_id":"2109569541072384120"}\n```\n\n```json\n{"absolute_path":"web_search","query":"bone density and fracture risk","num_results":10}\n```';
+
+test('tool-only final output is incomplete, billed, and never cached or saved as a history answer',async()=>{
+  const bg=createBackground({apiRun:async call=>{
+    call.onUpdate({text:toolOnlyReply,phase:'verify',usage:{total_tokens:60},model:'grok-current'});
+    return{text:toolOnlyReply,provider:'api',verificationStatus:'completed',usage:{total_tokens:75},model:'grok-current'};
+  }});await bg.ready();const port=bg.connect();await visitHistory(bg,port,[100]);
+  const failure=await analyze(bg,port,'tool-only-output');assert.equal(failure.type,'ERROR');assert.equal(failure.code,'API_INCOMPLETE');
+  assert.equal(failure.verificationFailure.code,'INCOMPLETE');assert.deepEqual(failure.usage,{total_tokens:75});assert.equal(failure.model,'grok-current');
+  assert.equal(failure.partialResult,undefined);assert.equal(port.messages.filter(m=>m.type==='UPDATE').every(m=>m.text===''),true);
+  assert.equal(JSON.stringify(port.messages).includes('absolute_path'),false);assert.equal(Object.keys(bg.session.data.cache||{}).length,0);
+  assert.equal((await bg.message({type:'GET_HISTORY'})).entries[0].analysis,undefined);assert.equal(bg.apiCalls.length,1,'No automatic paid retry');
+  assert.equal((await analyze(bg,port,'tool-only-manual-again')).type,'ERROR');assert.equal(bg.apiCalls.length,2);
+});
+
+test('only genuine reader output reaches the feed, cache, comment context and history',async()=>{
+  const actual='The evidence does not support a causal reduction in accident severity.';
+  const bg=createBackground({apiRun:async call=>{
+    call.onUpdate({text:toolOnlyReply,phase:'verify'});call.onUpdate({text:actual,phase:'verify'});
+    return{text:actual,provider:'api',verificationStatus:'completed'};
+  }});await bg.ready();const port=bg.connect();await visitHistory(bg,port,[100]);
+  assert.equal((await analyze(bg,port,'tools-then-answer')).result.text,actual);
+  assert.equal(port.messages.filter(m=>m.type==='UPDATE').map(m=>m.text).join(''),actual);
+  await until(()=>bg.local.data.superxHistory?.[0]?.analysis);assert.equal((await bg.message({type:'GET_HISTORY'})).entries[0].analysis.text,actual);
+  assert.equal(JSON.stringify(bg.session.data.cache).includes('absolute_path'),false);
+  const draft=await draftComments(bg,port,'clean-comment-context',100,{analysis:{text:toolOnlyReply}});assert.equal(draft.type,'COMMENT_RESULT');assert.equal(bg.commentCalls[0].analysis.text,'');
+});
+
+test('an authoritative empty or rejected final response revokes earlier text without reviving it as a partial',async()=>{
+  for(const text of ['',toolOnlyReply,{absolute_path:'web_search',query:'not a reader string'}]){
+    const bg=createBackground({apiRun:async call=>{
+      call.onUpdate({text:'An earlier fragment.',phase:'verify'});
+      return{text,provider:'api',usage:{total_tokens:44},model:'grok-current'};
+    }});await bg.ready();const port=bg.connect(),failure=await analyze(bg,port,'revoke-terminal');
+    assert.equal(failure.type,'ERROR');assert.equal(failure.code,'API_INCOMPLETE');assert.equal(failure.partialResult,undefined);
+    assert.equal(port.messages.filter(m=>m.type==='UPDATE').at(-1).text,'');assert.equal(failure.usage.total_tokens,44);
+    assert.equal(Object.keys(bg.session.data.cache||{}).length,0);assert.equal(bg.apiCalls.length,1);
+  }
+});
+
+test('progress updates preserve reader partials while explicit empty updates revoke timeout retention',async()=>{
+  for(const clear of [false,true]){
+    const gate=deferred(),bg=createBackground({apiRun:async call=>{
+      call.onUpdate({text:'Actual partial evidence.',phase:'verify',usage:{total_tokens:17},model:'grok-current'});
+      call.onUpdate({...(clear?{text:''}:{}),phase:'verify',usage:{total_tokens:19},model:'grok-current'});
+      await gate.promise;return{text:'Late evidence.',provider:'api'};
+    }});await bg.ready();const port=bg.connect();port.send({type:'ANALYZE',requestId:'reader-timeout',post:post(100)});
+    await until(()=>port.messages.filter(m=>m.type==='UPDATE').length===2);bg.expireDeadline(150000);
+    await until(()=>port.messages.some(m=>m.type==='ERROR'));const failure=port.messages.find(m=>m.type==='ERROR');
+    assert.equal(failure.code,'TIMEOUT');assert.deepEqual(failure.usage,{total_tokens:19});
+    if(clear){assert.equal(failure.partialResult,undefined);assert.equal(port.messages.filter(m=>m.type==='UPDATE')[1].text,'');}
+    else{assert.equal(failure.partialResult.text,'Actual partial evidence.');assert.equal(Object.hasOwn(port.messages.filter(m=>m.type==='UPDATE')[1],'text'),false);}
+    assert.equal(Object.keys(bg.session.data.cache||{}).length,0);gate.resolve();await tick();
+  }
+});
+
+test('tool-only error partials and hard timeouts do not retain command arguments',async()=>{
+  for(const timeout of [false,true]){
+    const gate=deferred(),bg=createBackground({apiRun:async call=>{
+      call.onUpdate({text:toolOnlyReply,phase:'verify',usage:{total_tokens:21},model:'grok-current'});
+      if(timeout)await gate.promise;
+      throw Object.assign(new Error('Interrupted'),{code:'API_STREAM_INTERRUPTED',usage:{total_tokens:25},partialResult:{text:toolOnlyReply,provider:'api',usage:{total_tokens:25}}});
+    }});await bg.ready();const port=bg.connect();await visitHistory(bg,port,[100]);port.send({type:'ANALYZE',requestId:'tool-error',post:post(100)});
+    await until(()=>port.messages.some(m=>m.type==='UPDATE'));if(timeout)bg.expireDeadline(150000);
+    await until(()=>port.messages.some(m=>m.type==='ERROR'));const failure=port.messages.find(m=>m.type==='ERROR');
+    assert.equal(failure.partialResult,undefined);assert.equal(JSON.stringify(port.messages).includes('absolute_path'),false);
+    assert.equal(Object.keys(bg.session.data.cache||{}).length,0);assert.equal((await bg.message({type:'GET_HISTORY'})).entries[0].analysis,undefined);
+    assert.equal(failure.usage.total_tokens,timeout?21:25);assert.equal(bg.apiCalls.length,1);gate.resolve();await tick();
+  }
+});
+
+test('v8 answers are not reused and contaminated session cache entries are pruned without touching comments',async()=>{
+  const seed=createBackground();await seed.ready();await analyze(seed,seed.connect(),'v9-cache-seed');
+  const key=Object.keys(seed.session.data.cache)[0],oldKey=key.replace('api-v9-reader-items','api-v8-fact-check-only'),now=seed.now();
+  const comments={completedAt:now,comments:['First.','Second.','Third.'],provider:'api'};
+  const bg=createBackground({cache:{[oldKey]:{text:'Older clean candidate answer',completedAt:now,provider:'api'},[key]:{text:toolOnlyReply,completedAt:now,provider:'api'},comments}});
+  await bg.ready();assert.equal(Object.hasOwn(bg.session.data.cache,key),false);assert.deepEqual(bg.session.data.cache.comments,comments);
+  const port=bg.connect(),answer=await analyze(bg,port,'new-reader-cache');assert.equal(answer.cached,false);assert.equal(bg.apiCalls.length,1);
+  assert.equal(JSON.stringify(port.messages).includes('absolute_path'),false);assert.equal((await analyze(bg,port,'reader-cache-again')).cached,true);
+});
+
+test('legitimate JSON and technical prose remain available in final results and history',async()=>{
+  for(const text of ['{"absolute_path":"C:/examples/web_search.json","query":"a file"}','```json\n{"density":1.1,"risk":"uncertain"}\n```','The example {"absolute_path":"web_search","query":"a claim"} is a command, not evidence.']){
+    const bg=createBackground({apiRun:async()=>({text,provider:'api',verificationStatus:'completed'})});await bg.ready();const port=bg.connect();await visitHistory(bg,port,[100]);
+    assert.equal((await analyze(bg,port,'legitimate-json')).result.text,text);await until(()=>bg.local.data.superxHistory?.[0]?.analysis);
+    assert.equal((await bg.message({type:'GET_HISTORY'})).entries[0].analysis.text,text);assert.equal((await analyze(bg,port,'legitimate-cache')).cached,true);
+  }
 });
 
 test('ordinary session Keys allow analysis, cached results and comments regardless of legacy consent records',async()=>{

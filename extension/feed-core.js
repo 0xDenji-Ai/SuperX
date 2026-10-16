@@ -30,6 +30,88 @@
   function normalizePrompt(value, fallback) {
     return typeof value === 'string' && value.trim() && value.length <= MAX_PROMPT_LENGTH ? value : fallback;
   }
+  // Defensive presentation only: these values are never executed as commands.
+  const TOOL_ARGUMENTS = Object.freeze({
+    web_search:['query','queries','num_results','max_results','search_query','domains','recency','from_date','to_date'],
+    web_search_with_snippets:['query','queries','num_results','max_results'],
+    web_search_with_search_results:['query','queries','num_results','max_results'],
+    browse_page:['url','instructions'],
+    x_thread_fetch:['post_id','tweet_id','thread_id','id'],
+    x_keyword_search:['query','mode','limit','num_results','from_date','to_date'],
+    x_semantic_search:['query','limit','num_results','from_date','to_date','min_score'],
+    x_user_search:['query','count','limit','num_results'],
+    view_image:['image_url','url'],
+    view_x_image:['image_url','url'],
+    view_x_video:['video_url','url'],
+    x_get_tweet:['post_id','tweet_id','id'],
+    x_get_user:['user_id','username','id']
+  });
+  function toolInvocation(value) {
+    if(Array.isArray(value))return value.length>0&&value.every(toolInvocation);
+    if(!value||typeof value!=='object')return false;
+    const name=value.absolute_path;
+    if(typeof name!=='string'||!Object.hasOwn(TOOL_ARGUMENTS,name))return false;
+    const keys=Object.keys(value);
+    return keys.length>1&&keys.every(key=>key==='absolute_path'||TOOL_ARGUMENTS[name].includes(key));
+  }
+  function readerOutput(value,{final=false}={}) {
+    const text=typeof value==='string'?value:'';
+    const body=text.trim();
+    if(!body)return {kind:'empty',text:''};
+    const content=()=>({kind:'content',text});
+    const hidden=kind=>({kind,text:''});
+    let cursor=0,found=false,inFence=false;
+    const whitespace=()=>{while(/\s/.test(body[cursor]||'')&&cursor<body.length)cursor++;};
+    while(cursor<body.length) {
+      whitespace();
+      if(cursor>=body.length)break;
+      if(body[cursor]==='`'||body[cursor]==='~') {
+        const rest=body.slice(cursor),marker=rest[0].repeat(3);
+        if(rest.length<3&&marker.startsWith(rest))return final?content():hidden('pending');
+        if(!rest.startsWith(marker))return content();
+        if(inFence) {cursor+=3;inFence=false;continue;}
+        const lineEnd=rest.indexOf('\n');
+        const label=(lineEnd<0?rest.slice(3):rest.slice(3,lineEnd)).trim().toLowerCase();
+        if(!['','json'].includes(label)) {
+          if(!final&&lineEnd<0&&'json'.startsWith(label))return hidden('pending');
+          return content();
+        }
+        if(lineEnd<0)return final?content():hidden('pending');
+        cursor+=lineEnd+1;inFence=true;continue;
+      }
+      if(!['{','['].includes(body[cursor]))return content();
+      const start=cursor,stack=[];
+      let quoted=false,escaped=false,complete=false;
+      for(;cursor<body.length;cursor++) {
+        const char=body[cursor];
+        if(quoted) {
+          if(escaped)escaped=false;
+          else if(char==='\\')escaped=true;
+          else if(char==='"')quoted=false;
+        } else if(char==='"')quoted=true;
+        else if(char==='{'||char==='[')stack.push(char);
+        else if(char==='}'||char===']') {
+          const open=stack.pop();
+          if(open!==(char==='}'?'{':'['))return content();
+          if(!stack.length){cursor++;complete=true;break;}
+        }
+      }
+      if(!complete) {
+        if(!final)return hidden('pending');
+        // A truncated known invocation cannot become a retained partial answer.
+        // Ordinary unfinished JSON, paths and technical code remain visible.
+        const fragment=body.slice(start);
+        const match=fragment.match(/"absolute_path"\s*:\s*"([a-z_]+)"/);
+        if(match&&Object.hasOwn(TOOL_ARGUMENTS,match[1]))return hidden('tool_only');
+        return content();
+      }
+      let parsed;
+      try{parsed=JSON.parse(body.slice(start,cursor));}catch{return content();}
+      if(!toolInvocation(parsed))return content();
+      found=true;
+    }
+    return found?hidden(inFence&&!final?'pending':'tool_only'):content();
+  }
   function explanationMode(settings) {
     return ['preset', 'custom'].includes(settings?.explanationMode) ? settings.explanationMode : 'preset';
   }
@@ -404,5 +486,5 @@
     clear() { this.items.clear(); }
   }
 
-  return Object.freeze({ LANGUAGES, DEFAULT_SETTINGS, DEFAULT_PROMPTS, MAX_PROMPT_LENGTH, normalizePrompt, explanationMode, normalizeSettings, resolvePostLanguage, canonicalPostUrl, extractPost, postFingerprint, nativePostIdentity, apiPostIdentity, visibilityEligibility, BoundedPostQueue });
+  return Object.freeze({ LANGUAGES, DEFAULT_SETTINGS, DEFAULT_PROMPTS, MAX_PROMPT_LENGTH, normalizePrompt, readerOutput, explanationMode, normalizeSettings, resolvePostLanguage, canonicalPostUrl, extractPost, postFingerprint, nativePostIdentity, apiPostIdentity, visibilityEligibility, BoundedPostQueue });
 });

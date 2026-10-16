@@ -1,6 +1,6 @@
 {
   "name": "superx",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "private": true,
   "license": "MIT",
   "description": "A Chrome/Edge extension for concise automatic fact-checks beside X posts, using your own xAI API Key.",

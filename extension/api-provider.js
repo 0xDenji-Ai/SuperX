@@ -57,7 +57,7 @@
     if(stage!=='comments'&&Core.explanationMode(settings)==='preset')return Core.DEFAULT_PROMPTS[stage];
     return Core.normalizePrompt(settings[`${stage}Prompt`],Core.DEFAULT_PROMPTS[stage]);
   }
-  const READER_OUTPUT='Return only useful fact-check findings, corrections and evidence. The reader can already see the original post alongside the answer: do not summarize, paraphrase, translate, quote at length or otherwise repeat it. Use at most the minimum identifying claim fragment needed to connect a specific finding to its claim. Do not add a separate explanation or post-summary section, even if an editable task requests one. When there is no meaningful checkable claim, give one brief, specific sentence rather than inventing a verification task. Keep routine source retrieval and input preparation internal. Do not announce successful retrieval, describe the application\'s input formats, compare retrieved content with auxiliary snapshots, or narrate compliance with instructions. If original content or material evidence is unavailable, briefly explain only the concrete gap beside the affected finding. Cite sources for substantive judgments without reporting tool execution. Choose natural paragraphs or concise points; avoid mechanical fact/opinion classifications, rigid checklists and generic disclaimer sections. These rules concern input handling and duplicated content; they do not restrict technical subjects discussed in the post or useful user-requested fact-check presentation. ';
+  const READER_OUTPUT='Return only useful fact-check findings, corrections and evidence. The reader can already see the original post alongside the answer: do not summarize, paraphrase, translate, quote at length or otherwise repeat it. Use at most the minimum identifying claim fragment needed to connect a specific finding to its claim. Do not add a separate explanation or post-summary section, even if an editable task requests one. When there is no meaningful checkable claim, give one brief, specific sentence rather than inventing a verification task. Keep routine source retrieval and input preparation internal. Use the provided tool interface for tool calls; do not print tool argument JSON or execution plans in the answer. Do not announce successful retrieval, describe the application\'s input formats, compare retrieved content with auxiliary snapshots, or narrate compliance with instructions. If original content or material evidence is unavailable, briefly explain only the concrete gap beside the affected finding. Cite sources for substantive judgments without reporting tool execution. Choose natural paragraphs or concise points; avoid mechanical fact/opinion classifications, rigid checklists and generic disclaimer sections. These rules concern input handling and duplicated content; they do not restrict technical subjects discussed in the post, legitimate technical code examples or useful user-requested fact-check presentation. ';
   const FIXED_RULES='Fixed application rules (take precedence over any conflicting editable task instruction):\n';
   function commentsLanguageInstruction(post,settings) {
     return languageInstruction(settings.language,post);
@@ -120,8 +120,75 @@
     };
     return configureReasoning(request,settings.apiModel);
   }
-  function responseText(response) {
-    return (response?.output||[]).filter(item=>item.type==='message' && (!item.role||item.role==='assistant')).flatMap(item=>item.content||[]).filter(c=>c.type==='output_text').map(c=>typeof c.text==='string'?c.text:'').join('\n');
+  function readerChannel(value) {
+    if(!value||typeof value!=='object')return false;
+    for(const key of ['channel','phase']) {
+      if(typeof value[key]==='string'&&/^(?:analysis|reasoning|commentary|comment|tool|tool_call|notification|summary)$/i.test(value[key]))return false;
+    }
+    return value.recipient==null||value.recipient===''||['all','user'].includes(value.recipient);
+  }
+  function readerMessage(item) {
+    return item?.type==='message'&&(!item.role||item.role==='assistant')&&readerChannel(item);
+  }
+  function explicitlyFinal(item) {return ['final','final_answer'].includes(item?.phase)||['final','final_answer'].includes(item?.channel);}
+  function readerItem(items) {
+    const messages=items.filter(readerMessage),finals=messages.filter(explicitlyFinal);
+    // Intermediate assistant messages are not separate sections of the answer.
+    // Even an empty final message is authoritative; never resurrect a prior one.
+    return (finals.length?finals:messages).at(-1);
+  }
+  function itemText(item) {
+    return (Array.isArray(item?.content)?item.content:[]).filter(part=>part?.type==='output_text'&&readerChannel(part)).map(part=>typeof part.text==='string'?part.text:'').join('\n');
+  }
+  function responseText(response,{final=true}={}) {
+    return Core.readerOutput(itemText(readerItem(Array.isArray(response?.output)?response.output:[])),{final}).text;
+  }
+  function textTracker() {
+    const states=[],byId=new Map(),byIndex=new Map();
+    let legacy='',scoped=false,active;
+    function locate(event,metadata) {
+      const id=metadata?.id||event.item_id,index=event.output_index;
+      let state=typeof id==='string'?byId.get(id):undefined;
+      state ||= Number.isSafeInteger(index)?byIndex.get(index):undefined;
+      if(!state) {
+        state={item:{},parts:new Map(),known:false};states.push(state);
+      }
+      if(typeof id==='string')byId.set(id,state);
+      if(Number.isSafeInteger(index)){byIndex.set(index,state);state.index=index;}
+      if(metadata) {
+        state.item={...state.item,...metadata};state.known=true;
+        if(Array.isArray(metadata.content))metadata.content.forEach((part,contentIndex)=>state.parts.set(contentIndex,{...part}));
+      }
+      return state;
+    }
+    function ingest(event) {
+      if(['response.output_item.added','response.output_item.done'].includes(event.type)) {
+        scoped=true;active=locate(event,event.item);
+        if(event.type==='response.output_item.done'&&Array.isArray(event.item?.content))active.parts=new Map(event.item.content.map((part,index)=>[index,{...part}]));
+        return;
+      }
+      const textEvent=['response.output_text.delta','response.output_text.done'].includes(event.type);
+      const partEvent=['response.content_part.added','response.content_part.done'].includes(event.type);
+      if(!textEvent&&!partEvent)return;
+      if(!readerChannel(event))return;
+      const addressed=typeof event.item_id==='string'||Number.isSafeInteger(event.output_index);
+      if(addressed)scoped=true;
+      if(!scoped&&textEvent) {legacy=event.type.endsWith('.delta')?legacy+(typeof event.delta==='string'?event.delta:''):typeof event.text==='string'?event.text:legacy;return;}
+      const state=addressed?locate(event):active;
+      if(!state)return;
+      const index=Number.isSafeInteger(event.content_index)?event.content_index:0;
+      if(partEvent) {state.parts.set(index,{...state.parts.get(index),...event.part});return;}
+      const part=state.parts.get(index)||{type:'output_text',text:''};
+      if(event.type.endsWith('.delta'))part.text=(typeof part.text==='string'?part.text:'')+(typeof event.delta==='string'?event.delta:'');
+      else if(typeof event.text==='string')part.text=event.text;
+      state.parts.set(index,part);
+    }
+    function text({final=false,requireMetadata=false}={}) {
+      if(!scoped)return requireMetadata?'':Core.readerOutput(legacy,{final}).text;
+      const selected=readerItem(states.filter(state=>state.known).sort((a,b)=>(a.index??states.indexOf(a))-(b.index??states.indexOf(b))).map(state=>({...state.item,content:[...state.parts].sort((a,b)=>a[0]-b[0]).map(([,part])=>part)})));
+      return Core.readerOutput(itemText(selected),{final}).text;
+    }
+    return {ingest,text};
   }
   function responseSources(response) {
     const found=new Map();
@@ -129,10 +196,10 @@
       const url=safeUrl(typeof value==='string'?value:value?.url);
       if (url && !found.has(url)) found.set(url,{url,title:String(typeof value==='object'&&value?.title||url).slice(0,200)});
     }
-    for (const item of response?.output||[]) {
-      if (item.type!=='message'||item.role&&item.role!=='assistant') continue;
+    const selected=readerItem(Array.isArray(response?.output)?response.output:[]);
+    for (const item of selected?[selected]:[]) {
       for (const c of item.content||[]) {
-        if(c.type!=='output_text')continue;
+        if(c.type!=='output_text'||!readerChannel(c))continue;
         for (const a of c.annotations||[]) if(a.type==='url_citation'||a.url_citation) add(a.url_citation||a);
       }
     }
@@ -208,7 +275,7 @@
     for(const key of ['web_search_calls','x_search_calls','x_posts_fetched','x_users_fetched']) {
       if(Number.isFinite(details?.[key])&&details[key]>0)return true;
     }
-    return (response?.output||[]).some(item=>['web_search_call','x_search_call'].includes(item.type)||item.type==='tool_call'&&/^(?:web_search|web_search_with_snippets|web_search_with_search_results|browse_page|x_keyword_search|x_semantic_search|x_user_search|x_thread_fetch)$/.test(item.name||item.function?.name||''));
+    return (response?.output||[]).some(item=>['web_search_call','x_search_call'].includes(item.type)||['tool_call','custom_tool_call'].includes(item.type)&&/^(?:web_search|web_search_with_snippets|web_search_with_search_results|browse_page|x_search|x_keyword_search|x_semantic_search|x_user_search|x_thread_fetch)$/.test(item.name||item.function?.name||''));
   }
   function abortError() { const error=apiError('API 请求已取消。','CANCELED');error.name='AbortError';return error; }
   function assertNotAborted(signal) { if(signal?.aborted)throw abortError(); }
@@ -292,6 +359,8 @@
   async function runStage(post,settings,apiKey,stage,analysis,{signal,onUpdate,fetchImpl}) {
     assertNotAborted(signal);
     let text='',completed=null,usage={},sources=[],searched=false,model=sanitizedModel(settings.apiModel),terminalUsageComplete=false;
+    const tracker=textTracker();
+    const publish=()=>onUpdate({text,usage,model,usageComplete:terminalUsageComplete,usageByStage:{[stage]:usage},modelByStage:{[stage]:model}});
     try {
       const response=await fetchImpl(ENDPOINT,{
         method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${apiKey}`},
@@ -305,25 +374,37 @@
       if(!response.body)throw failed(apiError('API 未返回可读取的响应。','API_STREAM_INTERRUPTED'),'CONNECTION');
       await readEvents(response.body,event=>{
         assertNotAborted(signal);
+        tracker.ingest(event);
         if(event.response?.usage)usage=sanitizedUsage(event.response.usage);
         if(event.response) {
           sources=mergeSources(sources,responseSources(event.response));
           searched ||= searchedResponse(event.response);
-          if(['response.completed','response.failed','response.incomplete'].includes(event.type))text=responseText(event.response)||text;
+          if(['response.completed','response.failed','response.incomplete'].includes(event.type)&&Object.hasOwn(event.response,'output'))text=responseText(event.response,{final:true});
         }
         const actualModel=sanitizedModel(event.response?.model);if(actualModel)model=actualModel;
         if(['response.completed','response.failed','response.incomplete','error'].includes(event.type))terminalUsageComplete=usageComplete(event.response?.usage);
+        if(['response.completed','response.failed','response.incomplete'].includes(event.type)&&Object.hasOwn(event.response||{},'output')&&!text.trim())publish();
         if(event.type==='response.output_text.delta') {
           if(completed)throw apiError('完整答案之后收到额外输出，未保存此结果。','API_STREAM_ERROR');
-          text+=typeof event.delta==='string'?event.delta:'';
-          onUpdate({text,usage,model,usageComplete:false,usageByStage:{[stage]:usage},modelByStage:{[stage]:model}});
+          text=tracker.text();
+          publish();
+        }
+        if(['response.output_item.added','response.output_item.done','response.content_part.added','response.content_part.done','response.output_text.done'].includes(event.type)&&!completed) {
+          text=tracker.text();
+          publish();
         }
         if(event.type==='response.completed') {
           completed=event.response;
           if(completed?.status==='incomplete')throw incompleteError(completed);
           if(completed?.status==='failed')throw streamError({response:completed});
           if(completed?.status&&completed.status!=='completed')throw failed(apiError('Grok 未返回已完成的答案，可手动重试。','API_INCOMPLETE'),'INCOMPLETE');
-          if(completed?.usage||completed?.model)onUpdate({text:responseText(completed)||text,usage,model,usageComplete:terminalUsageComplete,usageByStage:{[stage]:usage},modelByStage:{[stage]:model}});
+          // A supplied terminal output is authoritative, including an empty
+          // output or a tool/reasoning-only response. Only item-attributed
+          // reader text may fill a terminal response that omits output entirely.
+          text=Object.hasOwn(completed||{},'output')?responseText(completed):tracker.text({final:true,requireMetadata:true});
+          if(!text.trim()){publish();throw failed(apiError('Grok 未返回可显示的完整答案，可手动重试。','API_INCOMPLETE'),'INCOMPLETE');}
+          if(stage==='verify')assertMatchingScript(text,settings.language,false,'verify');
+          if(completed?.usage||completed?.model)publish();
         }
         if(event.type==='response.failed'||event.type==='error')throw streamError(event);
         if(event.type==='response.incomplete')throw incompleteError(event.response);
@@ -334,7 +415,6 @@
       if(completed.status==='incomplete')throw incompleteError(completed);
       if(completed.status==='failed')throw streamError({response:completed});
       if(completed.status&&completed.status!=='completed')throw failed(apiError('Grok 未返回已完成的答案，可手动重试。','API_INCOMPLETE'),'INCOMPLETE');
-      text=responseText(completed)||text;
       if(!text.trim())throw failed(apiError('Grok 返回了空答案。','API_INCOMPLETE'),'INCOMPLETE');
       return {text,sources:responseSources(completed),searched:searchedResponse(completed),usage,model,usageComplete:terminalUsageComplete};
     } catch(error) {
@@ -356,8 +436,9 @@
       if(model)error.modelByStage={[stage]:model};
       // A real unfinished Fact Check remains useful, unlike an earlier
       // explanation. Never retain canceled output or rejected language drift.
-      if(stage==='verify'&&text.trim()&&error.code!=='CANCELED'&&error.code!=='API_LANGUAGE_MISMATCH') {
-        error.partialText=text;
+      const partial=Core.readerOutput(text,{final:true});
+      if(stage==='verify'&&partial.kind==='content'&&partial.text.trim()&&error.code!=='CANCELED'&&error.code!=='API_LANGUAGE_MISMATCH') {
+        error.partialText=partial.text;
         error.partialSources=sources;
         error.partialSearched=searched;
       }

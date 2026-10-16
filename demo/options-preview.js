@@ -38,7 +38,7 @@
   const pick=keys=>Object.fromEntries((Array.isArray(keys)?keys:[keys]).filter(key=>Object.hasOwn(state,key)).map(key=>[key,state[key]]));
   window.chrome={
     runtime:{
-      getManifest:()=>({version:'0.8.0-preview'}),reload:()=>location.reload(),
+      getManifest:()=>({version:'0.8.1-preview'}),reload:()=>location.reload(),
       onMessage:{addListener:fn=>runtimeListeners.push(fn)},
       async sendMessage(message){
         if(message.type==='GET_UI_LANGUAGE')return {ok:true,language:state.uiLanguage};

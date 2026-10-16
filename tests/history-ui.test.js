@@ -116,6 +116,27 @@ test('history normalizes untrusted DTOs, rejects invalid links and bounds render
   assert.equal(records.length,1);assert.equal(records[0].text.length,12000);assert.equal(records[0].analysis.text.length,30000);assert.equal(records[0].analysis.sources.length,1);assert.deepEqual(records[0].comments,['a','b','c']);
 });
 
+test('history suppresses old tool-only answer pollution without filtering viewed posts or making API requests',async () => {
+  const command='{"absolute_path":"web_search","query":"private tool progress"}';
+  const normalized=history.normalizeEntries([post('1',{text:command,analysis:{text:command,verificationStatus:'completed',sources:[{url:'https://example.com/tool-progress',title:'Tool progress'}],usage:{total_tokens:17}}})]);
+  assert.equal(normalized[0].text,command,'The actual viewed post remains unchanged');
+  assert.equal(normalized[0].analysis.text,'');assert.equal(normalized[0].analysis.verificationStatus,'incomplete');assert.deepEqual(normalized[0].analysis.sources,[]);
+  const page=fixture({entries:[post('1',{analysis:{text:command,verificationStatus:'completed',sources:[]}})]});await page.controller.start();
+  assert.doesNotMatch(page.$('history-list').textContent,/absolute_path|private tool progress/);
+  assert.match(page.$('history-list').textContent,/Fact check incomplete/);
+  assert.equal(nodes(page.$('history-list'),'details').length,0);
+  assert.deepEqual(page.calls.map(call=>call.type).sort(),['GET_CONFIG','GET_HISTORY','GET_UI_LANGUAGE'].sort());
+});
+
+test('history preserves legitimate JSON and code that accompanies saved evidence',async () => {
+  for(const text of ['{"count":8,"status":"reported"}','```json\n{"count":8}\n```','Evidence notes:\n\n{"absolute_path":"web_search","query":"quoted diagnostic"}']) {
+    const page=fixture({entries:[post('1',{analysis:{text,verificationStatus:'completed',sources:[]}})]});await page.controller.start();await page.openFirstAnswer();
+    const answer=nodes(page.$('history-list'),'details')[0].textContent;
+    if(text.includes('absolute_path'))assert.match(answer,/absolute_path/);else assert.match(answer,/8/);
+    assert.doesNotMatch(answer,/Fact check incomplete/);
+  }
+});
+
 test('posts and expanded model HTML stay inert, without images or network generation',async () => {
   const page = fixture({entries:[post('1',{author:'<img src=x>',text:'<img src=x onerror=alert(1)>',analysis:{text:'# **A heading**\n\n<img src="https://tracker.test/pixel" onerror=alert(1)>\n\n![track](https://tracker.test/image)\n\n[bad](javascript:alert(1))',sources:[],model:'<svg onload=alert(1)>'}})]});
   await page.controller.start();await page.openFirstAnswer();

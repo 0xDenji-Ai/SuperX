@@ -50,6 +50,67 @@ const header = (handle, id, datetime = '2026-10-05T01:00:00.000Z') => e('div', {
 ]);
 const tweetText = text => e('div', { 'data-testid': 'tweetText' }, [], text);
 
+test('reader output hides the screenshot tool chain at every streaming prefix and on completion',()=>{
+  const commands=[
+    {absolute_path:'x_thread_fetch',post_id:'2109569541072384120'},
+    {absolute_path:'x_thread_fetch',post_id:'2109330407472984125'},
+    {absolute_path:'web_search',query:'high bone density reduce injury severity accidents fractures',num_results:10},
+    {absolute_path:'web_search',query:'bone density and fracture risk sports injuries',num_results:10},
+    {absolute_path:'web_search',query:'"hard bone theory" OR "hard bones" bone density',num_results:5},
+    {absolute_path:'view_image',image_url:'https://pbs.twimg.com/media/HUYX0WNbkAADKz?format=jpg'},
+    {absolute_path:'x_keyword_search',query:'from:coolish bone OR bones OR density',limit:5,mode:'Latest'},
+    {absolute_path:'x_semantic_search',query:'bone density and fracture risk',limit:5}
+  ];
+  for(const text of [
+    commands.map(command=>JSON.stringify(command)).join('\n'),
+    commands.map(command=>'```json\n'+JSON.stringify(command)+'\n```').join('\n\n'),
+    '~~~json\n'+JSON.stringify(commands)+'\n~~~'
+  ]) {
+    for(let end=1;end<=text.length;end++) {
+      const result=core.readerOutput(text.slice(0,end));
+      assert.equal(result.text,'',`Tool command prefix ${end}: ${text.slice(0,end)}`);
+      assert.ok(['pending','tool_only'].includes(result.kind));
+    }
+    assert.deepEqual(core.readerOutput(text,{final:true}),{kind:'tool_only',text:''});
+  }
+});
+
+test('reader output recognizes only whole known tool invocations while preserving useful JSON, code and mixed prose',()=>{
+  const invocation={absolute_path:'web_search',query:'An escaped "quote", slash \\ and {braces} [arrays]',num_results:5};
+  assert.deepEqual(core.readerOutput(JSON.stringify(invocation),{final:true}),{kind:'tool_only',text:''});
+  const content=[
+    '{"verified":false,"value":42}',
+    '["First comment.","Second comment.","Third comment."]',
+    '{"absolute_path":"F:\\\\project\\\\report.json","query":"Example data"}',
+    '{"absolute_path":"unrelated_tool","query":"Example data"}',
+    '{"absolute_path":"web_search"}',
+    '{"absolute_path":"web_search","query":"Example data","explanation":"Technical example"}',
+    '[{"absolute_path":"web_search","query":"Example data"},{"value":1}]',
+    '```js\nconst request = {absolute_path:"web_search", query:"example"};\n```',
+    '```json\n{"value":1,"unit":"g/cm²"}\n```',
+    'Use this example:\n```json\n'+JSON.stringify(invocation)+'\n```',
+    JSON.stringify(invocation)+'\nThe evidence contradicts the claimed result.',
+    '  A concise finding with `code` and https://primary.example/evidence.\n'
+  ];
+  for(const text of content)assert.deepEqual(core.readerOutput(text,{final:true}),{kind:'content',text},text);
+  for(const value of [null,undefined,7,' \n\t '])assert.deepEqual(core.readerOutput(value,{final:true}),{kind:'empty',text:''});
+});
+
+test('truncated known tool invocations cannot become partial answers but ordinary unfinished JSON remains content at completion',()=>{
+  for(const text of [
+    '{"absolute_path":"x_thread_fetch","post_id":"210956',
+    '```json\n{"absolute_path":"web_search","query":"bone density',
+    '[{"absolute_path":"view_image","image_url":"https://example.com/image'
+  ]) {
+    assert.deepEqual(core.readerOutput(text),{kind:'pending',text:''});
+    assert.deepEqual(core.readerOutput(text,{final:true}),{kind:'tool_only',text:''});
+  }
+  for(const text of ['{"value":42','{"absolute_path":"F:/data/claim.json","value":','```json\n{"density":']) {
+    assert.deepEqual(core.readerOutput(text),{kind:'pending',text:''});
+    assert.deepEqual(core.readerOutput(text,{final:true}),{kind:'content',text});
+  }
+});
+
 test('promoted posts use the Ad label in the author header, not media tracking or post words', () => {
   const row = e('div', {}, [header('sponsor','701'),e('span',{},[],'Ad'),e('button',{'data-testid':'caret'})]);
   const ad = e('article',{},[row,tweetText('Sponsor message')]);

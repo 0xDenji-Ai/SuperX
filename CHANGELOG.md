@@ -2,6 +2,13 @@
 
 SuperX release history. The extension's `manifest.json` is the authoritative installed version. Test counts below describe those releases' recorded checks, not live provider or browser-store certification.
 
+## 0.8.1 — Reader output handling (unreleased candidate)
+
+- Distinguish intermediate assistant messages and tool-call data from the final reader-facing answer. Use the completed response as the authoritative result instead of retaining earlier text when no final answer is present.
+- Hold recognized tool-command JSON while streaming and exclude replies consisting only of those commands from the reading rail and successful answer caches. Ordinary prose, code and JSON remain supported.
+- Show an incomplete fact check when the provider supplies no reader-facing answer. Preserve reported Token/model usage without automatically starting another paid request.
+- Keep the single-request Fact Check behavior introduced in 0.8.0. This local regression-fix candidate still requires installed-extension acceptance; the published Chrome Web Store and GitHub Stable version remains 0.7.26.
+
 ## 0.8.0 — Fact Check only (unreleased candidate)
 
 - Temporarily remove the explanation stage and its Settings controls. Run a single streamed Fact Check directly for each visible post, using its original URL and enabled search tools. Older generation-flow preferences no longer start an explanation or second request.

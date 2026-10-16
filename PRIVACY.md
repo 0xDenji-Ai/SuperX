@@ -1,6 +1,6 @@
 # Privacy and data handling
 
-This document describes SuperX 0.8.0's Fact Check data flow. It applies to the xAI API mode, not the removed X built-in Grok mode. Last updated: 2026-10-16. The currently published 0.7.26 stable release retains its earlier explanation-then-check flow.
+This document describes SuperX 0.8.1's Fact Check data flow. It applies to the xAI API mode, not the removed X built-in Grok mode. Last updated: 2026-10-16. The currently published 0.7.26 stable release retains its earlier explanation-then-check flow.
 
 ## Setup and control
 

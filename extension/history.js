@@ -1,12 +1,12 @@
 (function(root,factory) {
   'use strict';
-  const api = factory();
+  const api = factory(typeof module==='object'&&module.exports?require('./feed-core.js'):root.XGrokCore);
   if (typeof module === 'object' && module.exports) module.exports = api;
   else {
     root.SuperXHistoryUI = api;
     if (root.document && root.chrome?.runtime) api.create({environment:root}).start();
   }
-})(globalThis,function() {
+})(globalThis,function(Core) {
   'use strict';
   const TTL = 24 * 60 * 60 * 1000;
   const PAGE_SIZE = 100;
@@ -68,6 +68,14 @@
         usage:safeUsage(value.analysis.usage),
         usageComplete:value.analysis.usageComplete === true,
       } : null;
+      if(analysis) {
+        const output=Core.readerOutput(analysis.text,{final:true});
+        analysis.text=output.text;
+        if(output.kind!=='content') {
+          analysis.sources=[];analysis.verificationStart=undefined;
+          analysis.verificationStatus='incomplete';
+        }
+      }
       return [{id,url,author:boundedText(value.author,300),text:boundedText(value.text,12000),lastViewedAt:value.lastViewedAt,analysis,
         comments:Array.isArray(value.comments) ? value.comments.slice(0,3).map(comment => boundedText(comment,2000)).filter(Boolean) : []}];
     });
@@ -155,7 +163,7 @@
           else { expanded.delete(entry.id);body.replaceChildren();row.answerLabels = null; }
           summary.textContent = t(details.open ? 'history.hideAnswer' : 'history.showAnswer');
         });article.append(details);
-      } else {row.noAnalysis = element('p','help',t('history.noAnalysis'));article.append(row.noAnalysis);}
+      } else {row.noAnalysis = element('p','help',t(['incomplete','failed'].includes(entry.analysis?.verificationStatus)?'status.incomplete':'history.noAnalysis'));article.append(row.noAnalysis);}
       return row;
     }
     function updateRow(row,entry) {
@@ -163,7 +171,7 @@
       setText(row.time,formatTime(entry.lastViewedAt));row.time.dateTime = new Date(entry.lastViewedAt).toISOString();row.time.title = t('history.lastViewed');
       setText(row.open,t('history.open'));setText(row.remove,t('history.delete'));row.remove.disabled = busy;
       row.remove.setAttribute('aria-label',t('history.delete') + ' · ' + (entry.author || entry.id));
-      if (row.noAnalysis) setText(row.noAnalysis,t('history.noAnalysis'));
+      if (row.noAnalysis) setText(row.noAnalysis,t(['incomplete','failed'].includes(entry.analysis?.verificationStatus)?'status.incomplete':'history.noAnalysis'));
       if (row.summary) setText(row.summary,t(row.details.open ? 'history.hideAnswer' : 'history.showAnswer'));
       const labels = row.answerLabels,analysis = entry.analysis;
       if (labels?.tokens) setText(labels.tokens,t('history.tokens',{count:number(totalTokens(analysis.usage)) + (analysis.usageComplete ? '' : '+')}));

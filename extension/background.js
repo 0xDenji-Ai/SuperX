@@ -98,6 +98,7 @@ async function broadcastHistoryConfig(){
 }
 function historyTicket(post){return history.capture(post.id).catch(()=>null);}
 function rememberHistoryResult(ticket,result,comments=false,language=''){
+  if(!comments&&Core.readerOutput(result?.text,{final:true}).kind!=='content')return;
   void Promise.resolve(ticket).then(value=>comments?history.comments(value,{...result,language}):history.analysis(value,{...result,language})).then(()=>notifyHistoryChanged()).catch(()=>{});
 }
 async function broadcastConfig() { const config = await publicConfig(); for (const client of clients) send(client.port,{type:'CONFIG',...config,used:quotas[client.tabId] || 0,collapsed:Boolean(railStates[client.tabId]),uiLanguage:client.uiLanguage}); }
@@ -134,12 +135,12 @@ function cacheKey(post, s, inputFingerprint) {
   const mode=Core.explanationMode(s);
   const prompts=['fact-check-prompts-v1',mode==='preset'?Core.DEFAULT_PROMPTS.verify:s.verifyPrompt];
   return JSON.stringify(['GrokFirst-v1','api',s.apiModel,s.language,s.webSearch,s.xSearch,
-    'api-v8-fact-check-only',mode,'only',
+    'api-v9-reader-items',mode,'only',
     Core.apiPostIdentity(post,s),...prompts]);
 }
 function sanitizeAnalysis(raw) {
   const value=typeof raw==='string'?{text:raw}:raw&&typeof raw==='object'?raw:{};
-  return {text:typeof value.text==='string'?value.text.slice(0,30000):'',
+  return {text:Core.readerOutput(value.text,{final:true}).text.slice(0,30000),
     verificationStatus:typeof value.verificationStatus==='string'?value.verificationStatus.slice(0,40):'',
     warning:typeof value.warning==='string'?value.warning.slice(0,1000):'',
     sources:(Array.isArray(value.sources)?value.sources:[]).slice(0,20).map(source=>({url:GrokFirstAPI.safeUrl(source?.url),title:typeof source?.title==='string'?source.title.slice(0,200):''})).filter(source=>source.url)};
@@ -163,7 +164,8 @@ function withBillingMetadata(value,provider,verificationMode) {
 }
 function jobError(job,error,code,extra={}) { send(job.client.port,{type:commentsJob(job)?'COMMENT_ERROR':'ERROR',requestId:job.requestId,error,code,...extra}); }
 function freshCacheEntry(entry,now) {
-  return entry&&typeof entry==='object'&&!Array.isArray(entry)&&Number.isFinite(entry.completedAt)&&entry.completedAt>=0&&entry.completedAt<=now&&now-entry.completedAt<CACHE_TTL;
+  return entry&&typeof entry==='object'&&!Array.isArray(entry)&&Number.isFinite(entry.completedAt)&&entry.completedAt>=0&&entry.completedAt<=now&&now-entry.completedAt<CACHE_TTL
+    &&(typeof entry.text!=='string'||Core.readerOutput(entry.text,{final:true}).kind==='content');
 }
 function pruneCache(input,now=Date.now()) {
   const entries=input&&typeof input==='object'&&!Array.isArray(input)?Object.entries(input):[];
@@ -357,19 +359,29 @@ async function executeJob(job) {
     send(client.port,{type:commentsJob(job)?'COMMENT_START':'START',requestId,...(commentsJob(job)?{}:{used})});
     const onUpdate=update=>{
       job.billing=billingMetadata(update,job.settings.provider);
-      const text=String(update.text||'').slice(0,30000);
-      if(!commentsJob(job)&&text.trim()) {
-        job.retainedFactCheck={...sanitizeAnalysis(update),...job.billing,provider:'api',apiVerification:'only',verified:false,searched:update.searched===true};
+      const hasText=typeof update.text==='string';
+      const text=hasText?Core.readerOutput(update.text).text.slice(0,30000):undefined;
+      if(!commentsJob(job)&&hasText) {
+        if(text.trim())job.retainedFactCheck={...sanitizeAnalysis({...update,text}),...job.billing,provider:'api',apiVerification:'only',verified:false,searched:update.searched===true};
+        else delete job.retainedFactCheck;
       }
-      if(liveJob(job)&&!commentsJob(job))send(client.port,{type:'UPDATE',requestId,text,phase:update.phase,
-        verificationStatus:update.verificationStatus,warning:update.warning,sources:update.sources,...job.billing,...verificationMetadata(update,job.settings.apiVerification,text)});
+      if(liveJob(job)&&!commentsJob(job))send(client.port,{type:'UPDATE',requestId,...(hasText?{text}:{}),phase:update.phase,
+        verificationStatus:update.verificationStatus,warning:update.warning,sources:update.sources,...job.billing,...verificationMetadata(update,job.settings.apiVerification,text||'')});
     };
     const result=withBillingMetadata(await waitForAbort(runAPI(job,onUpdate),signal),job.settings.provider,commentsJob(job)?undefined:job.settings.apiVerification);
     if(!liveJob(job))return;
     job.billing=billingMetadata(result,job.settings.provider);
     releaseAPISlot(job);pump();
     if(commentsJob(job))result.comments=GrokFirstAPI.validateComments(result.comments);
-    else result.text=String(result.text).slice(0,30000);
+    else {
+      const reader=Core.readerOutput(result.text,{final:true});
+      if(reader.kind!=='content'){
+        delete job.retainedFactCheck;
+        send(client.port,{type:'UPDATE',requestId,text:'',phase:'verify',verificationStatus:'pending',...job.billing});
+        throw Object.assign(new Error('Grok 未返回可显示的核查答案，可手动重试。'),{code:'API_INCOMPLETE',verificationFailure:{stage:'verify',code:'INCOMPLETE',errorCode:'API_INCOMPLETE'},...job.billing});
+      }
+      result.text=reader.text.slice(0,30000);
+    }
     result.completedAt=Date.now();
     rememberHistoryResult(job.historyTicket,result,commentsJob(job),job.historyLanguage);
     if(epoch===cacheEpoch && !['incomplete','failed'].includes(result.verificationStatus)) {
@@ -381,7 +393,8 @@ async function executeJob(job) {
   } catch(e) {
     if(liveJob(job)) {
       const errorBilling={...job.billing,...billingMetadata(e.partialResult,job.settings.provider),...billingMetadata(e,job.settings.provider)};
-      const partialResult=e.partialResult?withBillingMetadata({...e.partialResult,...errorBilling,text:String(e.partialResult.text||'').slice(0,30000),verificationStatus:'incomplete'},job.settings.provider,job.settings.apiVerification):undefined;
+      const partialText=Core.readerOutput(e.partialResult?.text,{final:true}).text.slice(0,30000);
+      const partialResult=partialText?withBillingMetadata({...e.partialResult,...errorBilling,text:partialText,verificationStatus:'incomplete'},job.settings.provider,job.settings.apiVerification):undefined;
       const safeError=GrokFirstAPI.publicError(e);
       if(partialResult)rememberHistoryResult(job.historyTicket,{...partialResult,completedAt:Date.now()},false,job.historyLanguage);
       jobError(job,safeError.error,safeError.code,{...errorBilling,...(commentsJob(job)?{}:{...verificationMetadata({verificationFailure:e.verificationFailure||partialResult?.verificationFailure},job.settings.apiVerification),partialResult})});
