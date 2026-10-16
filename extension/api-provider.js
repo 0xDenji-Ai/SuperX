@@ -47,10 +47,9 @@
     if(!tools.length)throw apiError('分析原帖需要开启 X 搜索或网页搜索，才能读取全文。','URL_SEARCH_REQUIRED');
     return {url,tools};
   }
-  function configureReasoning(request,model) {
-    // Preserve custom models; no-reasoning is documented for these models only.
-    if (['grok-4.3','grok-4.3-latest'].includes(model)) request.reasoning={effort:'none'};
-    else if (['grok-4.5','grok-4.6','grok-4.7'].includes(model)) request.reasoning={effort:'low'};
+  function configureReasoning(request,model,value) {
+    const effort=Core.reasoningEffort(model,value);
+    if(effort!=='auto')request.reasoning={effort};
     return request;
   }
   function businessPrompt(settings,stage) {
@@ -80,7 +79,7 @@
       // duplicates and whitespace-only strings before displaying any drafts.
       text:{format:{type:'json_schema',name:'grokfirst_comments',strict:true,schema:{type:'array',minItems:3,maxItems:3,items:{type:'string',minLength:1,maxLength:280}}}},
       max_output_tokens:OUTPUT_LIMITS.comments,stream:true,store:false
-    },settings.apiModel);
+    },settings.apiModel,settings.apiReasoningEffort);
   }
   function validateComments(value) {
     if(!Array.isArray(value)||value.length!==3)throw apiError('Grok did not return exactly three valid comment drafts.','COMMENTS_INVALID_RESPONSE');
@@ -118,7 +117,7 @@
       stream:true,
       store:false
     };
-    return configureReasoning(request,settings.apiModel);
+    return configureReasoning(request,settings.apiModel,settings.apiReasoningEffort);
   }
   function readerChannel(value) {
     if(!value||typeof value!=='object')return false;

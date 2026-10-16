@@ -2,6 +2,13 @@
 
 SuperX release history. The extension's `manifest.json` is the authoritative installed version. Test counts below describe those releases' recorded checks, not live provider or browser-store certification.
 
+## 0.8.2 — Model and reasoning selectors (unreleased candidate)
+
+- Replace the editable model-name field with separate model and reasoning-effort dropdowns. Offer Grok 4.3, 4.5, 4.6 and 4.7, and only the effort levels supported by each model. Keep already saved custom model IDs as existing selections without adding a free-form input.
+- Send the selected effort explicitly for fact checks and comment drafts. Preserve previous defaults on upgrade: Grok 4.3 uses none, while 4.5–4.7 use low. Unknown existing model IDs keep provider-default reasoning.
+- Include effort in answer/comment cache identities and refresh visible answers when it changes. Fast defaults select Grok 4.3 with no reasoning and four concurrent requests; they do not enable a paid Fast/Priority service tier.
+- Local candidate awaiting installed-extension acceptance. Public Stable remains 0.7.26.
+
 ## 0.8.1 — Reader output handling (unreleased candidate)
 
 - Distinguish intermediate assistant messages and tool-call data from the final reader-facing answer. Use the completed response as the authoritative result instead of retaining earlier text when no final answer is present.

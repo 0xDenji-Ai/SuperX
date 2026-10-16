@@ -692,7 +692,7 @@ test('old API answers with mixed output languages are regenerated and the new la
   const refreshed=await analyze(bg,port,'regenerate-old-mixed-answer');
   assert.equal(refreshed.cached,false);assert.equal(bg.apiCalls.length,1);
   assert.equal(refreshed.result.text,'Quick meaning: An English post.\n\nFact check: English evidence.');
-  const newKey=Object.keys(bg.session.data.cache).find(key=>key.includes('api-v9-reader-items'));
+  const newKey=Object.keys(bg.session.data.cache).find(key=>key.includes('api-v10-model-reasoning'));
   assert.ok(newKey);assert.equal(bg.session.data.cache[newKey].text,refreshed.result.text);
   assert.equal((await analyze(bg,port,'new-answer-cached')).cached,true);
   assert.equal(bg.apiCalls.length,1);
@@ -725,7 +725,7 @@ test('0.6.1 API analysis caches regenerate naturally in every mode and fresh ans
     const storedKeys=Object.keys(bg.session.data.cache);
     assert.ok(storedKeys.includes(oldKey),'The migration does not destructively remove unrelated stored data');
     const freshKey=storedKeys.find(key=>key!==oldKey);
-    assert.ok(freshKey);assert.equal(JSON.parse(freshKey)[6],'api-v9-reader-items');
+    assert.ok(freshKey);assert.equal(JSON.parse(freshKey)[6],'api-v10-model-reasoning');
         assert.equal((await analyze(bg,port,'natural-cache-hit-'+mode,100,{post:input})).cached,true);
     assert.equal(bg.apiCalls.length,1);
     const restarted=createBackground({settings:s,session:bg.session.data});
@@ -738,7 +738,7 @@ test('0.6.1 API analysis caches regenerate naturally in every mode and fresh ans
   }
 });
 
-test('the natural analysis cache revision preserves all 0.6.1 comment caches',async()=>{
+test('comments cached before explicit reasoning selection cannot substitute for the selected effort',async()=>{
   const input={...post(100),text:'The author recommends a useful new tool.',language:'en'};
   const analysis={text:'An existing explanation.',verificationStatus:'completed',warning:'',sources:[]};
   const comments=['A practical example would help.','Which step would you try first?','The workflow seems useful.'];
@@ -749,8 +749,9 @@ test('the natural analysis cache revision preserves all 0.6.1 comment caches',as
     const bg=createBackground({settings:s,cache:{[oldKey]:{completedAt:1800000000000,comments,provider:'api',task:'comments'}}});
     await bg.ready();
     const response=await draftComments(bg,bg.connect(),'preserved-061-comments-'+mode,100,{post:input,analysis});
-    assert.equal(response.cached,true);assert.deepEqual(response.comments,comments);
-    assert.equal(bg.commentCalls.length,0);assert.equal(bg.apiCalls.length,0);
+    assert.equal(response.cached,false);assert.notDeepEqual(response.comments,comments);
+    assert.deepEqual(bg.session.data.cache[oldKey].comments,comments,'Old session records are not rewritten to invent an effort');
+    assert.equal(bg.commentCalls.length,1);assert.equal(bg.apiCalls.length,0);
   }
 });
 
@@ -769,7 +770,7 @@ test('0.6.2 excerpt-based caches cannot substitute for full-post answers in any 
     assert.equal(fresh.cached,false,mode);assert.equal(fresh.result.text,freshText);assert.equal(bg.apiCalls.length,1);
     const keys=Object.keys(bg.session.data.cache),freshKey=keys.find(key=>key!==oldKey);
     assert.ok(keys.includes(oldKey));assert.ok(freshKey);
-    assert.equal(JSON.parse(freshKey)[6],'api-v9-reader-items');
+    assert.equal(JSON.parse(freshKey)[6],'api-v10-model-reasoning');
     assert.deepEqual(JSON.parse(JSON.parse(freshKey)[9]),['post-input-v3-full-url',input.url,'en']);
     assert.equal((await analyze(bg,port,'full-hit-'+mode,100,{post:input})).cached,true);
     const restarted=createBackground({settings:s,session:bg.session.data});await restarted.ready();
@@ -803,7 +804,7 @@ test('0.6.4 API process narration caches regenerate in every mode and reader-fac
     assert.equal(first.result.text,freshText);assert.equal(bg.apiCalls.length,1);
     const keys=Object.keys(bg.session.data.cache),freshKey=keys.find(key=>key!==oldKey);
     assert.ok(keys.includes(oldKey),'Changing answer policy does not destructively remove stored data');
-    assert.ok(freshKey);assert.equal(JSON.parse(freshKey)[6],'api-v9-reader-items');
+    assert.ok(freshKey);assert.equal(JSON.parse(freshKey)[6],'api-v10-model-reasoning');
         assert.deepEqual(JSON.parse(JSON.parse(freshKey)[9]),['post-input-v3-full-url',input.url,'en']);
     const cached=await analyze(bg,port,'reader-output-hit-'+mode,100,{post:input});
     assert.equal(cached.cached,true);assert.equal(cached.result.text,freshText);assert.equal(bg.apiCalls.length,1);
@@ -2230,7 +2231,7 @@ test('tool-only error partials and hard timeouts do not retain command arguments
 
 test('v8 answers are not reused and contaminated session cache entries are pruned without touching comments',async()=>{
   const seed=createBackground();await seed.ready();await analyze(seed,seed.connect(),'v9-cache-seed');
-  const key=Object.keys(seed.session.data.cache)[0],oldKey=key.replace('api-v9-reader-items','api-v8-fact-check-only'),now=seed.now();
+  const key=Object.keys(seed.session.data.cache)[0],oldKey=key.replace('api-v10-model-reasoning','api-v8-fact-check-only'),now=seed.now();
   const comments={completedAt:now,comments:['First.','Second.','Third.'],provider:'api'};
   const bg=createBackground({cache:{[oldKey]:{text:'Older clean candidate answer',completedAt:now,provider:'api'},[key]:{text:toolOnlyReply,completedAt:now,provider:'api'},comments}});
   await bg.ready();assert.equal(Object.hasOwn(bg.session.data.cache,key),false);assert.deepEqual(bg.session.data.cache.comments,comments);
@@ -2244,6 +2245,44 @@ test('legitimate JSON and technical prose remain available in final results and 
     assert.equal((await analyze(bg,port,'legitimate-json')).result.text,text);await until(()=>bg.local.data.superxHistory?.[0]?.analysis);
     assert.equal((await bg.message({type:'GET_HISTORY'})).entries[0].analysis.text,text);assert.equal((await analyze(bg,port,'legitimate-cache')).cached,true);
   }
+});
+
+test('reasoning levels partition both Fact Check and comment caches and restore their own cached results',async()=>{
+  const bg=createBackground({settings:{apiModel:'grok-4.7',apiReasoningEffort:'low'},
+    apiRun:async call=>({text:'Evidence at '+call.settings.apiReasoningEffort,provider:'api'}),
+    commentRun:async call=>({comments:['First '+call.settings.apiReasoningEffort+'.','Second '+call.settings.apiReasoningEffort+'.','Third '+call.settings.apiReasoningEffort+'.'],provider:'api'})});
+  await bg.ready();const port=bg.connect();
+  const settings=effort=>({...core.DEFAULT_SETTINGS,apiModel:'grok-4.7',apiReasoningEffort:effort});
+  for(const [index,effort] of ['low','high','low'].entries()){
+    await bg.message({type:'SAVE_SETTINGS',settings:settings(effort)});
+    const analysis=await analyze(bg,port,'effort-check-'+index),comments=await draftComments(bg,port,'effort-comments-'+index);
+    assert.equal(analysis.result.text,'Evidence at '+effort);assert.equal(analysis.cached,index===2);assert.equal(comments.cached,index===2);
+    assert.equal(comments.comments[0],'First '+effort+'.');
+  }
+  assert.equal(bg.apiCalls.length,2);assert.equal(bg.commentCalls.length,2);
+  assert.deepEqual(bg.apiCalls.map(call=>call.settings.apiReasoningEffort),['low','high']);
+  assert.equal(Object.keys(bg.session.data.cache).length,4);
+});
+
+test('saving a reasoning-only change cancels old accepted work and new work uses the selected effort',async()=>{
+  const gate=deferred(),bg=createBackground({settings:{apiModel:'grok-4.7',apiReasoningEffort:'low'},apiRun:async call=>{
+    if(call.settings.apiReasoningEffort==='low')await gate.promise;
+    return{text:'Evidence at '+call.settings.apiReasoningEffort,provider:'api'};
+  }});await bg.ready();const port=bg.connect();port.send({type:'ANALYZE',requestId:'effort-old',post:post(100)});await until(()=>bg.apiCalls.length===1);
+  await bg.message({type:'SAVE_SETTINGS',settings:{...core.DEFAULT_SETTINGS,apiModel:'grok-4.7',apiReasoningEffort:'xhigh'}});
+  assert.equal(bg.apiCalls[0].signal.aborted,true);assert.equal(bg.local.data.settings.apiReasoningEffort,'xhigh');
+  assert.equal((await analyze(bg,port,'effort-new')).result.text,'Evidence at xhigh');gate.resolve();await tick();await tick();
+  assert.equal(port.messages.some(m=>m.requestId==='effort-old'&&m.type==='RESULT'),false);
+  assert.equal(Object.values(bg.session.data.cache).some(entry=>entry.text==='Evidence at low'),false);assert.equal(bg.apiCalls.length,2);
+  assert.equal(bg.session.data.apiKey,'session-secret');
+});
+
+test('pre-selector v9 cache entries cannot override explicit reasoning choices',async()=>{
+  const seed=createBackground();await seed.ready();await analyze(seed,seed.connect(),'effort-seed');
+  const newKey=Object.keys(seed.session.data.cache)[0],oldParts=JSON.parse(newKey);oldParts[6]='api-v9-reader-items';oldParts.pop();
+  const bg=createBackground({cache:{[JSON.stringify(oldParts)]:{text:'Older implicit effort answer',completedAt:seed.now(),provider:'api'}}});
+  await bg.ready();const result=await analyze(bg,bg.connect(),'explicit-effort');assert.equal(result.cached,false);assert.equal(bg.apiCalls.length,1);
+  assert.equal(bg.apiCalls[0].settings.apiReasoningEffort,'none');assert.notEqual(result.result.text,'Older implicit effort answer');
 });
 
 test('ordinary session Keys allow analysis, cached results and comments regardless of legacy consent records',async()=>{

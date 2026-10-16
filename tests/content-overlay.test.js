@@ -2398,6 +2398,23 @@ function tokenHeader(card) {
   assert.ok(header,'Every result row owns compact token metadata');
   return header;
 }
+
+test('a saved reasoning-only change clears completed analysis and comments before requesting the new setting',()=>{
+  const settings={apiModel:'grok-4.7',apiReasoningEffort:'low'}, {page,request,card}=tokenFixture(settings);
+  tokenResult(page,request,{usage:{total_tokens:22},model:'grok-4.7'});
+  card.testShadow.querySelector('.generate-comments').emit('click');page.flush();
+  const draft=page.port.sent.find(message=>message.type==='GENERATE_COMMENTS');
+  page.port.onMessage.emit({type:'COMMENT_RESULT',requestId:draft.requestId,comments:['First comment.','Second comment.','Third comment.'],usage:{total_tokens:12},model:'grok-4.7'});page.flush();
+  assert.match(card.testShadow.querySelector('.answer').textContent,/completed/);assert.match(card.testShadow.querySelector('.comments').textContent,/First comment/);
+  page.configure({...settings,apiReasoningEffort:'high'});page.intersect();page.tick();
+  assert.equal(card.testShadow.querySelector('.answer').textContent,'');assert.doesNotMatch(card.testShadow.querySelector('.comments').textContent,/First comment/);
+  assert.equal(tokenHeader(card).hidden,true);
+  const fresh=page.port.sent.filter(message=>message.type==='ANALYZE').at(-1);assert.notEqual(fresh.requestId,request.requestId);
+  page.port.onMessage.emit({type:'RESULT',requestId:request.requestId,result:{text:'Old late answer',provider:'api'}});page.flush();
+  assert.equal(card.testShadow.querySelector('.answer').textContent,'');
+  page.port.onMessage.emit({type:'RESULT',requestId:fresh.requestId,result:{text:'New selected-effort evidence.',provider:'api',usage:{total_tokens:30}}});page.flush();
+  assert.equal(card.testShadow.querySelector('.answer').textContent,'New selected-effort evidence.');assert.deepEqual(page.writes,[]);
+});
 function assertTokenCount(card,count) {
   const footer=tokenHeader(card);assert.equal(footer.hidden,false);
   assert.match(footer.textContent,new RegExp(`(^|\\D)${count}(\\D|$)`));

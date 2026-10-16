@@ -1,6 +1,6 @@
 # Privacy and data handling
 
-This document describes SuperX 0.8.1's Fact Check data flow. It applies to the xAI API mode, not the removed X built-in Grok mode. Last updated: 2026-10-16. The currently published 0.7.26 stable release retains its earlier explanation-then-check flow.
+This document describes SuperX 0.8.2's Fact Check data flow. It applies to the xAI API mode, not the removed X built-in Grok mode. Last updated: 2026-10-16. The currently published 0.7.26 stable release retains its earlier explanation-then-check flow.
 
 ## Setup and control
 
@@ -13,7 +13,7 @@ When analysis is enabled, the Key is available and a visible post enters the que
 - The canonical original post URL and post ID.
 - The author's currently displayed post text, its language mark, author label and timestamp.
 - Media presence and up to four eligible X-hosted image URLs with their accessible descriptions, plus available quoted-post context. A URL or thumbnail is not a promise that the model inspected the media.
-- Your selected model, answer language, search settings and effective fact-check instructions, including custom prompts if selected.
+- Your selected model, reasoning effort, answer language, search settings and effective fact-check instructions, including custom prompts if selected.
 - The existing Fact Check for an optional comment-drafting request. Fact Check itself uses one generation request and does not receive an earlier explanation.
 
 The API Key is sent as the request's authentication credential. Search-enabled requests ask xAI's tools to retrieve the original post and relevant evidence; provider tools may retrieve further posts, pages or media. SuperX does not independently preload every complete post or video.

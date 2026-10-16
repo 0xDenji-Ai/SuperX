@@ -443,6 +443,61 @@ test('API defaults use bounded parallelism and only Fact Check while preserving 
   assert.equal(core.normalizeSettings({apiVerification:'off'}).apiVerification,'only');
 });
 
+test('model profiles expose only supported reasoning choices and are deeply immutable',()=>{
+  assert.deepEqual(core.API_MODELS,[
+    {value:'grok-4.3',label:'Grok 4.3',efforts:['none','low','medium','high'],defaultEffort:'none'},
+    {value:'grok-4.5',label:'Grok 4.5',efforts:['low','medium','high'],defaultEffort:'low'},
+    {value:'grok-4.6',label:'Grok 4.6',efforts:['low','medium','high','xhigh'],defaultEffort:'low'},
+    {value:'grok-4.7',label:'Grok 4.7',efforts:['low','medium','high','xhigh'],defaultEffort:'low'}
+  ]);
+  for(const profile of core.API_MODELS) {
+    assert.equal(core.modelProfile(profile.value),profile);
+    assert.equal(Object.isFrozen(profile),true);assert.equal(Object.isFrozen(profile.efforts),true);
+    assert.throws(()=>{profile.efforts.push('unsupported');},TypeError);
+    assert.throws(()=>{profile.defaultEffort='high';},TypeError);
+  }
+  assert.equal(Object.isFrozen(core.API_MODELS),true);
+  assert.throws(()=>{core.API_MODELS.push({value:'unsupported'});},TypeError);
+  assert.equal(core.modelProfile('grok-4.3-latest'),core.modelProfile('grok-4.3'));
+  for(const model of ['custom-model','grok-4.5-latest','grok-4.7-fast','Grok-4.3',' grok-4.3 ',undefined,null,{}])assert.equal(core.modelProfile(model),null);
+});
+
+test('reasoning settings retain supported choices and fall back per model without changing custom IDs',()=>{
+  assert.equal(core.DEFAULT_SETTINGS.apiReasoningEffort,'none');
+  for(const profile of core.API_MODELS) {
+    for(const effort of profile.efforts) {
+      const settings=core.normalizeSettings({apiModel:profile.value,apiReasoningEffort:effort});
+      assert.equal(settings.apiModel,profile.value);assert.equal(settings.apiReasoningEffort,effort);
+      assert.equal(core.reasoningEffort(profile.value,effort),effort);
+      assert.deepEqual(core.normalizeSettings(settings),settings);
+    }
+    for(const value of [undefined,null,'','auto','invalid','HIGH',' high ',false,7,{},[]]) {
+      assert.equal(core.reasoningEffort(profile.value,value),profile.defaultEffort);
+      assert.equal(core.normalizeSettings({apiModel:profile.value,apiReasoningEffort:value}).apiReasoningEffort,profile.defaultEffort);
+    }
+  }
+  assert.equal(core.normalizeSettings({apiModel:'grok-4.5',apiReasoningEffort:'none'}).apiReasoningEffort,'low');
+  assert.equal(core.normalizeSettings({apiModel:'grok-4.3',apiReasoningEffort:'xhigh'}).apiReasoningEffort,'none');
+  assert.equal(core.normalizeSettings({apiModel:' grok-4.3-latest ',apiReasoningEffort:'high'}).apiReasoningEffort,'high');
+  for(const apiModel of ['my-model','grok-4.5-latest','grok-4.7-fast','Grok-4.3'])for(const apiReasoningEffort of [undefined,'none','high','xhigh','auto']) {
+    const settings=core.normalizeSettings({apiModel,apiReasoningEffort});
+    assert.equal(settings.apiModel,apiModel);assert.equal(settings.apiReasoningEffort,'auto');
+    assert.equal(core.reasoningEffort(apiModel,apiReasoningEffort),'auto');
+  }
+});
+
+test('reasoning migration keeps previous model defaults and preserves language, prompts and credential separation',()=>{
+  for(const [apiModel,expected] of [['grok-4.3','none'],['grok-4.3-latest','none'],['grok-4.5','low'],['grok-4.6','low'],['grok-4.7','low'],['saved-custom-id','auto']]) {
+    const original={provider:'api',apiModel,language:'pt-BR',interfaceLanguage:'ja',explanationMode:'custom',explainPrompt:'Archived explanation.',verifyPrompt:'  Preserve my check.\n',commentsPrompt:'Preserve my comments.',apiKey:'SYNTHETIC_PRIVATE_KEY',rememberApiKey:true};
+    const snapshot=structuredClone(original),settings=core.normalizeSettings(original);
+    assert.equal(settings.apiModel,apiModel);assert.equal(settings.apiReasoningEffort,expected);
+    for(const name of ['language','interfaceLanguage','explanationMode','explainPrompt','verifyPrompt','commentsPrompt'])assert.equal(settings[name],original[name]);
+    assert.equal(Object.hasOwn(settings,'apiKey'),false);assert.equal(Object.hasOwn(settings,'rememberApiKey'),false);
+    assert.deepEqual(original,snapshot,'Migration must not mutate the caller or credential storage');
+  }
+  assert.deepEqual(core.normalizeSettings({apiModel:'invalid model',apiReasoningEffort:'high'}),{...core.DEFAULT_SETTINGS,apiReasoningEffort:'high'});
+});
+
 test('default and explicit infinite queues retain every visible post beyond the old capacity', () => {
   for (const options of [undefined, Infinity, {capacity:Infinity}]) {
     const queue=new core.BoundedPostQueue(options);
@@ -687,6 +742,143 @@ function uiPageFixture(file, settings=core.DEFAULT_SETTINGS, storage={}, environ
 const settleUI=()=>new Promise(resolve=>setImmediate(resolve));
 const uiMessageTypes=fixture=>fixture.messages.map(message=>message.type).filter(type=>!['GET_SECURITY_STATUS','GET_CONFIG','GET_HISTORY_STATUS'].includes(type));
 
+test('Settings model and reasoning controls are required dropdowns with model-specific choices',async()=>{
+  const html=fs.readFileSync(path.join(__dirname,'../extension/options.html'),'utf8');
+  for(const id of ['api-model','api-reasoning-effort']) {
+    assert.match(html,new RegExp('<select\\b[^>]*id="'+id+'"[^>]*\\brequired\\b'));
+    assert.doesNotMatch(html,new RegExp('<input\\b[^>]*id="'+id+'"'));
+    assert.match(html,new RegExp('<label\\b[^>]*for="'+id+'"'));
+  }
+  const fixture=uiPageFixture('options');await settleUI();await settleUI();
+  const model=fixture.ids.get('api-model'),effort=fixture.ids.get('api-reasoning-effort');
+  assert.deepEqual(model.children.map(option=>option.value),['grok-4.3','grok-4.5','grok-4.6','grok-4.7']);
+  assert.equal(model.value,'grok-4.3');assert.equal(effort.value,'none');
+  for(const [value,expected] of [
+    ['grok-4.3',['none','low','medium','high']],['grok-4.5',['low','medium','high']],
+    ['grok-4.6',['low','medium','high','xhigh']],['grok-4.7',['low','medium','high','xhigh']]
+  ]) {
+    model.value=value;model.listeners.change();
+    assert.deepEqual(effort.children.map(option=>option.value),expected);
+    assert.ok(expected.includes(effort.value));
+  }
+  assert.deepEqual(uiMessageTypes(fixture),['GET_UI_LANGUAGE'],'Choosing a model must not save or start a paid request');
+});
+
+test('changing the Settings model keeps a supported effort and falls back only when the level is unsupported',async()=>{
+  const fixture=uiPageFixture('options');await settleUI();await settleUI();
+  const model=fixture.ids.get('api-model'),effort=fixture.ids.get('api-reasoning-effort');
+  effort.value='high';effort.listeners.change();
+  for(const value of ['grok-4.5','grok-4.6','grok-4.7']) {
+    model.value=value;model.listeners.change();assert.equal(effort.value,'high');
+  }
+  effort.value='xhigh';effort.listeners.change();model.value='grok-4.5';model.listeners.change();
+  assert.equal(effort.value,'low');
+  model.value='grok-4.7';model.listeners.change();effort.value='xhigh';effort.listeners.change();
+  model.value='grok-4.3';model.listeners.change();assert.equal(effort.value,'none');
+  model.value='grok-4.5';model.listeners.change();assert.equal(effort.value,'low');
+  model.value='grok-4.3';model.listeners.change();assert.equal(effort.value,'low','A supported explicit choice survives a model switch');
+  assert.equal(fixture.local.settings,core.DEFAULT_SETTINGS);
+});
+
+test('every model and effort choice persists through Save and reopening without resending an untouched Key',async()=>{
+  for(const [apiModel,efforts] of [
+    ['grok-4.3',['none','low','medium','high']],['grok-4.5',['low','medium','high']],
+    ['grok-4.6',['low','medium','high','xhigh']],['grok-4.7',['low','medium','high','xhigh']]
+  ])for(const apiReasoningEffort of efforts) {
+    const fixture=uiPageFixture('options');await settleUI();await settleUI();
+    fixture.ids.get('api-model').value=apiModel;fixture.ids.get('api-model').listeners.change();
+    fixture.ids.get('api-reasoning-effort').value=apiReasoningEffort;fixture.ids.get('api-reasoning-effort').listeners.change();
+    const form=fixture.ids.get('settings-form');await form.listeners.submit({preventDefault(){},currentTarget:form});
+    const saved=fixture.messages.filter(message=>message.type==='SAVE_SETTINGS');
+    assert.equal(saved.length,1);assert.equal(saved[0].settings.apiModel,apiModel);assert.equal(saved[0].settings.apiReasoningEffort,apiReasoningEffort);
+    assert.equal(fixture.local.settings.apiModel,apiModel);assert.equal(fixture.local.settings.apiReasoningEffort,apiReasoningEffort);
+    assert.deepEqual(uiMessageTypes(fixture),['GET_UI_LANGUAGE','SAVE_SETTINGS']);
+    assert.equal(fixture.session.apiKey,'session-secret');assert.ok(fixture.messages.every(message=>!Object.hasOwn(message,'apiKey')));
+    const reopened=uiPageFixture('options',fixture.local.settings,{local:fixture.local,session:fixture.session});await settleUI();await settleUI();
+    assert.equal(reopened.ids.get('api-model').value,apiModel);assert.equal(reopened.ids.get('api-reasoning-effort').value,apiReasoningEffort);
+    assert.equal(reopened.session.apiKey,'session-secret');assert.deepEqual(uiMessageTypes(reopened),['GET_UI_LANGUAGE']);
+  }
+});
+
+test('saved legacy model IDs stay selectable without a free-form field or silent model migration',async()=>{
+  for(const [apiModel,expectedEfforts,expectedEffort] of [
+    ['saved-custom-id',['auto'],'auto'],['grok-4.3-latest',['none','low','medium','high'],'none']
+  ]) {
+    const fixture=uiPageFixture('options',{...core.DEFAULT_SETTINGS,apiModel});await settleUI();await settleUI();
+    const model=fixture.ids.get('api-model'),effort=fixture.ids.get('api-reasoning-effort');
+    assert.equal(model.value,apiModel);assert.equal(model.children.length,5);
+    assert.equal(model.children.at(-1).value,apiModel);
+    assert.equal(model.children.at(-1).textContent,ui.t('options.savedModel','en',{model:apiModel}));
+    assert.deepEqual(effort.children.map(option=>option.value),expectedEfforts);assert.equal(effort.value,expectedEffort);
+    model.value='grok-4.7';model.listeners.change();model.value=apiModel;model.listeners.change();
+    assert.equal(effort.value,apiModel==='grok-4.3-latest'?'low':'auto');
+    effort.value=expectedEffort;effort.listeners.change();
+    assert.equal(effort.value,expectedEffort);
+    const form=fixture.ids.get('settings-form');await form.listeners.submit({preventDefault(){},currentTarget:form});
+    assert.equal(fixture.local.settings.apiModel,apiModel);assert.equal(fixture.local.settings.apiReasoningEffort,expectedEffort);
+    const reopened=uiPageFixture('options',fixture.local.settings);await settleUI();await settleUI();
+    assert.equal(reopened.ids.get('api-model').value,apiModel);assert.equal(reopened.ids.get('api-reasoning-effort').value,expectedEffort);
+  }
+});
+
+test('injected unknown models and unsupported reasoning values are rejected before saving settings or credentials',async()=>{
+  for(const invalid of [
+    {model:'new-custom-id',effort:'auto',focus:'api-model',error:'options.modelInvalid'},
+    {model:'',effort:'none',focus:'api-model',error:'options.modelInvalid'},
+    {model:'grok-4.5',effort:'none',focus:'api-reasoning-effort',error:'options.reasoningInvalid'},
+    {model:'grok-4.5',effort:'xhigh',focus:'api-reasoning-effort',error:'options.reasoningInvalid'},
+    {model:'grok-4.7',effort:'',focus:'api-reasoning-effort',error:'options.reasoningInvalid'}
+  ]) {
+    const fixture=uiPageFixture('options');await settleUI();await settleUI();
+    fixture.ids.get('api-model').value=invalid.model;fixture.ids.get('api-model').listeners.change();
+    fixture.ids.get('api-reasoning-effort').value=invalid.effort;
+    fixture.ids.get('api-key').value='replacement-fixture';fixture.ids.get('api-key').listeners.input();
+    const form=fixture.ids.get('settings-form');await form.listeners.submit({preventDefault(){},currentTarget:form});
+    assert.equal(fixture.ids.get('status').textContent,ui.t(invalid.error,'en'));
+    assert.equal(fixture.ids.get(invalid.focus).focused,true);assert.equal(fixture.session.apiKey,'session-secret');
+    assert.equal(fixture.local.settings,core.DEFAULT_SETTINGS);assert.deepEqual(uiMessageTypes(fixture),['GET_UI_LANGUAGE']);
+  }
+});
+
+test('fast defaults select Grok 4.3 with no reasoning and four requests while preserving other drafts until Save',async()=>{
+  const original=core.normalizeSettings({apiModel:'grok-4.7',apiReasoningEffort:'xhigh',apiConcurrency:8,language:'ja',explanationMode:'custom',verifyPrompt:'My check draft.',commentsPrompt:'My comment draft.'});
+  const fixture=uiPageFixture('options',original);await settleUI();await settleUI();
+  fixture.ids.get('fast-preset').listeners.click();
+  assert.equal(fixture.ids.get('api-model').value,'grok-4.3');assert.equal(fixture.ids.get('api-reasoning-effort').value,'none');
+  assert.equal(fixture.ids.get('api-concurrency').value,4);assert.equal(fixture.ids.get('language').value,'ja');
+  assert.equal(fixture.ids.get('verify-prompt').value,original.verifyPrompt);assert.equal(fixture.ids.get('comments-prompt').value,original.commentsPrompt);
+  assert.equal(fixture.ids.get('api-key').value,'session-secret');assert.equal(fixture.local.settings,original);
+  assert.deepEqual(uiMessageTypes(fixture),['GET_UI_LANGUAGE']);
+  const form=fixture.ids.get('settings-form');await form.listeners.submit({preventDefault(){},currentTarget:form});
+  assert.equal(fixture.local.settings.apiModel,'grok-4.3');assert.equal(fixture.local.settings.apiReasoningEffort,'none');assert.equal(fixture.local.settings.apiConcurrency,4);
+  assert.equal(fixture.local.settings.language,'ja');assert.equal(fixture.local.settings.verifyPrompt,original.verifyPrompt);
+  assert.deepEqual(uiMessageTypes(fixture),['GET_UI_LANGUAGE','SAVE_SETTINGS']);
+});
+
+test('locale changes relabel reasoning options while preserving model, reasoning, Key and prompt drafts',async()=>{
+  const fixture=uiPageFixture('options');await settleUI();await settleUI();
+  fixture.ids.get('api-model').value='grok-4.7';fixture.ids.get('api-model').listeners.change();
+  fixture.ids.get('api-reasoning-effort').value='xhigh';fixture.ids.get('api-reasoning-effort').listeners.change();
+  fixture.ids.get('api-key').value='unsaved-key-fixture';fixture.ids.get('api-key').listeners.input();
+  fixture.ids.get('verify-prompt').value='Unsaved verification draft.';
+  for(const locale of ui.SUPPORTED_LANGUAGES) {
+    fixture.runtimeListeners.forEach(listener=>listener({type:'UI_LANGUAGE_CHANGED',language:locale}));
+    assert.equal(fixture.ids.get('api-model').value,'grok-4.7');assert.equal(fixture.ids.get('api-reasoning-effort').value,'xhigh');
+    assert.equal(fixture.ids.get('api-reasoning-effort').children.at(-1).textContent,ui.t('options.reasoning.xhigh',locale));
+    assert.equal(fixture.ids.get('api-key').value,'unsaved-key-fixture');assert.equal(fixture.ids.get('verify-prompt').value,'Unsaved verification draft.');
+    assert.equal(fixture.ids.get('status').textContent,ui.t('options.unsavedChanges',locale));
+  }
+  assert.equal(fixture.session.apiKey,'session-secret');assert.deepEqual(uiMessageTypes(fixture),['GET_UI_LANGUAGE']);
+});
+
+test('reasoning-only edits participate in unsaved status and reverting the selection clears the hint',async()=>{
+  const fixture=uiPageFixture('options');await settleUI();await settleUI();
+  const effort=fixture.ids.get('api-reasoning-effort');
+  effort.value='high';effort.listeners.change();assert.equal(fixture.ids.get('status').textContent,ui.t('options.unsavedChanges','en'));
+  effort.value='none';effort.listeners.change();assert.equal(fixture.ids.get('status').textContent,'');
+  assert.equal(fixture.local.settings.apiReasoningEffort,'none');assert.deepEqual(uiMessageTypes(fixture),['GET_UI_LANGUAGE']);
+});
+
 test('Settings and popup open browsing history without needing a Key or saving analysis settings',async()=>{
   for(const file of ['options','popup']) {
     const fixture=uiPageFixture(file,core.DEFAULT_SETTINGS,{session:{apiKey:undefined}});
@@ -879,7 +1071,7 @@ test('live options locale changes preserve drafts and never save settings or sen
   assert.equal(fixture.ids.get('language').value,'pt-BR');
   assert.ok(fixture.ids.get('language').children.some(option=>option.value==='pt-BR'));
   fixture.ids.get('api-key').value='draft-secret';
-  fixture.ids.get('api-model').value='grok-custom';
+  fixture.ids.get('api-model').value='grok-4.7';fixture.ids.get('api-model').listeners.change();
   fixture.ids.get('api-concurrency').value=7;
   fixture.ids.get('explanation-mode').value='custom';fixture.ids.get('explanation-mode').listeners.change();
   fixture.ids.get('language').value='ko';
@@ -891,7 +1083,7 @@ test('live options locale changes preserve drafts and never save settings or sen
   fixture.storageListeners.forEach(listener=>listener({uiLanguage:{newValue:'ar'}},'local'));
   assert.equal(fixture.document.documentElement.dir,'rtl');
   assert.equal(fixture.ids.get('api-key').value,'draft-secret');
-  assert.equal(fixture.ids.get('api-model').value,'grok-custom');
+  assert.equal(fixture.ids.get('api-model').value,'grok-4.7');
   assert.equal(fixture.ids.get('api-concurrency').value,7);
   assert.equal(fixture.ids.get('explanation-mode').value,'custom');
   assert.equal(fixture.ids.get('analysis-prompts').hidden,false);
@@ -956,11 +1148,11 @@ test('demoting a remembered Key to session-only is explicit and saves credential
   assert.equal(fixture.ids.get('api-key').value,'remembered-to-demote');
   assertUIRememberedKey(fixture,'remembered-to-demote');assert.deepEqual(uiMessageTypes(fixture),['GET_UI_LANGUAGE']);
   fixture.ids.get('remember-key').checked=false;fixture.ids.get('remember-key').listeners.change();
-  fixture.ids.get('api-model').value='replacement-model';fixture.ids.get('api-model').listeners.input();
+  fixture.ids.get('api-model').value='grok-4.7';fixture.ids.get('api-model').listeners.change();
   const form=fixture.ids.get('settings-form');await form.listeners.submit({preventDefault(){},currentTarget:form});
   const correction=fixture.messages.find(message=>message.type==='SAVE_KEY');
   assert.equal(correction.remember,false);assert.equal(correction.apiKey,'remembered-to-demote');
-  assert.equal(correction.settings.apiModel,'replacement-model');
+  assert.equal(correction.settings.apiModel,'grok-4.7');
   assert.equal(fixture.local.apiKey,undefined);assert.equal(fixture.local.apiKeyEncrypted,undefined);assert.equal(fixture.local.rememberApiKey,false);
   assert.equal(fixture.session.apiKey,'remembered-to-demote');
   assert.deepEqual(uiMessageTypes(fixture),['GET_UI_LANGUAGE','SAVE_KEY']);
@@ -1151,15 +1343,16 @@ test('changing model and Key together sends one transaction without exposing set
         dispatches.push({model:message.settings.apiModel,key:state.session.apiKey});
     }});
   await settleUI();await settleUI();
-  fixture.ids.get('api-model').value='replacement-model';
+  fixture.ids.get('api-model').value='grok-4.7';fixture.ids.get('api-model').listeners.change();
+  fixture.ids.get('api-reasoning-effort').value='xhigh';fixture.ids.get('api-reasoning-effort').listeners.change();
   fixture.ids.get('api-key').value='new-account-key';fixture.ids.get('api-key').listeners.input();
   const form=fixture.ids.get('settings-form');await form.listeners.submit({preventDefault(){},currentTarget:form});
   assert.deepEqual(dispatches,[],'Target settings must never be broadcast with the previous account Key');
   assert.deepEqual(uiMessageTypes(fixture),['GET_UI_LANGUAGE','SAVE_KEY']);
   const saved=fixture.messages.find(message=>message.type==='SAVE_KEY');
-  assert.equal(saved.settings.apiModel,'replacement-model');assert.equal(saved.apiKey,'new-account-key');
+  assert.equal(saved.settings.apiModel,'grok-4.7');assert.equal(saved.settings.apiReasoningEffort,'xhigh');assert.equal(saved.apiKey,'new-account-key');
   assert.equal(Object.hasOwn(saved,'passphrase'),false);
-  assert.equal(fixture.local.settings.apiModel,'replacement-model');
+  assert.equal(fixture.local.settings.apiModel,'grok-4.7');assert.equal(fixture.local.settings.apiReasoningEffort,'xhigh');
   assertUIRememberedKey(fixture,'new-account-key');assert.equal(fixture.session.apiKey,'new-account-key');
 });
 
@@ -1343,7 +1536,7 @@ test('local encrypted Key changes update untouched input while preserving edited
     const fixture=uiPageFixture('options',core.DEFAULT_SETTINGS,
       {local:{apiKeyEncrypted:oldEnvelope,rememberApiKey:true},session:{apiKey:undefined}});
     await settleUI();await settleUI();
-    fixture.ids.get('api-model').value='draft-model';fixture.ids.get('api-model').listeners.input();
+    fixture.ids.get('api-model').value='grok-4.7';fixture.ids.get('api-model').listeners.change();
     fixture.ids.get('verify-prompt').value='Keep my prompt draft.';
     if(edited) {
       fixture.ids.get('api-key').value='replacement-c-fixture';fixture.ids.get('api-key').listeners.input();
@@ -1353,12 +1546,12 @@ test('local encrypted Key changes update untouched input while preserving edited
     await settleUI();await settleUI();
     assert.equal(fixture.session.apiKey,'account-b-fixture');
     assert.equal(fixture.ids.get('api-key').value,edited?'replacement-c-fixture':'account-b-fixture');
-    assert.equal(fixture.ids.get('api-model').value,'draft-model');
+    assert.equal(fixture.ids.get('api-model').value,'grok-4.7');
     assert.equal(fixture.ids.get('verify-prompt').value,'Keep my prompt draft.');
     assert.ok(!fixture.messages.some(message=>['SAVE_KEY','SAVE_SETTINGS'].includes(message.type)));
     const form=fixture.ids.get('settings-form');await form.listeners.submit({preventDefault(){},currentTarget:form});
     assertUIRememberedKey(fixture,edited?'replacement-c-fixture':'account-b-fixture');
-    assert.equal(fixture.local.settings.apiModel,'draft-model');
+    assert.equal(fixture.local.settings.apiModel,'grok-4.7');
     assert.equal(fixture.local.settings.verifyPrompt,'Keep my prompt draft.');
     assert.deepEqual(uiMessageTypes(fixture),['GET_UI_LANGUAGE',edited?'SAVE_KEY':'SAVE_SETTINGS']);
     if(!edited)assert.equal(fixture.local.apiKeyEncrypted,nextEnvelope,'Ordinary Settings saves do not rotate or replace ciphertext');
@@ -1373,9 +1566,9 @@ test('external credentials become the draft baseline without resending an unchan
   fixture.local.apiKeyEncrypted=uiFixtureEncryptedKey('account-b-fixture');fixture.session.apiKey='account-b-fixture';
   for(const listener of fixture.storageListeners)listener({apiKey:{oldValue:'account-a-fixture',newValue:'account-b-fixture'}},'session');
   await settleUI();await settleUI();
-  fixture.ids.get('api-model').value='replacement-model';fixture.ids.get('api-model').listeners.input();
+  fixture.ids.get('api-model').value='grok-4.7';fixture.ids.get('api-model').listeners.change();
   const form=fixture.ids.get('settings-form');await form.listeners.submit({preventDefault(){},currentTarget:form});
-  assert.equal(fixture.local.settings.apiModel,'replacement-model');
+  assert.equal(fixture.local.settings.apiModel,'grok-4.7');
   assert.ok(!fixture.messages.some(message=>['LOCK_KEY','UNLOCK_KEY','SAVE_KEY'].includes(message.type)));
   assert.equal(fixture.session.apiKey,'account-b-fixture');
 });
@@ -1387,16 +1580,16 @@ test('failed atomic replacement saves preserve credentials and settings while re
       {local:{rememberApiKey:remembered,...(remembered?{apiKey:'old-account-fixture'}:{})},session:{apiKey:'old-account-fixture'}},
       {onMessage(message){if(message.type==='SAVE_KEY'&&fail)return {ok:false,errorKey:'errors.keyStorage'};}});
     await settleUI();await settleUI();
-    fixture.ids.get('api-model').value='replacement-model';fixture.ids.get('api-model').listeners.input();
+    fixture.ids.get('api-model').value='grok-4.7';fixture.ids.get('api-model').listeners.change();
     fixture.ids.get('api-key').value='replacement-fixture';fixture.ids.get('api-key').listeners.input();
     const form=fixture.ids.get('settings-form');await form.listeners.submit({preventDefault(){},currentTarget:form});
     assert.equal(fixture.session.apiKey,'old-account-fixture');assert.equal(fixture.local.settings.apiModel,core.DEFAULT_SETTINGS.apiModel);
-    assert.equal(fixture.ids.get('api-key').value,'replacement-fixture');assert.equal(fixture.ids.get('api-model').value,'replacement-model');
+    assert.equal(fixture.ids.get('api-key').value,'replacement-fixture');assert.equal(fixture.ids.get('api-model').value,'grok-4.7');
     assert.equal(fixture.ids.get('key-security-state').dataset.state,'ready');
     assert.equal(fixture.ids.get('key-security-state').textContent,ui.t(remembered?'options.keyReadySaved':'options.keyReady','en'));
     assert.equal(fixture.ids.get('status').dataset.state,'error');assert.equal(fixture.ids.get('save').disabled,false);
     fail=false;await form.listeners.submit({preventDefault(){},currentTarget:form});
-    assert.equal(fixture.session.apiKey,'replacement-fixture');assert.equal(fixture.local.settings.apiModel,'replacement-model');
+    assert.equal(fixture.session.apiKey,'replacement-fixture');assert.equal(fixture.local.settings.apiModel,'grok-4.7');
     assert.equal(fixture.ids.get('key-security-state').dataset.state,'ready');
   }
 });
@@ -1407,7 +1600,7 @@ test('invalid or emptied Key edits are rejected before credential or settings mu
       {local:{apiKey:'existing-fixture',rememberApiKey:true},session:{apiKey:'existing-fixture'}});
     await settleUI();await settleUI();
     fixture.ids.get('api-key').value=draft;fixture.ids.get('api-key').listeners.input();
-    fixture.ids.get('api-model').value='draft-model';
+    fixture.ids.get('api-model').value='grok-4.7';fixture.ids.get('api-model').listeners.change();
     const form=fixture.ids.get('settings-form');await form.listeners.submit({preventDefault(){},currentTarget:form});
     assert.equal(fixture.ids.get('status').textContent,ui.t(draft?'errors.keyInvalid':'options.keyRequired','en'));
     assert.equal(fixture.ids.get('api-key').focused,true);
@@ -1427,7 +1620,7 @@ test('editing after Save replaces stale success with an unsaved hint and reverti
   assert.equal(fixture.messages.filter(message=>message.type==='SAVE_SETTINGS').length,savedCount);
   language.value=core.DEFAULT_SETTINGS.language;language.listeners.change();
   assert.equal(fixture.ids.get('status').textContent,'');
-  fixture.ids.get('api-model').value='draft-model';fixture.ids.get('api-model').listeners.input();
+  fixture.ids.get('api-model').value='grok-4.7';fixture.ids.get('api-model').listeners.change();
   assert.equal(fixture.ids.get('status').textContent,ui.t('options.unsavedChanges','en'));
   for(const listener of fixture.runtimeListeners)listener({type:'UI_LANGUAGE_CHANGED',language:'ja'});
   assert.equal(fixture.ids.get('status').textContent,ui.t('options.unsavedChanges','ja'));
@@ -1470,7 +1663,7 @@ test('opening Settings focuses API Key for both current and legacy trusted entri
 
 test('an existing migration Settings page handles fresh or legacy focus requests once without saving drafts or accepting arbitrary targets',async()=>{
   const fixture=uiPageFixture('options',core.DEFAULT_SETTINGS,{local:{apiKeyVault:{fixture:'encrypted'},rememberApiKey:true},session:{apiKey:undefined}});await settleUI();await settleUI();
-  fixture.ids.get('api-model').value='unsaved-fixture-model';fixture.ids.get('api-model').listeners.input();
+  fixture.ids.get('api-model').value='grok-4.7';fixture.ids.get('api-model').listeners.change();
   fixture.session.superxOptionsFocus={id:'save',nonce:'invalid-fixture'};
   for(const listener of fixture.storageListeners)listener({superxOptionsFocus:{newValue:fixture.session.superxOptionsFocus}},'session');
   await settleUI();await settleUI();
@@ -1480,14 +1673,14 @@ test('an existing migration Settings page handles fresh or legacy focus requests
   await settleUI();await settleUI();
   assert.equal(fixture.ids.get('api-key').focused,true);
   assert.equal(fixture.ids.has('unlock-passphrase'),false);
-  assert.equal(fixture.ids.get('api-model').value,'unsaved-fixture-model');
+  assert.equal(fixture.ids.get('api-model').value,'grok-4.7');
   assert.equal(Object.hasOwn(fixture.session,'superxOptionsFocus'),false);
   fixture.ids.get('api-key').focused=false;
   fixture.session.superxOptionsFocus={id:'api-key',nonce:'second-fixture'};
   for(const listener of fixture.storageListeners)listener({superxOptionsFocus:{newValue:fixture.session.superxOptionsFocus}},'session');
   await settleUI();await settleUI();
   assert.equal(fixture.ids.get('api-key').focused,false,'A consumed nonce cannot refocus or replace the existing draft');
-  assert.equal(fixture.ids.get('api-model').value,'unsaved-fixture-model');
+  assert.equal(fixture.ids.get('api-model').value,'grok-4.7');
   assert.ok(!fixture.messages.some(message=>['SAVE_SETTINGS','SAVE_KEY'].includes(message.type)));
 });
 
@@ -1501,10 +1694,10 @@ test('a Settings focus request received during Save waits until completion and f
       }
     }});
   await settleUI();await settleUI();
-  fixture.ids.get('api-model').value='replacement-model';fixture.ids.get('api-model').listeners.input();
+  fixture.ids.get('api-model').value='grok-4.7';fixture.ids.get('api-model').listeners.change();
   const form=fixture.ids.get('settings-form');await form.listeners.submit({preventDefault(){},currentTarget:form});await settleUI();await settleUI();
   assert.equal(fixture.ids.get('api-key').focused,true);assert.equal(fixture.ids.has('unlock-passphrase'),false);
-  assert.equal(fixture.ids.get('api-key').value,'');assert.equal(fixture.ids.get('api-model').value,'replacement-model');
+  assert.equal(fixture.ids.get('api-key').value,'');assert.equal(fixture.ids.get('api-model').value,'grok-4.7');
   assert.equal(fixture.session.apiKey,undefined);assert.ok(fixture.local.apiKeyVault);
   assert.equal(Object.hasOwn(fixture.session,'superxOptionsFocus'),false);
   assert.deepEqual(uiMessageTypes(fixture),['GET_UI_LANGUAGE','SAVE_SETTINGS']);

@@ -338,7 +338,7 @@
       for(const field of ['explainPrompt','verifyPrompt','commentsPrompt','interfaceLanguage']){delete previousOptions[field];delete nextOptions[field];}
       const allChanged=JSON.stringify(previousOptions)!==JSON.stringify(nextOptions);
       const presentationOrPromptsOnlyChanged=!allChanged&&JSON.stringify(settings)!==JSON.stringify(nextSettings);
-      const previous=JSON.stringify([settings.apiModel,settings.language,settings.webSearch,settings.xSearch,settings.apiVerification,settings.explanationMode]);
+      const previous=JSON.stringify([settings.apiModel,settings.apiReasoningEffort,settings.language,settings.webSearch,settings.xSearch,settings.apiVerification,settings.explanationMode]);
       const wasReady=providerReady;
       settings=nextSettings;
       configureHistory(message.historyEnabled,message.historyEpoch);
@@ -351,7 +351,7 @@
       if(!Core.LANGUAGES.some(item=>item.value===settings.language)&&!Array.from(railLanguage.children).some(item=>item.value===settings.language)){const option=node('option','',settings.language);option.value=settings.language;railLanguage.append(option);}
       railLanguage.value=settings.language;railLanguage.disabled=false;
       refreshHeaderLanguage();
-      const changed=previous!==JSON.stringify([settings.apiModel,settings.language,settings.webSearch,settings.xSearch,settings.apiVerification,settings.explanationMode]);
+      const changed=previous!==JSON.stringify([settings.apiModel,settings.apiReasoningEffort,settings.language,settings.webSearch,settings.xSearch,settings.apiVerification,settings.explanationMode]);
       if(!presentationOrPromptsOnlyChanged){queue.clear();limited=false;pauseReason='';}
       if(allChanged || !settings.enabled || (wasReady&&!providerReady)) {
         post({type:'CANCEL_ALL'});requests.clear();

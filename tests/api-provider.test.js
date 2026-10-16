@@ -124,10 +124,58 @@ test('invalid URL or absent retrieval tools fail before a streaming update or HT
   assert.deepEqual(api.buildRequest(post,{...settings,webSearch:false}).tools,[{type:'x_search',enable_image_understanding:true,enable_video_understanding:true}]);
 });
 
-test('model selection preserves custom models and requests supported low reasoning only',()=>{
+test('legacy model settings keep previous reasoning defaults and custom model IDs',()=>{
   for(const apiModel of ['grok-4.3','grok-4.3-latest'])assert.deepEqual(api.buildRequest(post,{...settings,apiModel}).reasoning,{effort:'none'});
   for(const apiModel of ['grok-4.5','grok-4.6','grok-4.7'])assert.deepEqual(api.buildRequest(post,{...settings,apiModel}).reasoning,{effort:'low'});
   for(const apiModel of ['custom-model','grok-4.7-latest']){const request=api.buildRequest(post,{...settings,apiModel});assert.equal(request.reasoning,undefined);assert.equal(request.model,apiModel);}
+});
+
+test('Fact Check and comment builders send every supported explicit reasoning choice for its selected model',()=>{
+  const profiles=[
+    ['grok-4.3',['none','low','medium','high']],
+    ['grok-4.3-latest',['none','low','medium','high']],
+    ['grok-4.5',['low','medium','high']],
+    ['grok-4.6',['low','medium','high','xhigh']],
+    ['grok-4.7',['low','medium','high','xhigh']]
+  ];
+  for(const [apiModel,efforts] of profiles)for(const apiReasoningEffort of efforts) {
+    const selected={...settings,apiModel,apiReasoningEffort};
+    for(const request of [api.buildRequest(post,selected),api.buildCommentsRequest(post,selected)]) {
+      assert.equal(request.model,apiModel);assert.deepEqual(request.reasoning,{effort:apiReasoningEffort});
+      assert.equal(request.stream,true);assert.equal(request.store,false);
+      for(const field of ['service_tier','temperature','top_p','priority'])assert.equal(Object.hasOwn(request,field),false);
+    }
+    assert.equal(api.buildRequest(post,selected).max_output_tokens,1800);
+    assert.equal(api.buildCommentsRequest(post,selected).max_output_tokens,400);
+  }
+});
+
+test('request builders validate model compatibility and leave unknown custom models on server reasoning defaults',()=>{
+  for(const [apiModel,apiReasoningEffort,expected] of [
+    ['grok-4.3','xhigh','none'],['grok-4.3','auto','none'],['grok-4.5','none','low'],
+    ['grok-4.5','xhigh','low'],['grok-4.6','none','low'],['grok-4.7','invalid','low'],
+    ['grok-4.7',null,'low'],['grok-4.3-latest','high','high']
+  ])for(const request of [api.buildRequest(post,{...settings,apiModel,apiReasoningEffort}),api.buildCommentsRequest(post,{...settings,apiModel,apiReasoningEffort})]) {
+    assert.equal(request.model,apiModel);assert.deepEqual(request.reasoning,{effort:expected});
+  }
+  for(const apiModel of ['custom-model','grok-4.5-latest','grok-4.7-fast','Grok-4.3'])for(const apiReasoningEffort of ['none','high','xhigh','auto']) {
+    const selected={...settings,apiModel,apiReasoningEffort};
+    for(const request of [api.buildRequest(post,selected),api.buildCommentsRequest(post,selected)]) {
+      assert.equal(request.model,apiModel);assert.equal(Object.hasOwn(request,'reasoning'),false);
+    }
+  }
+});
+
+test('analysis and comment generation preserve the accepted reasoning choice in the actual request body',async()=>{
+  const selected=core.normalizeSettings({...settings,apiModel:'grok-4.7',apiReasoningEffort:'xhigh',language:'en'}),sent=[];
+  const fetchImpl=async(_,request)=>{
+    sent.push(JSON.parse(request.body));return responseFor([completed(sent.length===1?'The evidence supports a narrower claim.':'["First draft.","Second draft.","Third draft."]')]);
+  };
+  const analysis=await api.run(post,selected,'synthetic-key',{fetchImpl});
+  const drafts=await api.generateComments(post,selected,'synthetic-key',{fetchImpl,analysis});
+  assert.equal(sent.length,2);assert.deepEqual(drafts.comments,['First draft.','Second draft.','Third draft.']);
+  for(const request of sent){assert.equal(request.model,'grok-4.7');assert.deepEqual(request.reasoning,{effort:'xhigh'});assert.equal(JSON.stringify(request).includes('synthetic-key'),false);}
+  assert.equal(selected.apiReasoningEffort,'xhigh');assert.equal(selected.apiModel,'grok-4.7');
 });
 
 test('only actual search use supports completed status; citations or source counts alone remain unverified',async()=>{

@@ -304,6 +304,20 @@
     "ru": ["Автор"],
     "hi": ["लेखक"]
   });
+  section(["options.reasoning","options.reasoningHelp","options.reasoning.none","options.reasoning.low","options.reasoning.medium","options.reasoning.high","options.reasoning.xhigh","options.reasoning.auto","options.savedModel","options.reasoningInvalid"], {
+    "en": ["Reasoning effort","Only levels supported by the selected model are shown. Higher levels may take longer and use more Tokens. This does not enable Fast or Priority processing.","None · No reasoning","Low","Medium","High","Extra high","Provider default","{model} · Previously saved","Choose a supported reasoning level."],
+    "zh-CN": ["推理档位","只显示当前模型支持的档位。更高档位可能需要更长时间、消耗更多 Token；这不会开启 Fast 或 Priority 加速。","关闭推理","低","中","高","最高","服务默认","{model} · 已保存的模型","请选择模型支持的推理档位。"],
+    "zh-TW": ["推理等級","只顯示目前模型支援的等級。較高等級可能需要更長時間、消耗更多 Token；這不會開啟 Fast 或 Priority 加速。","關閉推理","低","中","高","最高","服務預設","{model} · 已儲存的模型","請選擇模型支援的推理等級。"],
+    "ja": ["推論レベル","選択したモデルが対応するレベルのみ表示します。高いレベルは時間と Token 消費が増える場合があります。Fast や Priority は有効になりません。","推論なし","低","中","高","最高","サービスの既定値","{model} · 保存済みモデル","対応する推論レベルを選択してください。"],
+    "ko": ["추론 수준","선택한 모델이 지원하는 수준만 표시합니다. 높은 수준은 시간과 Token 사용량이 늘 수 있습니다. Fast 또는 Priority 처리는 활성화하지 않습니다.","추론 끄기","낮음","중간","높음","최고","서비스 기본값","{model} · 저장된 모델","지원되는 추론 수준을 선택하세요."],
+    "es": ["Nivel de razonamiento","Solo se muestran los niveles compatibles con el modelo. Los niveles altos pueden tardar más y consumir más Tokens. No activa Fast ni Priority.","Sin razonamiento","Bajo","Medio","Alto","Máximo","Predeterminado del servicio","{model} · Modelo guardado","Elige un nivel de razonamiento compatible."],
+    "fr": ["Niveau de raisonnement","Seuls les niveaux compatibles avec le modèle sont affichés. Un niveau plus élevé peut prendre plus de temps et consommer davantage de Tokens. Cela n’active ni Fast ni Priority.","Sans raisonnement","Faible","Moyen","Élevé","Maximum","Valeur du service","{model} · Modèle enregistré","Choisissez un niveau de raisonnement compatible."],
+    "de": ["Denkaufwand","Es werden nur unterstützte Stufen angezeigt. Höhere Stufen können länger dauern und mehr Tokens verbrauchen. Fast oder Priority wird dadurch nicht aktiviert.","Ohne Reasoning","Niedrig","Mittel","Hoch","Sehr hoch","Dienststandard","{model} · Gespeichertes Modell","Wähle eine unterstützte Reasoning-Stufe."],
+    "pt": ["Nível de raciocínio","São exibidos apenas os níveis compatíveis com o modelo. Níveis mais altos podem demorar mais e consumir mais Tokens. Isso não ativa Fast nem Priority.","Sem raciocínio","Baixo","Médio","Alto","Máximo","Padrão do serviço","{model} · Modelo salvo","Escolha um nível de raciocínio compatível."],
+    "ar": ["مستوى الاستدلال","تظهر المستويات التي يدعمها النموذج فقط. قد تستغرق المستويات الأعلى وقتًا أطول وتستهلك Tokens أكثر. لا يفعّل ذلك Fast أو Priority.","دون استدلال","منخفض","متوسط","مرتفع","الأعلى","إعداد الخدمة الافتراضي","{model} · نموذج محفوظ","اختر مستوى استدلال يدعمه النموذج."],
+    "ru": ["Уровень рассуждения","Показаны только уровни, поддерживаемые моделью. Высокие уровни могут требовать больше времени и Tokens. Fast и Priority не включаются.","Без рассуждения","Низкий","Средний","Высокий","Максимальный","По умолчанию сервиса","{model} · Сохранённая модель","Выберите поддерживаемый уровень рассуждения."],
+    "hi": ["तर्क स्तर","केवल चुने गए मॉडल के समर्थित स्तर दिखते हैं। ऊँचे स्तर में अधिक समय और Tokens लग सकते हैं। इससे Fast या Priority चालू नहीं होता।","तर्क बंद","कम","मध्यम","उच्च","अधिकतम","सेवा का डिफ़ॉल्ट","{model} · सहेजा गया मॉडल","समर्थित तर्क स्तर चुनें।"]
+  });
   section(["options.modelPricing"], {
     "en": ["View models and pricing"],
     "zh-CN": ["查看模型与价格"],

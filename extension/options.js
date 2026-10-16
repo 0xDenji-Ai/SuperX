@@ -75,6 +75,7 @@
       || $("enabled").checked !== currentSettings.enabled
       || $("explanation-mode").value !== currentSettings.explanationMode
       || $("api-model").value !== currentSettings.apiModel
+      || $("api-reasoning-effort").value !== currentSettings.apiReasoningEffort
       || Number($("api-concurrency").value) !== currentSettings.apiConcurrency
       || $("web-search").checked !== currentSettings.webSearch
       || $("x-search").checked !== currentSettings.xSearch
@@ -143,6 +144,34 @@
     }
     select.value = language;
   }
+  function populateModels(model) {
+    const select = $("api-model");
+    select.replaceChildren();
+    for (const item of core.API_MODELS) {
+      const option = document.createElement("option");
+      option.value = item.value;option.textContent = item.label;
+      select.append(option);
+    }
+    // Keep an already saved alias/custom ID available during upgrades without
+    // offering a free-form field or silently changing the user's model.
+    if (!core.API_MODELS.some(item => item.value === currentSettings.apiModel)) {
+      const option = document.createElement("option");
+      option.value = currentSettings.apiModel;
+      option.textContent = ui.t("options.savedModel",uiLanguage,{model:currentSettings.apiModel});
+      select.append(option);
+    }
+    select.value = model;
+  }
+  function populateReasoning(model, effort) {
+    const select = $("api-reasoning-effort");
+    select.replaceChildren();
+    for (const value of core.modelProfile(model)?.efforts || ["auto"]) {
+      const option = document.createElement("option");
+      option.value = value;option.textContent = ui.t("options.reasoning."+value,uiLanguage);
+      select.append(option);
+    }
+    select.value = core.reasoningEffort(model,effort);
+  }
   function renderLanguage() {
     const interfaceLanguage = $("interface-language").value || currentSettings.interfaceLanguage;
     uiLanguage = ui.resolveLanguage(interfaceLanguage,observedUILanguage);
@@ -152,6 +181,9 @@
     $("extension-version").textContent = ui.t("options.version",uiLanguage,{version:chrome.runtime.getManifest().version});
     populateLanguages($("language").value || currentSettings.language);
     populateInterfaceLanguages(interfaceLanguage);
+    const model = $("api-model").value || currentSettings.apiModel;
+    const effort = $("api-reasoning-effort").value || currentSettings.apiReasoningEffort;
+    populateModels(model);populateReasoning(model,effort);
     showExplanationMode();
     renderSecurity();
     if (statusMessage) setStatus(statusMessage.key,statusMessage.state,statusMessage.vars);
@@ -159,7 +191,8 @@
   function populate(settings) {
     $("enabled").checked = settings.enabled;
     $("explanation-mode").value = settings.explanationMode === "custom" ? "custom" : "preset";
-    $("api-model").value = settings.apiModel;
+    populateModels(settings.apiModel);
+    populateReasoning(settings.apiModel,settings.apiReasoningEffort);
     $("api-concurrency").value = settings.apiConcurrency;
     $("web-search").checked = settings.webSearch;
     $("x-search").checked = settings.xSearch;
@@ -195,7 +228,8 @@
   }
   $("explanation-mode").addEventListener("change",() => { showExplanationMode();markDraft(); });
   $("interface-language").addEventListener("change",() => { renderLanguage();markDraft(); });
-  for (const id of ["enabled","api-model","api-concurrency","web-search","x-search","language",...promptFields.map(field => field.name + "-prompt")]) {
+  $("api-model").addEventListener("change",() => { populateReasoning($("api-model").value,$("api-reasoning-effort").value);markDraft(); });
+  for (const id of ["enabled","api-reasoning-effort","api-concurrency","web-search","x-search","language",...promptFields.map(field => field.name + "-prompt")]) {
     $(id).addEventListener("input",markDraft);
     $(id).addEventListener("change",markDraft);
   }
@@ -215,6 +249,7 @@
   });
   $("fast-preset").addEventListener("click",() => {
     $("api-model").value = "grok-4.3";
+    populateReasoning("grok-4.3","none");
     $("api-concurrency").value = 4;
     showExplanationMode();setStatus("options.presetReady");
   });
@@ -248,6 +283,7 @@
       provider:"api",
       explanationMode:$("explanation-mode").value,
       apiModel:$("api-model").value.trim(),
+      apiReasoningEffort:$("api-reasoning-effort").value,
       apiConcurrency:Number($("api-concurrency").value),
       apiVerification:"only",
       webSearch:$("web-search").checked,
@@ -266,8 +302,12 @@
     if (saveKey && (apiKey.length > 500 || /[\r\n]/.test(apiKey))) {
       setStatus("errors.keyInvalid","error");$("api-key").focus();return;
     }
-    if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test($("api-model").value.trim())) {
+    if (!core.API_MODELS.some(item => item.value === $("api-model").value)
+      && $("api-model").value !== currentSettings.apiModel) {
       setStatus("options.modelInvalid","error");$("api-model").focus();return;
+    }
+    if (!$("api-reasoning-effort").value || $("api-reasoning-effort").value !== settings.apiReasoningEffort) {
+      setStatus("options.reasoningInvalid","error");$("api-reasoning-effort").focus();return;
     }
     if (!settings.webSearch && !settings.xSearch) {
       setStatus("options.urlSearchRequired","error");$("x-search").focus();return;

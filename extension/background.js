@@ -135,8 +135,8 @@ function cacheKey(post, s, inputFingerprint) {
   const mode=Core.explanationMode(s);
   const prompts=['fact-check-prompts-v1',mode==='preset'?Core.DEFAULT_PROMPTS.verify:s.verifyPrompt];
   return JSON.stringify(['GrokFirst-v1','api',s.apiModel,s.language,s.webSearch,s.xSearch,
-    'api-v9-reader-items',mode,'only',
-    Core.apiPostIdentity(post,s),...prompts]);
+    'api-v10-model-reasoning',mode,'only',
+    Core.apiPostIdentity(post,s),...prompts,Core.reasoningEffort(s.apiModel,s.apiReasoningEffort)]);
 }
 function sanitizeAnalysis(raw) {
   const value=typeof raw==='string'?{text:raw}:raw&&typeof raw==='object'?raw:{};
@@ -147,7 +147,7 @@ function sanitizeAnalysis(raw) {
 }
 function commentCacheKey(post,s,inputFingerprint,analysis) {
   const prompts=['comments-prompt-v1',s.commentsPrompt];
-  return JSON.stringify(['GrokFirst-comments-v2-language','api',s.apiModel,s.language,Core.postFingerprint(post),analysis,...prompts]);
+  return JSON.stringify(['GrokFirst-comments-v2-language','api',s.apiModel,s.language,Core.postFingerprint(post),analysis,...prompts,Core.reasoningEffort(s.apiModel,s.apiReasoningEffort)]);
 }
 function commentsJob(job) { return job.settings.task==='comments'; }
 function billingMetadata(value,provider) { return provider==='api'?GrokFirstAPI.sanitizedMetadata(value):{}; }

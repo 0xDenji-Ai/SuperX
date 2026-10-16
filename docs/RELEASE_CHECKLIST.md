@@ -2,6 +2,14 @@
 
 This checklist separates reproducible checks from manual browser and service checks. A passing mock test suite is not evidence that a particular X account, browser installation, or paid API request works.
 
+## 0.8.2 local candidate — Model and reasoning selectors
+
+- [x] Replace free-form model entry with a model selector and a supported-effort selector. Preserve old saved model IDs and their previous effective reasoning defaults.
+- [x] Apply the chosen effort to fact checks and comment drafts; separate their caches by effort and refresh old displayed results when the saved effort changes.
+- [x] Complete local automated and isolated-browser checks for model/effort choices, save/reopen, language changes, Key drafts, fast defaults and narrow layouts: 647 automated tests and 166 isolated-browser checks passed. No real Key or paid API request was used.
+- [ ] Confirm the installed candidate on real X; model availability, provider behavior and factual accuracy still require live acceptance.
+- [ ] Publish only after explicit candidate acceptance. Keep the published 0.7.26 Stable artifacts unchanged.
+
 ## 0.8.1 local candidate — Fact Check only and reader output handling
 
 - [x] Remove live explanation generation and the explanation/settings flow selector; each automatic task makes one streamed Fact Check request.

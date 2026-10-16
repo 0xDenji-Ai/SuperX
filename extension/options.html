@@ -56,8 +56,13 @@
             <p id="key-security-state" class="key-state" role="status" aria-live="polite"></p>
             <div class="field model-field">
               <label for="api-model" data-i18n="options.model">Model</label>
-              <input id="api-model" type="text" autocomplete="off" spellcheck="false" dir="ltr" aria-describedby="model-help">
+              <select id="api-model" required dir="ltr" aria-describedby="model-help"></select>
               <p id="model-help" class="help" data-i18n="options.modelHelp">Recommended: grok-4.3 is fast and has the lowest Token prices among these models. You can also use grok-4.5, grok-4.6 or grok-4.7, which have higher Token prices than grok-4.3.</p>
+              <div class="field reasoning-field">
+                <label for="api-reasoning-effort" data-i18n="options.reasoning">Reasoning effort</label>
+                <select id="api-reasoning-effort" required aria-describedby="reasoning-help"></select>
+                <p id="reasoning-help" class="help" data-i18n="options.reasoningHelp">Only levels supported by the selected model are shown. Higher levels may take longer and use more Tokens. This does not enable Fast or Priority processing.</p>
+              </div>
               <div class="model-actions">
                 <button id="fast-preset" class="text-button" type="button" data-i18n="options.fastPreset">Use fast defaults</button>
                 <a id="model-pricing" class="help" href="https://docs.x.ai/developers/pricing" target="_blank" rel="noopener noreferrer" data-i18n="options.modelPricing">View models and pricing</a>

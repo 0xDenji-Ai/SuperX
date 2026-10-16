@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "SuperX",
-  "version": "0.8.1",
+  "version": "0.8.2",
   "homepage_url": "https://superx.vip/",
   "description": "浏览 X 时，通过 xAI API 自动核查帖子中的事实主张，在右栏展示简洁结论与证据。",
   "minimum_chrome_version": "120",

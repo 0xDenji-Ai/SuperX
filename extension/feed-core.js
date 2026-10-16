@@ -22,6 +22,23 @@
     { value: 'hi', label: 'हिन्दी' }
   ].map(Object.freeze));
 
+  const API_MODELS = Object.freeze([
+    {value:'grok-4.3',label:'Grok 4.3',efforts:['none','low','medium','high'],defaultEffort:'none'},
+    {value:'grok-4.5',label:'Grok 4.5',efforts:['low','medium','high'],defaultEffort:'low'},
+    {value:'grok-4.6',label:'Grok 4.6',efforts:['low','medium','high','xhigh'],defaultEffort:'low'},
+    {value:'grok-4.7',label:'Grok 4.7',efforts:['low','medium','high','xhigh'],defaultEffort:'low'}
+  ].map(profile=>Object.freeze({...profile,efforts:Object.freeze(profile.efforts)})));
+  function modelProfile(model) {
+    const value=model==='grok-4.3-latest'?'grok-4.3':model;
+    return API_MODELS.find(profile=>profile.value===value)||null;
+  }
+  function reasoningEffort(model,value) {
+    const profile=modelProfile(model);
+    // Unknown/custom model IDs retain their server defaults instead of
+    // receiving a parameter whose compatibility has not been established.
+    return profile?(profile.efforts.includes(value)?value:profile.defaultEffort):'auto';
+  }
+
   const MAX_PROMPT_LENGTH = 12000;
   const DEFAULT_PROMPTS = Object.freeze({
     verify: 'Fact-check the important, checkable claims in this post. Start directly with useful findings: what the evidence supports, contradicts or leaves unresolved, with corrections and clickable primary sources beside the relevant finding. Add only information the reader cannot already see in the post. Do not summarize, paraphrase, translate or repeat the original post; use at most a minimal identifying claim fragment when needed to make a correction clear. Keep the response concise and let the evidence determine its natural form, without a stock introduction, rigid checklist or generic disclaimer. If there is no meaningful checkable claim, say so briefly instead of manufacturing a fact check.',
@@ -124,6 +141,7 @@
     language: 'auto',
     interfaceLanguage: 'auto',
     apiModel: 'grok-4.3',
+    apiReasoningEffort: 'none',
     apiConcurrency: 4,
     apiVerification: 'only',
     webSearch: true,
@@ -195,6 +213,7 @@
     const language = typeof value.language === 'string' ? value.language.trim() : '';
     const interfaceLanguage = typeof value.interfaceLanguage === 'string' ? value.interfaceLanguage.trim().toLowerCase() : '';
     const model = typeof value.apiModel === 'string' ? value.apiModel.trim() : '';
+    const normalizedModel = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(model) ? model : DEFAULT_SETTINGS.apiModel;
     return {
       // Legacy native/no-key selections migrate to the supported API provider.
       provider: 'api',
@@ -206,7 +225,8 @@
       cooldownMs: 0,
       language: validLanguage(language) ? language : DEFAULT_SETTINGS.language,
       interfaceLanguage: LANGUAGES.find(item => item.value.toLowerCase() === interfaceLanguage)?.value || DEFAULT_SETTINGS.interfaceLanguage,
-      apiModel: /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(model) ? model : DEFAULT_SETTINGS.apiModel,
+      apiModel: normalizedModel,
+      apiReasoningEffort: reasoningEffort(normalizedModel,value.apiReasoningEffort),
       apiConcurrency: boundedNumber(value.apiConcurrency, DEFAULT_SETTINGS.apiConcurrency, 1, 8),
       // Legacy explanation/combined/off choices all become one fact-check task.
       apiVerification: 'only',
@@ -486,5 +506,5 @@
     clear() { this.items.clear(); }
   }
 
-  return Object.freeze({ LANGUAGES, DEFAULT_SETTINGS, DEFAULT_PROMPTS, MAX_PROMPT_LENGTH, normalizePrompt, readerOutput, explanationMode, normalizeSettings, resolvePostLanguage, canonicalPostUrl, extractPost, postFingerprint, nativePostIdentity, apiPostIdentity, visibilityEligibility, BoundedPostQueue });
+  return Object.freeze({ LANGUAGES, API_MODELS, modelProfile, reasoningEffort, DEFAULT_SETTINGS, DEFAULT_PROMPTS, MAX_PROMPT_LENGTH, normalizePrompt, readerOutput, explanationMode, normalizeSettings, resolvePostLanguage, canonicalPostUrl, extractPost, postFingerprint, nativePostIdentity, apiPostIdentity, visibilityEligibility, BoundedPostQueue });
 });
