@@ -1130,3 +1130,58 @@ test('bounded message paths preserve useful status details but never arbitrary b
     assert.doesNotMatch(JSON.stringify(error),/DO_NOT_COPY|unsafe-account|resp_unknown|owner@example/);return true;
   });
 });
+
+test('official flat HTTP error strings retain a safe summary without altering status classification or retrying',async()=>{
+  let calls=0;
+  await assert.rejects(api.run(post,settings,'synthetic-key',{fetchImpl:async()=>{
+    calls++;return new Response(JSON.stringify({code:'not-found',error:'The selected model does not exist or the team cannot access it.'}),{status:404,headers:{'x-request-id':diagnosticRequestId}});
+  }}),error=>{
+    assert.deepEqual(error.verificationFailure,{stage:'verify',code:'ACCESS',errorCode:'API_ERROR',httpStatus:404});
+    assert.equal(error.requestDiagnostics.failureOrigin,'http');assert.equal(error.requestDiagnostics.transportStatus,404);assert.equal(error.requestDiagnostics.requestId,diagnosticRequestId);
+    assert.equal(error.requestDiagnostics.providerMessage,'The selected model does not exist or the team cannot access it.');assert.doesNotMatch(api.publicError(error).error,/selected model|team cannot/);return true;
+  });assert.equal(calls,1);
+});
+
+test('HTTP 200 stream errors support fixed flat string wrappers after more precise message paths',async()=>{
+  const summary='The included API budget has been reached.';
+  const cases=[
+    {type:'error',code:'private-account:spending-limit',error:summary},
+    {type:'error',response:{code:'private-account:spending-limit',error:summary}},
+    {type:'error',data:{code:'private-account:spending-limit',error:summary}},
+    {type:'error',code:'private-account:spending-limit',error:'Less precise fallback.',message:summary}
+  ];
+  for(const event of cases){let calls=0;await assert.rejects(api.run(post,settings,'synthetic-key',{fetchImpl:async()=>{calls++;return {...responseFor([event]),status:200};}}),error=>{
+    assert.deepEqual(error.verificationFailure,{stage:'verify',code:'ACCESS',errorCode:'API_ERROR',providerCode:'spending_limit'});
+    assert.equal(error.requestDiagnostics.failureOrigin,'stream');assert.equal(error.requestDiagnostics.transportStatus,200);assert.equal(error.requestDiagnostics.providerMessage,summary);
+    assert.equal(JSON.stringify(error.requestDiagnostics).includes('private-account'),false);return true;
+  });assert.equal(calls,1);}
+});
+
+test('flat and bare JSON error strings share Key and input redaction without serializing objects or reading HTML',async()=>{
+  const key='unprefixed.synthetic.secret',current={...post,text:'PRIVATE_ORIGINAL_POST a sufficiently long private post must not enter logs.',quotedContext:[{text:'PRIVATE_QUOTE a separate private quotation must not enter logs.'}]};
+  const configured={...settings,verifyPrompt:'PRIVATE_PROMPT these custom checking instructions must not enter logs.'};
+  const cases=[
+    [JSON.stringify({error:`Budget exceeded for ${key} and xai-privatevalue owner@example.com.`}),true],
+    [JSON.stringify(`Budget exceeded for ${key} and sk-privatevalue.`),true],
+    ...[current.text,current.quotedContext[0].text,configured.verifyPrompt].map(value=>[JSON.stringify({error:'Rejected input: '+value}),false]),
+    [JSON.stringify({error:{unrecognized:'DO_NOT_STRINGIFY_OBJECT'}}),false],
+    [JSON.stringify({error:['DO_NOT_STRINGIFY_ARRAY']}),false],
+    [JSON.stringify({error:123}),false],
+    ['<html>DO_NOT_PARSE_NON_JSON_HTML</html>',false],
+    [JSON.stringify({error:'x'.repeat(8193)}),false]
+  ];
+  for(const [body,hasMessage]of cases){let calls=0;await assert.rejects(api.run(current,configured,key,{fetchImpl:async()=>{calls++;return new Response(body,{status:503});}}),error=>{
+    assert.equal(error.requestDiagnostics.failureOrigin,'http');assert.equal(error.requestDiagnostics.transportStatus,503);assert.equal(Boolean(error.requestDiagnostics.providerMessage),hasMessage);
+    assert.doesNotMatch(JSON.stringify(error.requestDiagnostics),/unprefixed|xai-private|sk-private|owner@example|PRIVATE_|DO_NOT_|\[object Object\]/);return true;
+  });assert.equal(calls,1);}
+  for(const value of [current.text,key])await assert.rejects(api.run(current,configured,key,{fetchImpl:async()=>({...responseFor([{type:'error',error:'Rejected input: '+value}]),status:200})}),error=>{
+    assert.equal(value===key?error.requestDiagnostics.providerMessage.includes(key):error.requestDiagnostics.providerMessage!==undefined,false);return true;
+  });
+});
+
+test('a WKE marker in a string error summary does not infer an HTTP status or an account budget classification',async()=>{
+  await assert.rejects(api.run(post,settings,'synthetic-key',{fetchImpl:async()=>({...responseFor([{type:'error',error:'The request could not be completed. [WKE=personal-team-blocked:spending-limit]'}]),status:200})}),error=>{
+    assert.deepEqual(error.verificationFailure,{stage:'verify',code:'UNKNOWN',errorCode:'API_ERROR'});
+    assert.equal(error.requestDiagnostics.failureOrigin,'stream');assert.equal(error.requestDiagnostics.transportStatus,200);assert.match(error.requestDiagnostics.providerMessage,/WKE=/);return true;
+  });
+});

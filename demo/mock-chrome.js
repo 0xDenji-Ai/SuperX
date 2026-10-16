@@ -87,7 +87,7 @@
     );
   }
   window.chrome={runtime:{
-    id:'superx-demo',getManifest:()=>({version:'0.9.4-demo'}),getURL:asset=>`/extension/${asset}`,
+    id:'superx-demo',getManifest:()=>({version:'0.9.5-demo'}),getURL:asset=>`/extension/${asset}`,
     async sendMessage(message){if(message.type==='GET_UI_LANGUAGE')return{ok:true,language:document.documentElement.lang};if(message.type==='OPEN_SETTINGS'){if(query.get('connection')==='expired')throw new Error('Extension context invalidated');openPreviewSettings(message.focus);}if(message.type==='OPEN_HISTORY')location.assign(`/demo/history.html?lang=${encodeURIComponent(document.documentElement.lang)}`);return{ok:true};},
     connect:()=>{
       setTimeout(configure,20);

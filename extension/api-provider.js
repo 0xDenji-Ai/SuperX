@@ -342,9 +342,13 @@
       const id=diagnosticId(at(path));if(id){metadata.responseId=id;break;}
     }
     for(const path of [['error','message'],['response','error','message'],['data','error','message'],['message'],['data','message'],['response','message'],
-      ['status','message'],['status','details','message'],['status','details'],['error','details','message'],['error','details'],['error','status','message'],['error','status','details','message'],['error','status','details'],['response','error','details','message']]) {
+      ['status','message'],['status','details','message'],['status','details'],['error','details','message'],['error','details'],['error','status','message'],['error','status','details','message'],['error','status','details'],['response','error','details','message'],
+      ['error'],['response','error'],['data','error']]) {
       const message=providerMessage(at(path),redaction);if(message){metadata.providerMessage=message;break;}
     }
+    // xAI also returns a parsed JSON string as an error body. Never coerce an
+    // object, array or non-JSON response into diagnostic text.
+    if(!metadata.providerMessage){const message=providerMessage(value,redaction);if(message)metadata.providerMessage=message;}
     return metadata;
   }
   function diagnosticRedaction(post,settings,analysis,apiKey,request) {

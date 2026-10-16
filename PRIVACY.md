@@ -1,6 +1,6 @@
 # Privacy and data handling
 
-This document describes the unreleased SuperX 0.9.4 candidate's Fact Check data flow, through API Key or a direct local connection to official Grok. Last updated: 2026-10-16. The currently published 0.7.26 stable release retains its earlier explanation-then-check flow and API-only connection.
+This document describes the unreleased SuperX 0.9.5 candidate's Fact Check data flow, through API Key or a direct local connection to official Grok. Last updated: 2026-10-16. The currently published 0.7.26 stable release retains its earlier explanation-then-check flow and API-only connection.
 
 ## Setup and control
 

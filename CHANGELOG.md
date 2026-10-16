@@ -2,6 +2,12 @@
 
 SuperX release history. The extension's `manifest.json` is the authoritative installed version. Test counts below describe those releases' recorded checks, not live provider or browser-store certification.
 
+## 0.9.5 — Preserve official string-shaped API error details (unreleased candidate)
+
+- Read official flat `{code, error: string}` errors and complete JSON string error bodies through the same bounded redaction as object-shaped error messages. Prefer specific message fields when both are present.
+- Preserve HTTP and stream provenance without treating prose or WKE text as a budget classification. Do not parse HTML bodies, serialize arbitrary error objects or retry requests automatically. This improves future diagnostics; it does not establish the cause of a previously observed failure.
+- Published Stable remains 0.7.26.
+
 ## 0.9.4 — Trace API failures without guessing account exhaustion (unreleased candidate)
 
 - Distinguish HTTP rejection, errors inside an accepted stream and network failure. Keep transport status separate from an error event's explicit status; a stream's `spending_limit` is not by itself proof of HTTP 402.
