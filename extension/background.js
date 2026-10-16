@@ -11,9 +11,7 @@ const jobs = new Map();
 const runningJobs = new Set();
 const apiSlots = new Set();
 let queue = [], pumping = false, settings, cache = {}, quotas = {}, railStates = {}, revision = 0, cacheEpoch = 0;
-let ratePaused = false, queuePause, apiAccountPause, uiLanguage = UI.browserLanguage(globalThis);
-let budgetPauseWrites = Promise.resolve(), budgetPauseWriteVersion = 0, budgetPauseMayExist = false;
-let apiCapacityPause, capacityPauseWrites = Promise.resolve(), capacityPauseMayExist = false, capacityPauseWriteVersion = 0;
+let uiLanguage = UI.browserLanguage(globalThis);
 let apiDiagnostics = [], apiDiagnosticsEpoch = 0, apiDiagnosticsReady = Promise.resolve(), apiDiagnosticsWrites = Promise.resolve();
 let quotaWrites = Promise.resolve(), cacheWrites = Promise.resolve(), railStateWrites = Promise.resolve(), uiLanguageWrites = Promise.resolve();
 let securityWrites = Promise.resolve(), securityPending = 0, securityGeneration = 0;
@@ -27,16 +25,14 @@ async function initialize() {
   await chrome.storage.local.setAccessLevel({accessLevel:'TRUSTED_CONTEXTS'});
   await chrome.storage.session.setAccessLevel({accessLevel:'TRUSTED_CONTEXTS'});
   // Diagnostic storage is optional. Its reads/writes never gate credentials,
-  // analysis, the account-spending pause or normal extension startup.
+  // analysis or normal extension startup.
   apiDiagnosticsReady=loadAPIDiagnostics();
   const local = await chrome.storage.local.get(['settings','uiLanguage','apiKey','apiKeyEncrypted','apiKeyVault','rememberApiKey','buildConnectionEncrypted']);
   const session = await chrome.storage.session.get(['quotas','railStates','uiLanguage','apiKey','cache','securityFault','apiBudgetPause','apiCapacityPause']);
   settings = Core.normalizeSettings(local.settings);
-  budgetPauseMayExist=session.apiBudgetPause!==undefined;
-  const restoredPause=budgetPauseFromRecord(session.apiBudgetPause);
-  if(restoredPause)apiAccountPause=restoredPause;
-  capacityPauseMayExist=session.apiCapacityPause!==undefined;
-  apiCapacityPause=capacityPauseFromRecord(session.apiCapacityPause);
+  // Errors belong to their own request. Retired session pause records never
+  // freeze unrelated work, even when optional storage cleanup fails.
+  try{await chrome.storage.session.remove(['apiBudgetPause','apiCapacityPause']);}catch{}
   if(BuildKeyStore.envelopePresent(local.buildConnectionEncrypted)){
     try{const secret=await BuildKeyStore.open(local.buildConnectionEncrypted);if(validBuildSecret(secret))buildSecret=secret;}catch{/* Reconnect locally; API Key remains independent. */}
   }
@@ -185,9 +181,7 @@ async function publicConfig() {
   const status=securityStatus();
   const historyConfig=history.config();
   if(settings.provider==='build')ensureBuildStatus();
-  const apiBudgetPaused=settings.provider==='api'&&Boolean(apiAccountPause);
-  const apiCapacityPaused=capacityPausedFor(settings);
-  return {settings,ready:providerAllowsCalls(),keyState:status.keyState,apiBudgetPaused,apiCapacityPaused,...(apiBudgetPaused?{apiBudgetFailure:apiAccountPause.verificationFailure}:{}),...(settings.provider==='build'?{buildStatus:{...buildStatus,ready:buildReady()}}:{}),buildConnection:{configured:validBuildSecret(buildSecret),port:settings.buildPort},historyEnabled:historyConfig.enabled,historyEpoch:historyConfig.epoch};
+  return {settings,ready:providerAllowsCalls(),keyState:status.keyState,apiBudgetPaused:false,apiCapacityPaused:false,...(settings.provider==='build'?{buildStatus:{...buildStatus,ready:buildReady()}}:{}),buildConnection:{configured:validBuildSecret(buildSecret),port:settings.buildPort},historyEnabled:historyConfig.enabled,historyEpoch:historyConfig.epoch};
 }
 async function notifyHistoryChanged(){await chrome.runtime.sendMessage({type:'HISTORY_CHANGED',...history.config()}).catch(()=>{});}
 async function broadcastHistoryConfig(){
@@ -327,7 +321,7 @@ function withBillingMetadata(value,provider,verificationMode) {
   for(const field of ['usage','usageComplete','usageByStage','model','modelByStage','verificationStart','verificationFailure','requestDiagnostics'])delete result[field];
   return {...result,...billingMetadata(value,provider),...verificationMetadata(value,verificationMode),...requestMetadata(value,provider)};
 }
-function jobError(job,error,code,extra={}) { send(job.client.port,{type:commentsJob(job)?'COMMENT_ERROR':'ERROR',requestId:job.requestId,error,code,...extra}); }
+function jobError(job,error,code,extra={}) { send(job.client.port,{type:commentsJob(job)?'COMMENT_ERROR':'ERROR',requestId:job.requestId,error,code,retryAttempts:job.retryAttempts||0,...extra}); }
 function freshCacheEntry(entry,now) {
   return entry&&typeof entry==='object'&&!Array.isArray(entry)&&Number.isFinite(entry.completedAt)&&entry.completedAt>=0&&entry.completedAt<=now&&now-entry.completedAt<CACHE_TTL
     &&(typeof entry.text!=='string'||Core.readerOutput(entry.text,{final:true}).kind==='content');
@@ -364,7 +358,7 @@ function persistRailStates() {
   return railStateWrites;
 }
 function removeJob(job) { if(jobs.get(job.key)===job)jobs.delete(job.key); }
-function abortJob(job) { job.controller.abort(); removeJob(job); queue = queue.filter(j=>j!==job); pump(); }
+function abortJob(job,deferPump=false) { job.cancelled=true;clearTimeout(job.retryTimer);job.retryTimer=undefined;job.retryPlan=undefined;job.controller.abort(); removeJob(job); queue = queue.filter(j=>j!==job);if(!deferPump)pump(); }
 function cancelClient(client) { client.cancelEpoch++; for (const job of [...jobs.values()]) if(job.client===client) abortJob(job); }
 // Browser message promises do not reject when an AbortSignal is cancelled.
 // Keep the UI await interruptible; paid calls retain their separate slot until
@@ -423,8 +417,8 @@ chrome.runtime.onConnect.addListener(port => {
       if(message.type==='SET_RAIL_COLLAPSED') {
         railStates[client.tabId]=Boolean(message.collapsed);
         if(railStates[client.tabId]) {
-          for(const waiting of queue.filter(job=>job.client.tabId===client.tabId)) {
-            removeJob(waiting);jobError(waiting,'右栏已收起，未开始的分析已暂停。','RAIL_COLLAPSED');
+          for(const waiting of [...jobs.values()].filter(job=>job.client.tabId===client.tabId&&!runningJobs.has(job))) {
+            abortJob(waiting,true);jobError(waiting,'右栏已收起，未开始的分析已暂停。','RAIL_COLLAPSED');
           }
           queue=queue.filter(job=>job.client.tabId!==client.tabId);pump();
         }
@@ -463,11 +457,7 @@ chrome.runtime.onConnect.addListener(port => {
       if(!config.ready) { report(settings.provider==='build'?'请在设置中连接 Grok Build。':'请打开设置并输入 xAI API Key。',settings.provider==='build'?(buildStatus.errorCode||'BUILD_NOT_CONNECTED'):'NEEDS_KEY'); return; }
       const key=`${client.tabId}:${requestId}`;
       if(jobs.has(key)) return;
-      const budgetProbe=snapshot.provider==='api'&&apiAccountPause&&message.force===true?apiAccountPause:undefined;
-      const capacityProbe=capacityPausedFor(snapshot)&&message.force===true?apiCapacityPause:undefined;
-      if(queuePausedFor(snapshot) && (message.force!==true||(budgetProbe||capacityProbe)&&[...jobs.values(),...apiSlots].some(job=>(job.budgetProbe||job.capacityProbe)&&job.settings.provider===snapshot.provider))) { const paused=queuePauseError(snapshot);report(paused.error,paused.code,paused.verificationFailure?{verificationFailure:paused.verificationFailure}:{});return; }
-      if(message.force===true)clearQueuePause(snapshot.provider);
-      const job={key,requestId,post,inputFingerprint,analysis,client,clientEpoch:receivedEpoch,settings:snapshot,revision:receivedRevision,fingerprint,historyTicket:ticket,historyLanguage,budgetProbe,capacityProbe,controller:new AbortController()};
+      const job={key,requestId,post,inputFingerprint,analysis,client,clientEpoch:receivedEpoch,settings:snapshot,revision:receivedRevision,fingerprint,historyTicket:ticket,historyLanguage,retryAttempts:0,completedBilling:[],controller:new AbortController()};
       jobs.set(key,job);
       const before=comments?queue.findIndex(waiting=>!commentsJob(waiting)):-1;
       if(before>=0)queue.splice(before,0,job);else queue.push(job);
@@ -481,7 +471,6 @@ function liveJob(job) {
   return runningJobs.has(job) && jobs.get(job.key)===job && !job.controller.signal.aborted && job.revision===revision && job.clientEpoch===job.client.cancelEpoch && clients.has(job.client);
 }
 function apiLimit(s) { return s.provider==='build'?1:Math.max(1,Math.min(8,Math.trunc(Number(s.apiConcurrency))||3)); }
-function rateLimitError() { return Object.assign(new Error('Grok 已限速，自动队列已暂停，请稍后手动重试。'),{code:'RATE_LIMIT'}); }
 const API_BUDGET_CODES=new Set(['spending_limit','insufficient_credits','insufficient_quota','usage_limit_exceeded']);
 function apiBudgetFailure(value) {
   const supplied=GrokFirstAPI.sanitizedVerificationFailure(value?.verificationFailure)||GrokFirstAPI.sanitizedVerificationFailure(value?.partialResult?.verificationFailure);
@@ -495,80 +484,10 @@ function apiBudgetFailure(value) {
 function apiCapacityFailure(value) {
   return value?.code==='API_CAPACITY'||GrokFirstAPI.sanitizedVerificationFailure(value?.verificationFailure)?.errorCode==='API_CAPACITY'||GrokFirstAPI.sanitizedVerificationFailure(value?.partialResult?.verificationFailure)?.errorCode==='API_CAPACITY';
 }
-function capacityPausedFor(input) { return input.provider==='api'&&Boolean(apiCapacityPause)&&apiCapacityPause.model===input.apiModel; }
-function capacityPauseRecord(pause) {
-  const model=pause?.model;
-  return pause?.provider==='api'&&typeof model==='string'&&/^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$/.test(model)&&!/^(?:xai-|sk-)/i.test(model)?{version:1,reason:'api-capacity',model}:undefined;
-}
-function capacityPauseFromRecord(record) {
-  const safe=record?.version===1&&record.reason==='api-capacity'?capacityPauseRecord({provider:'api',model:record.model}):undefined;
-  return safe?{provider:'api',model:safe.model,code:'API_CAPACITY',error:GrokFirstAPI.publicError({code:'API_CAPACITY'}).error}:undefined;
-}
-function persistCapacityPause(record) {
-  const writeVersion=++capacityPauseWriteVersion;
-  if(record)capacityPauseMayExist=true;
-  const operation=capacityPauseWrites.catch(()=>{}).then(async()=>{
-    try{
-      if(record)await chrome.storage.session.set({apiCapacityPause:record});else await chrome.storage.session.remove('apiCapacityPause');
-      const stored=await chrome.storage.session.get('apiCapacityPause');
-      const confirmed=record?JSON.stringify(capacityPauseRecord(capacityPauseFromRecord(stored.apiCapacityPause)))===JSON.stringify(record):stored.apiCapacityPause===undefined;
-      if(confirmed&&!record&&writeVersion===capacityPauseWriteVersion)capacityPauseMayExist=false;
-      return confirmed;
-    }catch{return false;}
-  });
-  capacityPauseWrites=operation;return operation;
-}
-function clearAPICapacityPause(current=()=>true) {
-  const previous=apiCapacityPause;
-  if(!previous&&!capacityPauseMayExist)return Promise.resolve(true);
-  const removalVersion=capacityPauseWriteVersion+1;
-  return persistCapacityPause(undefined).then(async cleared=>{
-    if(cleared&&apiCapacityPause===previous&&current()){apiCapacityPause=undefined;return true;}
-    // Cancellation while optional storage confirms recovery cannot silently
-    // reopen automatic work. Do not revive a pause after a newer model reset.
-    if(cleared&&previous&&apiCapacityPause===previous&&removalVersion===capacityPauseWriteVersion)await persistCapacityPause(capacityPauseRecord(previous));
-    return false;
-  });
-}
-function queuePausedFor(input) { return input.provider==='api'&&Boolean(apiAccountPause)||capacityPausedFor(input)||ratePaused&&queuePause?.provider===input.provider; }
-function budgetPauseRecord(pause) {
-  const failure=apiBudgetFailure(pause);
-  return pause?.provider==='api'&&failure?{version:1,reason:'api-budget',verificationFailure:failure}:undefined;
-}
-function budgetPauseFromRecord(record) {
-  if(record?.version!==1||record.reason!=='api-budget')return undefined;
-  const verificationFailure=apiBudgetFailure(record);
-  return verificationFailure?{provider:'api',code:'API_ERROR',error:GrokFirstAPI.publicError({code:'API_ERROR'}).error,verificationFailure}:undefined;
-}
-function persistBudgetPause(record) {
-  // Only a fixed reason and sanitized structured cause survive worker sleep.
-  // Serialize readbacks with writes so an earlier pause cannot revive after
-  // a Key/settings reset or a successful explicit recovery probe.
-  const writeVersion=++budgetPauseWriteVersion;
-  if(record)budgetPauseMayExist=true;
-  const operation=budgetPauseWrites.catch(()=>{}).then(async()=>{
-    try {
-      if(record)await chrome.storage.session.set({apiBudgetPause:record});else await chrome.storage.session.remove('apiBudgetPause');
-      const saved=await chrome.storage.session.get('apiBudgetPause');
-      const confirmed=record?JSON.stringify(budgetPauseRecord(budgetPauseFromRecord(saved.apiBudgetPause)))===JSON.stringify(record):saved.apiBudgetPause===undefined;
-      if(confirmed&&!record&&writeVersion===budgetPauseWriteVersion)budgetPauseMayExist=false;
-      return confirmed;
-    }catch{return false;}
-  });
-  budgetPauseWrites=operation;return operation;
-}
-function clearQueuePause(provider) {
-  if(provider&&queuePause?.provider!==provider)return Promise.resolve(true);
-  ratePaused=false;queuePause=undefined;return Promise.resolve(true);
-}
-function clearAPIBudgetPause() {
-  const previous=apiAccountPause;
-  if(!previous&&!budgetPauseMayExist)return Promise.resolve(true);
-  // Keep the account gate closed until durable removal is confirmed. A full
-  // result can still be displayed if storage fails; it must not resume auto.
-  return persistBudgetPause(undefined).then(cleared=>{if(cleared&&apiAccountPause===previous){apiAccountPause=undefined;return true;}return false;});
-}
-function queuePauseError(input=settings) { return input.provider==='api'&&apiAccountPause?apiAccountPause:capacityPausedFor(input)?apiCapacityPause:queuePause??{code:'RATE_LIMIT',error:rateLimitError().message}; }
+// Retained callers during settings and credential changes need no error gate.
+function clearQueuePause(){return Promise.resolve(true);}
+function clearAPIBudgetPause(){return Promise.resolve(true);}
+function clearAPICapacityPause(){return Promise.resolve(true);}
 function clearAPIDeadline(job) { clearTimeout(job.deadline);job.deadline=undefined; }
 function startAPIDeadline(job) {
   clearAPIDeadline(job);
@@ -579,34 +498,68 @@ function startAPIDeadline(job) {
 function releaseAPISlot(job) { clearAPIDeadline(job);apiSlots.delete(job);job.slotHeld=false;job.slotPhase=null; }
 function trackedAPICall(job,onUpdate) {
   job.apiProviderPending=true;
-  return runAPI(job,onUpdate).finally(()=>{
+  return runAPI(job,onUpdate).then(value=>{
+    // Late billing counts after a UI timeout; late prose is never accepted.
+    if(job.controller.signal.aborted)job.billing={...job.billing,...billingMetadata(value,job.settings.provider)};
+    return value;
+  },error=>{
+    if(job.controller.signal.aborted)job.billing={...job.billing,...billingMetadata(error.partialResult,job.settings.provider),...billingMetadata(error,job.settings.provider)};
+    throw error;
+  }).finally(()=>{
     job.apiProviderPending=false;
-    // A canceled UI job may have finished long before fetch/reader cleanup.
-    // It still owns its global slot until this actual provider call settles.
-    if(job.executionFinished){releaseAPISlot(job);pump();}
+    // An aborted UI await may finish before fetch/reader cleanup. Its slot
+    // remains owned by that attempt until the actual provider promise settles.
+    if(job.executionFinished)completeAttempt(job);
   });
 }
-function pauseWaitingJobs(job,error) {
-  const budget=job.settings.provider==='api'?apiBudgetFailure(error):undefined;
-  const capacity=job.settings.provider==='api'&&apiCapacityFailure(error);
-  if(!budget&&!capacity&&error?.code!=='RATE_LIMIT')return;
-  const safe=budget?GrokFirstAPI.publicError({code:'API_ERROR'}):{code:'RATE_LIMIT',error:rateLimitError().message};
-  // Account spending is independent of short-lived provider rate limiting.
-  // Switching to Build or receiving a later 429 cannot erase an API cause.
-  if(budget){apiAccountPause={provider:'api',...safe,verificationFailure:budget};void persistBudgetPause(budgetPauseRecord(apiAccountPause));void broadcastConfig();}
-  else if(capacity){apiCapacityPause={provider:'api',model:job.settings.apiModel,code:'API_CAPACITY',error:GrokFirstAPI.publicError({code:'API_CAPACITY'}).error};void persistCapacityPause(capacityPauseRecord(apiCapacityPause));void broadcastConfig();}
-  else{queuePause={provider:job.settings.provider,...safe};ratePaused=true;}
-  const paused=queuePauseError(job.settings);
-  const affected=value=>value.settings.provider===job.settings.provider&&(!capacity||budget||value.settings.apiModel===job.settings.apiModel);
-  for(const waiting of queue.filter(affected)) {
-    jobError(waiting,paused.error,paused.code,paused.verificationFailure?{verificationFailure:paused.verificationFailure}:{});
-    removeJob(waiting);
+function logicalJobActive(job){return jobs.get(job.key)===job&&!job.cancelled&&job.revision===revision&&job.clientEpoch===job.client.cancelEpoch&&clients.has(job.client);}
+function aggregateBilling(job,current={}){
+  if(!job.completedBilling.length)return billingMetadata(current,job.settings.provider);
+  const values=[...job.completedBilling,billingMetadata(current,job.settings.provider)];
+  const stage=commentsJob(job)?'comments':'verify';
+  const usage=GrokFirstAPI.mergeUsage(...values.map(value=>value.usage));
+  const model=[...values].reverse().find(value=>value.model)?.model;
+  const usageByStage={};
+  for(const name of ['url','explain','verify','inline','comments']){
+    const reported=values.map(value=>value.usageByStage?.[name]||(name===stage?value.usage:undefined)).filter(Boolean);
+    if(reported.length)usageByStage[name]=GrokFirstAPI.mergeUsage(...reported);
   }
-  queue=queue.filter(value=>!affected(value));
+  const modelByStage=Object.assign({},...values.map(value=>value.modelByStage||{}),model?{[stage]:model}:{});
+  return billingMetadata({usage,usageComplete:values.every(value=>value.usageComplete===true&&GrokFirstAPI.usageComplete(value.usage)),usageByStage,model,modelByStage},job.settings.provider);
+}
+function retryPlan(job,error,code,extra={}){
+  if(!logicalJobActive(job)||job.retryAttempts>=Core.AUTO_RETRY_LIMIT||!Core.autoRetryDecision(error).retryable)return false;
+  const safe=job.settings.provider==='build'?SuperXBuild.publicError(error):GrokFirstAPI.publicError(error);
+  job.retryPlan={error:safe.error,code,extra};return true;
+}
+function completeAttempt(job){
+  if(job.attemptCompleted)return;
+  job.attemptCompleted=true;releaseAPISlot(job);runningJobs.delete(job);
+  const plan=job.retryPlan;job.retryPlan=undefined;
+  if(plan&&logicalJobActive(job)&&!railStates[job.client.tabId]){
+    const billing=aggregateBilling(job,job.billing);
+    job.completedBilling.push(billingMetadata(job.billing,job.settings.provider));
+    const next=job.retryAttempts+1;
+    const partialResult=plan.extra.partialResult?withBillingMetadata({...plan.extra.partialResult,...billing},job.settings.provider,job.settings.apiVerification):undefined;
+    send(job.client.port,{type:commentsJob(job)?'COMMENT_RETRY_WAIT':'RETRY_WAIT',requestId:job.requestId,
+      retryAttempt:next,maxRetries:Core.AUTO_RETRY_LIMIT,retryDelayMs:Core.AUTO_RETRY_DELAY_MS,
+      error:plan.error,code:plan.code,...plan.extra,...billing,...(partialResult?{partialResult}:{})});
+    job.retryTimer=setTimeout(()=>{
+      job.retryTimer=undefined;
+      if(!logicalJobActive(job)||railStates[job.client.tabId]){removeJob(job);return;}
+      job.previousPartial=job.retainedFactCheck?sanitizeAnalysis(job.retainedFactCheck):undefined;
+      job.nextRetryAttempt=next;job.controller=new AbortController();job.executionFinished=false;job.attemptCompleted=false;
+      job.billing=undefined;job.requestDiagnostics=undefined;job.diagnosticsRecorded=false;job.attemptHasReaderText=false;
+      queue.push(job);
+      send(job.client.port,{type:commentsJob(job)?'COMMENT_QUEUED':'QUEUED',requestId:job.requestId,retryAttempt:next,maxRetries:Core.AUTO_RETRY_LIMIT});
+      pump();
+    },Core.AUTO_RETRY_DELAY_MS);
+  }else removeJob(job);
+  pump();
 }
 function stopUnavailableBuild(code) {
   buildStatus={...buildStatus,available:false,errorCode:code};buildStatusAt=Date.now();
-  for(const waiting of [...queue].filter(job=>job.settings.provider==='build')){jobError(waiting,SuperXBuild.publicError({code}).error,code);removeJob(waiting);}
+  for(const waiting of [...jobs.values()].filter(job=>job.settings.provider==='build'&&!runningJobs.has(job))){jobError(waiting,SuperXBuild.publicError({code}).error,code);abortJob(waiting);}
   queue=queue.filter(job=>job.settings.provider!=='build');void broadcastConfig();
 }
 function pump() {
@@ -618,6 +571,7 @@ function pump() {
       const job=queue[0];
       if(apiSlots.size>=apiLimit(job.settings))break;
       queue.shift();runningJobs.add(job);
+      if(job.nextRetryAttempt){job.retryAttempts=job.nextRetryAttempt;job.nextRetryAttempt=undefined;}
       // Every post now owns one Fact Check request; all configured slots can
       // serve visible posts instead of reserving capacity for a second stage.
       job.slotHeld=true;job.slotPhase=commentsJob(job)?'comments':'verify';apiSlots.add(job);
@@ -635,45 +589,43 @@ async function executeJob(job) {
     startAPIDeadline(job);
     if(!commentsJob(job))void persistQuotas().catch(()=>{});
     if(!liveJob(job))return;
-    send(client.port,{type:commentsJob(job)?'COMMENT_START':'START',requestId,...(commentsJob(job)?{}:{used})});
+    send(client.port,{type:commentsJob(job)?'COMMENT_START':'START',requestId,retryAttempt:job.retryAttempts,maxRetries:Core.AUTO_RETRY_LIMIT,...(commentsJob(job)?{}:{used})});
     const onUpdate=update=>{
-      job.billing=billingMetadata(update,job.settings.provider);
+      job.billing={...job.billing,...billingMetadata(update,job.settings.provider)};
       const diagnostics=requestMetadata(update,job.settings.provider).requestDiagnostics;if(diagnostics)job.requestDiagnostics=diagnostics;
       const hasText=typeof update.text==='string';
       const text=hasText?Core.readerOutput(update.text).text.slice(0,30000):undefined;
-      if(!commentsJob(job)&&hasText) {
+      if(!commentsJob(job)&&hasText&&!signal.aborted) {
+        if(text.trim())job.attemptHasReaderText=true;
         if(text.trim())job.retainedFactCheck={...sanitizeAnalysis({...update,text}),...job.billing,provider:job.settings.provider,apiVerification:'only',verified:false,searched:update.searched===true};
-        else delete job.retainedFactCheck;
+        else if(job.attemptHasReaderText||!job.retryAttempts)delete job.retainedFactCheck;
       }
-      if(liveJob(job)&&!commentsJob(job))send(client.port,{type:'UPDATE',requestId,...(hasText?{text}:{}),phase:update.phase,
-        verificationStatus:update.verificationStatus,warning:update.warning,sources:update.sources,...job.billing,...verificationMetadata(update,job.settings.apiVerification,text||'')});
+      if(liveJob(job)&&!commentsJob(job))send(client.port,{type:'UPDATE',requestId,...(hasText&&(text.trim()||job.attemptHasReaderText||!job.retainedFactCheck)?{text}:{}),phase:update.phase,
+        verificationStatus:update.verificationStatus,warning:update.warning,...(!hasText||text.trim()||job.attemptHasReaderText||!job.retainedFactCheck?{sources:update.sources}:{}),...aggregateBilling(job,job.billing),...verificationMetadata(update,job.settings.apiVerification,text||'')});
     };
     const result=withBillingMetadata(await (job.settings.provider==='build'?runAPI(job,onUpdate):waitForAbort(trackedAPICall(job,onUpdate),signal)),job.settings.provider,commentsJob(job)?undefined:job.settings.apiVerification);
     if(!liveJob(job))return;
-    job.billing=billingMetadata(result,job.settings.provider);
+    job.billing={...job.billing,...billingMetadata(result,job.settings.provider)};
     if(result.requestDiagnostics)job.requestDiagnostics=result.requestDiagnostics;
-    if(job.settings.provider==='api'&&apiBudgetFailure(result))pauseWaitingJobs(job,result);
+
     if(job.settings.provider==='api'&&apiCapacityFailure(result))throw Object.assign(new Error('Model capacity is temporarily unavailable.'),{code:'API_CAPACITY',partialResult:result,verificationFailure:result.verificationFailure,...job.billing,...requestMetadata(result,'api')});
     if(commentsJob(job))result.comments=GrokFirstAPI.validateComments(result.comments);
     else {
       const reader=Core.readerOutput(result.text,{final:true});
       if(reader.kind!=='content'){
-        delete job.retainedFactCheck;
-        send(client.port,{type:'UPDATE',requestId,text:'',phase:'verify',verificationStatus:'pending',...job.billing});
+        // The current attempt's empty/tool-only final retracts its own stream.
+        // It must not destroy a genuine partial retained from an earlier try.
+        job.retainedFactCheck=job.previousPartial;
+        send(client.port,{type:'UPDATE',requestId,text:job.previousPartial?.text||'',sources:job.previousPartial?.sources||[],phase:'verify',verificationStatus:'pending',...aggregateBilling(job,job.billing)});
         throw Object.assign(new Error('Grok 未返回可显示的核查答案，可手动重试。'),{code:'API_INCOMPLETE',verificationFailure:{stage:'verify',code:'INCOMPLETE',errorCode:'API_INCOMPLETE'},...job.billing});
       }
       result.text=reader.text.slice(0,30000);
     }
-    if(['incomplete','failed'].includes(result.verificationStatus))rememberAPIDiagnostics(job,result,result.verificationFailure?.errorCode||'API_INCOMPLETE');
-    // A spending pause permits one explicitly requested probe at a time.
-    // Incomplete/failed results never reopen automatic account spending.
-    let budgetRecovered=Boolean(job.budgetProbe&&apiAccountPause===job.budgetProbe&&!apiBudgetFailure(result)&&!['incomplete','failed'].includes(result.verificationStatus));
-    if(budgetRecovered)budgetRecovered=await clearAPIBudgetPause();
-    if(budgetRecovered){for(const peer of clients)send(peer.port,{type:'API_BUDGET_RECOVERED'});void broadcastConfig();}
-    let capacityRecovered=Boolean(job.capacityProbe&&apiCapacityPause===job.capacityProbe&&!apiBudgetFailure(result)&&!apiCapacityFailure(result)&&!GrokFirstAPI.sanitizedVerificationFailure(result.verificationFailure)&&!['incomplete','failed'].includes(result.verificationStatus));
-    if(capacityRecovered)capacityRecovered=await waitForAbort(clearAPICapacityPause(()=>liveJob(job)),signal);
-    capacityRecovered=capacityRecovered&&!capacityPausedFor(job.settings)&&liveJob(job);
-    if(capacityRecovered){for(const peer of clients)send(peer.port,{type:'API_CAPACITY_RECOVERED'});void broadcastConfig();}
+    if(['incomplete','failed'].includes(result.verificationStatus)){
+      rememberAPIDiagnostics(job,result,result.verificationFailure?.errorCode||'API_INCOMPLETE');
+      if(job.retryAttempts<Core.AUTO_RETRY_LIMIT&&Core.autoRetryDecision(result).retryable)throw Object.assign(new Error('Fact Check incomplete.'),{code:result.verificationFailure?.errorCode||'API_INCOMPLETE',partialResult:result,verificationFailure:result.verificationFailure,...job.billing});
+    }
+    Object.assign(result,aggregateBilling(job,job.billing));
     releaseAPISlot(job);pump();
     result.completedAt=Date.now();
     rememberHistoryResult(job.historyTicket,result,commentsJob(job),job.historyLanguage);
@@ -684,36 +636,48 @@ async function executeJob(job) {
       // must not leave finished requests looking as though they still run.
       void persistCache(epoch).catch(()=>{});
     }
-    const recovered={...(budgetRecovered?{apiBudgetRecovered:true}:{}),...(capacityRecovered?{apiCapacityRecovered:true}:{})};
-    if(liveJob(job))send(client.port,commentsJob(job)?{type:'COMMENT_RESULT',requestId,comments:result.comments,cached:false,...job.billing,...recovered}:{type:'RESULT',requestId,result,cached:false,...recovered});
+    const recovered={retryAttempts:job.retryAttempts};
+    if(liveJob(job))send(client.port,commentsJob(job)?{type:'COMMENT_RESULT',requestId,comments:result.comments,cached:false,...aggregateBilling(job,job.billing),...recovered}:{type:'RESULT',requestId,result,cached:false,...recovered});
   } catch(e) {
-    if(job.settings.provider==='build'&&e.code==='BUILD_CANCEL_UNCONFIRMED'){stopUnavailableBuild(e.code);if(!liveJob(job)&&clients.has(client))jobError(job,SuperXBuild.publicError(e).error,e.code);}
+    if(job.settings.provider==='build'&&e.code==='BUILD_CANCEL_UNCONFIRMED'){
+      // A deadline may have aborted this attempt before the local service
+      // reports an unconfirmed cancellation. That stronger safety result must
+      // never fall through to the generic TIMEOUT retry path.
+      job.billing={...job.billing,...billingMetadata(e.partialResult,job.settings.provider),...billingMetadata(e,job.settings.provider)};
+      stopUnavailableBuild(e.code);
+      if(clients.has(client)&&(!jobs.has(job.key)||jobs.get(job.key)===job))jobError(job,SuperXBuild.publicError(e).error,e.code,aggregateBilling(job,job.billing));
+      return;
+    }
     if(liveJob(job)) {
-      const errorBilling={...job.billing,...billingMetadata(e.partialResult,job.settings.provider),...billingMetadata(e,job.settings.provider)};
+      job.billing={...job.billing,...billingMetadata(e.partialResult,job.settings.provider),...billingMetadata(e,job.settings.provider)};
+      const errorBilling=aggregateBilling(job,job.billing);
       const diagnostics=requestMetadata(e,job.settings.provider).requestDiagnostics||requestMetadata(e.partialResult,job.settings.provider).requestDiagnostics||job.requestDiagnostics;
       const diagnosticMetadata=diagnostics?{requestDiagnostics:diagnostics}:{};
-      const partialText=Core.readerOutput(e.partialResult?.text,{final:true}).text.slice(0,30000);
-      const partialResult=partialText?withBillingMetadata({...e.partialResult,...errorBilling,...diagnosticMetadata,text:partialText,verificationStatus:'incomplete'},job.settings.provider,job.settings.apiVerification):undefined;
+      const retained=e.partialResult||job.retainedFactCheck;
+      const partialText=Core.readerOutput(retained?.text,{final:true}).text.slice(0,30000);
+      const partialResult=partialText?withBillingMetadata({...retained,...errorBilling,...diagnosticMetadata,text:partialText,verificationStatus:'incomplete'},job.settings.provider,job.settings.apiVerification):undefined;
+      if(partialResult&&!commentsJob(job))job.retainedFactCheck=sanitizeAnalysis(partialResult);
       const safeError=job.settings.provider==='build'?SuperXBuild.publicError(e):GrokFirstAPI.publicError(e);
       const budgetFailure=job.settings.provider==='api'?apiBudgetFailure(e):undefined;
       const capacityFailure=job.settings.provider==='api'&&apiCapacityFailure(e)?GrokFirstAPI.sanitizedVerificationFailure(e.verificationFailure)||GrokFirstAPI.sanitizedVerificationFailure({stage:'verify',code:'SERVER',...e.failureDetails,errorCode:'API_CAPACITY'}):undefined;
       if(partialResult)rememberHistoryResult(job.historyTicket,{...partialResult,completedAt:Date.now()},false,job.historyLanguage);
       rememberAPIDiagnostics(job,{...diagnosticMetadata,verificationFailure:e.verificationFailure||partialResult?.verificationFailure||budgetFailure||capacityFailure},safeError.code);
-      jobError(job,safeError.error,safeError.code,{...errorBilling,...diagnosticMetadata,...(commentsJob(job)?(budgetFailure||capacityFailure?{verificationFailure:budgetFailure||capacityFailure}:{}):{...verificationMetadata({verificationFailure:e.verificationFailure||partialResult?.verificationFailure||budgetFailure||capacityFailure},job.settings.apiVerification),partialResult})});
-      if(e.code==='RATE_LIMIT'||e.code==='API_CAPACITY'||budgetFailure)pauseWaitingJobs(job,e);
-      if(job.settings.provider==='build'&&['BUILD_CONNECTION_REQUIRED','BUILD_CANCEL_UNCONFIRMED','BUILD_PERMISSION_REQUIRED','BUILD_LOGIN_REQUIRED','BUILD_VERSION_UNSUPPORTED','BUILD_CONFIG_UNSUPPORTED','BUILD_TOOL_POLICY','BUILD_DISCONNECTED','BUILD_UNAVAILABLE'].includes(safeError.code))stopUnavailableBuild(safeError.code);
+      const failureMetadata={...errorBilling,...diagnosticMetadata,...(commentsJob(job)?(budgetFailure||capacityFailure?{verificationFailure:budgetFailure||capacityFailure}:{}):{...verificationMetadata({verificationFailure:e.verificationFailure||partialResult?.verificationFailure||budgetFailure||capacityFailure},job.settings.apiVerification),partialResult})};
+      if(!retryPlan(job,e,safeError.code,failureMetadata))jobError(job,safeError.error,safeError.code,{...failureMetadata,retryAttempts:job.retryAttempts});
+      if(job.settings.provider==='build'&&['BUILD_CONNECTION_REQUIRED','BUILD_CANCEL_UNCONFIRMED','BUILD_PERMISSION_REQUIRED','BUILD_LOGIN_REQUIRED','BUILD_VERSION_UNSUPPORTED','BUILD_CONFIG_UNSUPPORTED','BUILD_TOOL_POLICY','BUILD_UNAVAILABLE'].includes(safeError.code))stopUnavailableBuild(safeError.code);
     } else if(signal.aborted && clients.has(client) && job.revision===revision && (!jobs.has(job.key)||jobs.get(job.key)===job)) {
       const reason=signal.reason;
       const timedOut=reason?.code==='TIMEOUT';
-      const partialResult=timedOut&&job.retainedFactCheck?withBillingMetadata({...job.retainedFactCheck,...job.billing,verificationStatus:'incomplete',
+      const billing=aggregateBilling(job,job.billing);
+      const partialResult=timedOut&&job.retainedFactCheck?withBillingMetadata({...job.retainedFactCheck,...billing,verificationStatus:'incomplete',
         ...verificationMetadata(reason,job.settings.apiVerification)},job.settings.provider,job.settings.apiVerification):undefined;
       if(partialResult)rememberHistoryResult(job.historyTicket,{...partialResult,completedAt:Date.now()},false,job.historyLanguage);
-      jobError(job,timedOut?GrokFirstAPI.publicError(reason).error:'请求已取消；可手动重试。',timedOut?reason.code:'CANCELLED',
-        {...job.billing,...(timedOut&&!commentsJob(job)?verificationMetadata(reason,job.settings.apiVerification):{}),...(partialResult?{partialResult}:{} )});
+      const metadata={...billing,...(timedOut&&!commentsJob(job)?verificationMetadata(reason,job.settings.apiVerification):{}),...(partialResult?{partialResult}:{} )};
+      if(!timedOut||!retryPlan(job,reason,reason.code,metadata))jobError(job,timedOut?GrokFirstAPI.publicError(reason).error:'请求已取消；可手动重试。',timedOut?reason.code:'CANCELLED',{...metadata,retryAttempts:job.retryAttempts});
     }
   } finally {
-    clearAPIDeadline(job);removeJob(job);runningJobs.delete(job);job.executionFinished=true;
-    if(!job.apiProviderPending)releaseAPISlot(job);
+    clearAPIDeadline(job);job.executionFinished=true;
+    if(!job.apiProviderPending)completeAttempt(job);
     pump();
   }
 }
@@ -808,14 +772,7 @@ function queueSecurityMutation(message) {
   const operation=securityWrites.catch(()=>{}).then(async()=>{
     await ready;
     await pauseReset;
-    const previousModel=settings.apiModel;
-    let failure,changedAccountKey=!message.apiKey;
-    if(message.apiKey&&(apiAccountPause||budgetPauseMayExist)){
-      // Compare only in trusted worker memory, after startup restored the Key.
-      // If the previous credential cannot be read, retain the account pause
-      // until an explicit successful probe rather than guessing it changed.
-      try{const previous=await chrome.storage.session.get('apiKey');changedAccountKey=validKey(previous.apiKey)&&previous.apiKey.trim()!==message.apiKey.trim();}catch{/* A Key save may still succeed; no budget reset is inferred. */}
-    }
+    let failure;
     try {
       try { await clearStoredCache(); }
       catch(error) { failure=securityError(); }
@@ -834,8 +791,6 @@ function queueSecurityMutation(message) {
           try { await chrome.storage.session.set({securityFault:true}); }catch{/* Readiness remains closed in this worker. */}
         }
       }
-      if(!failure&&generation===securityGeneration&&changedAccountKey)await clearAPIBudgetPause();
-      if(!failure&&generation===securityGeneration&&settings.apiModel!==previousModel)await clearAPICapacityPause();
     }
     finally {
       securityPending--;

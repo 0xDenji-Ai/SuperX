@@ -1618,16 +1618,16 @@ test('a fatal connection failure ends verification, retains the explanation and 
   assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,1,'FATAL cannot turn into an automatic paid retry');assert.deepEqual(page.writes,[]);
 });
 
-test('offscreen cancellation stops only its own verification indicator and ignores late tokens',()=>{
+test('scrolling a running fact check offscreen preserves its paid stream and verification indicator',()=>{
   const page=fixture();page.configure({explanationMode:'preset'});
   const [first,second]=page.port.sent.filter(message=>message.type==='ANALYZE');
   const firstUI=beginVerification(page,first,page.cards()[0]),secondUI=beginVerification(page,second,page.cards()[1]);
   page.articles[0].rect={...page.articles[0].rect,top:-500,bottom:-200};page.tick(100);page.tick(1100);
-  assert.ok(page.port.sent.some(message=>message.type==='CANCEL'&&message.requestId===first.requestId));
-  assert.equal(firstUI.wait.hidden,true);assert.equal(firstUI.status.classList.contains('shimmer'),false);assert.equal(firstUI.answer.textContent,'Preserved explanation');
+  assert.equal(page.port.sent.some(message=>['CANCEL','CANCEL_IF_QUEUED'].includes(message.type)&&message.requestId===first.requestId),false);
+  assert.equal(firstUI.wait.hidden,false);assert.equal(firstUI.status.classList.contains('shimmer'),true);assert.equal(firstUI.answer.textContent,'Preserved explanation');
   assert.equal(secondUI.wait.hidden,false);assert.equal(secondUI.status.classList.contains('shimmer'),true);
-  page.port.onMessage.emit({type:'UPDATE',requestId:first.requestId,phase:'verify',text:'Late cancelled check',verificationText:'Late cancelled check'});page.flush();
-  assert.equal(firstUI.wait.hidden,true);assert.doesNotMatch(firstUI.answer.textContent,/Late cancelled check/);
+  page.port.onMessage.emit({type:'UPDATE',requestId:first.requestId,phase:'verify',text:'The paid check continues offscreen.',verificationText:'The paid check continues offscreen.'});page.flush();
+  assert.equal(firstUI.wait.hidden,true);assert.equal(firstUI.answer.textContent,'The paid check continues offscreen.');
   assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,2);assert.deepEqual(page.writes,[]);
 });
 
@@ -1783,8 +1783,8 @@ test('changing a nonzero dwell restarts only waiting posts and replaces the sing
 test('manual retry and comment generation bypass dwell while automatic requests remain delayed',()=>{
   const page=fixture({postCount:1});page.configure({dwellMs:30000});page.cards()[0].testShadow.querySelector('.generate-comments').emit('click');page.flush();
   assert.equal(page.port.sent.filter(message=>message.type==='GENERATE_COMMENTS').length,1);assert.equal(page.port.sent.some(message=>message.type==='ANALYZE'),false);
-  page.port.onMessage.emit({type:'CONFIG',settings:{...core.DEFAULT_SETTINGS,dwellMs:30000},ready:true,apiBudgetPaused:true});page.flush();
-  const retry=page.cards()[0].testShadow.querySelector('.retry');assert.equal(retry.hidden,false);retry.emit('click');page.flush();const requests=page.port.sent.filter(message=>message.type==='ANALYZE');assert.equal(requests.length,1);assert.equal(requests[0].force,true);
+  const manual=fixture({postCount:1});manual.configure();const first=manual.port.sent.find(message=>message.type==='ANALYZE');manual.port.onMessage.emit({type:'ERROR',requestId:first.requestId,code:'NETWORK_ERROR'});manual.flush();manual.configure({dwellMs:30000});
+  const retry=manual.cards()[0].testShadow.querySelector('.retry');assert.equal(retry.hidden,false);retry.emit('click');manual.flush();const requests=manual.port.sent.filter(message=>message.type==='ANALYZE');assert.equal(requests.length,2);assert.equal(requests[1].force,true);
 });
 
 test('history does not require a Key or wait for dwell, and supplying a Key starts a fresh full dwell',()=>{
@@ -1821,7 +1821,7 @@ test('parallel API results are independently attributed and rendering frames can
   assert.deepEqual(page.writes,[]);
 });
 
-test('rate limits retain available fact-check findings and stay paused after prompt edits on new API cards',()=>{
+test('rate limits retain available findings without preventing new posts after prompt edits',()=>{
   const page=fixture({postCount:3});page.articles[2].rect={...page.articles[2].rect,top:1200,bottom:1480};
   page.configure({dwellMs:120});page.intersect();page.tick();page.tick(130);
   const request=page.port.sent.find(m=>m.type==='ANALYZE');
@@ -1830,9 +1830,9 @@ test('rate limits retain available fact-check findings and stay paused after pro
   assert.equal(page.cards()[0].testShadow.querySelector('.note').textContent,'');
   page.configure({verifyPrompt:'A new fact-check style for future requests'});
   page.articles[2].rect={...page.articles[2].rect,top:650,bottom:930};page.tick(1000);
-  assert.equal(page.port.sent.filter(m=>m.type==='ANALYZE').length,2);
-  assert.ok(page.cards()[2].testShadow.textContent.includes(ui.t('status.rateLimited','zh-CN')));
-  assert.equal(page.cards()[2].testShadow.querySelector('.note').textContent,ui.t('note.rateLimited','zh-CN'));
+  assert.equal(page.port.sent.filter(m=>m.type==='ANALYZE').length,3);
+  assert.equal(page.cards()[2].testShadow.querySelector('.status').textContent,ui.t('status.queued','zh-CN'));
+  assert.equal(page.cards()[2].testShadow.querySelector('.note').textContent,'');
   assert.doesNotMatch(page.cards()[2].testShadow.querySelector('.note').textContent,/API Key/,'An exhausted quota is not a missing credential');
 });
 
@@ -1855,18 +1855,20 @@ test('API media hydration preserves one paid task and its completed explanation'
   assert.deepEqual(page.writes,[]);
 });
 
-test('all API modes cancel a recycled post and ignore its late answer',()=>{
+test('all API modes isolate a recycled article while preserving the original running subscription for its return',()=>{
   for(const explanationMode of ['preset','custom']) {
     const page=fixture(),article=page.articles[0];article.postData.language='en';
     page.configure({explanationMode});page.intersect();page.tick();
     const request=page.port.sent.find(m=>m.type==='ANALYZE'&&m.post.id===article.postData.id);
+    const original={...article.postData},retained=page.cards()[0];page.port.onMessage.emit({type:'START',requestId:request.requestId});
     article.postData={...article.postData,id:'999',url:'https://x.com/recycled/status/999',text:'A different English post'};
     page.mutate();page.intersect();page.tick();page.tick(130);
-    assert.equal(page.port.sent.some(m=>m.type==='CANCEL'&&m.requestId===request.requestId),true,explanationMode);
-    page.port.onMessage.emit({type:'RESULT',requestId:request.requestId,result:{provider:'api',text:'Obsolete answer',sources:[]}});page.flush();
-    assert.doesNotMatch(page.cards().map(card=>card.testShadow.textContent).join(''),/Obsolete answer/,explanationMode);
+    assert.equal(page.port.sent.some(m=>['CANCEL','CANCEL_IF_QUEUED'].includes(m.type)&&m.requestId===request.requestId),false,explanationMode);
+    page.port.onMessage.emit({type:'RESULT',requestId:request.requestId,result:{provider:'api',text:'Original post finding.',sources:[],verificationStatus:'completed'}});page.flush();
+    assert.doesNotMatch(page.cards().map(card=>card.testShadow.textContent).join(''),/Original post finding/,explanationMode);
     const sent=page.port.sent.filter(m=>m.type==='ANALYZE'&&m.post.id==='999');
     assert.equal(sent.length,1);assert.deepEqual(sent[0].post,article.postData);
+    article.postData=original;page.mutate();page.intersect();page.tick();assert.equal(retained.isConnected,true);assert.equal(retained.testShadow.querySelector('.answer').textContent,'Original post finding.');assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE'&&message.post.id===original.id).length,1);
     assert.deepEqual(page.writes,[]);
   }
 });
@@ -2050,18 +2052,65 @@ test('all API modes cancel stale visible-text comments on expansion and preserve
   }
 });
 
-test('queued and running offscreen API work cancels independently without erasing other cards',()=>{
+test('offscreen running API work survives while unstarted queued work receives only a cancellation probe',()=>{
   const page=fixture();page.configure({dwellMs:120});page.intersect();page.tick();page.tick(130);
   const requests=page.port.sent.filter(m=>m.type==='ANALYZE');const first=requests[0],second=requests[1];
   page.port.onMessage.emit({type:'START',requestId:first.requestId,used:1});
   page.port.onMessage.emit({type:'UPDATE',requestId:first.requestId,phase:'explain',text:'Retained preview'});page.flush();
   page.articles[0].rect={...page.articles[0].rect,top:-500,bottom:-200};page.tick(100);page.tick(1100);
-  assert.ok(page.port.sent.some(m=>m.type==='CANCEL'&&m.requestId===first.requestId));
+  assert.equal(page.port.sent.some(m=>['CANCEL','CANCEL_IF_QUEUED'].includes(m.type)&&m.requestId===first.requestId),false);
   assert.equal(page.port.sent.some(m=>m.type==='CANCEL'&&m.requestId===second.requestId),false);
   assert.match(page.cards()[0].testShadow.textContent,/Retained preview/);
-  assert.ok(page.cards()[0].testShadow.textContent.includes(ui.t('note.cancelled','zh-CN')));
-  page.port.onMessage.emit({type:'RESULT',requestId:first.requestId,result:{provider:'api',text:'Ignored late answer',sources:[]}});page.flush();
-  assert.doesNotMatch(page.cards()[0].testShadow.textContent,/Ignored late answer/);
+  assert.equal(page.cards()[0].testShadow.querySelector('.note').textContent,'');
+  page.articles[1].rect={...page.articles[1].rect,top:1200,bottom:1480};page.tick(1100);
+  assert.equal(page.port.sent.filter(m=>m.type==='CANCEL_IF_QUEUED'&&m.requestId===second.requestId).length,1);assert.equal(page.port.sent.some(m=>m.type==='CANCEL'&&m.requestId===second.requestId),false);
+  page.port.onMessage.emit({type:'RESULT',requestId:first.requestId,result:{provider:'api',text:'Completed while offscreen.',sources:[],verificationStatus:'completed'}});page.flush();
+  assert.match(page.cards()[0].testShadow.textContent,/Completed while offscreen/);
+});
+
+function remountPost(page,original,rect=original.rect){
+  const article=page.document.createElement('article');article.setAttribute('data-testid','tweet');article.rect={...rect};article.postData={...original.postData};page.primary.append(article);page.articles.push(article);return article;
+}
+
+test('rapid virtualized scrolling away and back retains three running cards without duplicate paid requests',()=>{
+  const page=fixture({postCount:6});for(let index=3;index<6;index++)page.articles[index].rect={...page.articles[index].rect,top:1200+(index-3)*280,bottom:1480+(index-3)*280};page.configure();
+  const first=page.port.sent.filter(message=>message.type==='ANALYZE');assert.equal(first.length,3);const retained=page.cards().slice(0,3),originals=page.articles.slice(0,3);
+  for(const request of first){page.port.onMessage.emit({type:'START',requestId:request.requestId});page.port.onMessage.emit({type:'UPDATE',requestId:request.requestId,phase:'verify',text:'Running finding '+request.post.id,usage:{total_tokens:17}});}page.flush();const before=page.port.sent.length;
+  for(const article of originals)article.remove();for(let index=3;index<6;index++)page.articles[index].rect={...page.articles[index].rect,top:90+(index-3)*280,bottom:370+(index-3)*280};page.mutate();page.intersect();page.tick(2000);
+  assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,6);assert.equal(page.port.sent.slice(before).some(message=>['CANCEL','CANCEL_IF_QUEUED'].includes(message.type)&&first.some(request=>request.requestId===message.requestId)),false);
+  for(const request of first)page.port.onMessage.emit({type:'UPDATE',requestId:request.requestId,phase:'verify',text:'Continued while detached '+request.post.id,usage:{total_tokens:25}});page.flush();
+  for(let index=3;index<6;index++)page.articles[index].rect={...page.articles[index].rect,top:1200+(index-3)*280,bottom:1480+(index-3)*280};originals.forEach((article,index)=>remountPost(page,article,{...article.rect,top:90+index*280,bottom:370+index*280}));page.mutate();page.intersect();page.tick(2000);
+  assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,6,'Restoring the same posts reuses their active subscriptions');
+  first.forEach((request,index)=>{assert.equal(retained[index].isConnected,true);assert.equal(retained[index].testShadow.querySelector('.answer').textContent,'Continued while detached '+request.post.id);assertTokenCount(retained[index],25);assert.equal(retained[index].testShadow.querySelector('.retry').disabled,true);page.port.onMessage.emit({type:'RESULT',requestId:request.requestId,result:{provider:'api',text:'Completed original '+request.post.id,verificationStatus:'completed',sources:[],usage:{total_tokens:42}}});});page.flush();
+  first.forEach((request,index)=>{assert.equal(retained[index].testShadow.querySelector('.answer').textContent,'Completed original '+request.post.id);assertTokenCount(retained[index],42);});assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,6);
+});
+
+test('a fact check completed while its X post DOM is detached remains available when the post returns',()=>{
+  const {page,request,card}=tokenFixture();page.port.onMessage.emit({type:'START',requestId:request.requestId});const original=page.articles[0];original.remove();page.mutate();page.tick(2000);
+  page.port.onMessage.emit({type:'RESULT',requestId:request.requestId,result:{provider:'api',text:'Finished while the virtualized row was absent.',verificationStatus:'completed',sources:[{url:'https://example.com/primary',title:'Primary source'}],usage:{total_tokens:54},model:'detached-response-model'}});page.flush();remountPost(page,original);page.mutate();page.intersect();page.tick();
+  assert.equal(card.isConnected,true);assert.equal(card.testShadow.querySelector('.answer').textContent,'Finished while the virtualized row was absent.');assertTokenCount(card,54);assert.match(tokenHeader(card).title,/detached-response-model/);assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,1);assert.equal(page.port.sent.some(message=>message.type==='CANCEL'&&message.requestId===request.requestId),false);
+});
+
+test('running comments and fact checks both finish while detached and return with their shared usage and copy actions',()=>{
+  const {page,request,card}=tokenFixture();page.port.onMessage.emit({type:'START',requestId:request.requestId});page.port.onMessage.emit({type:'UPDATE',requestId:request.requestId,phase:'verify',text:'Initial fact.',usage:{total_tokens:20}});page.flush();card.testShadow.querySelector('.generate-comments').emit('click');const draft=page.port.sent.find(message=>message.type==='GENERATE_COMMENTS');page.port.onMessage.emit({type:'COMMENT_START',requestId:draft.requestId});const original=page.articles[0];original.remove();page.mutate();page.tick(2000);
+  page.port.onMessage.emit({type:'COMMENT_RESULT',requestId:draft.requestId,comments:suggestions,usage:{total_tokens:15},model:'detached-comments-model'});page.port.onMessage.emit({type:'RESULT',requestId:request.requestId,result:{provider:'api',text:'Completed detached fact.',verificationStatus:'completed',sources:[],usage:{total_tokens:40},model:'detached-facts-model'}});page.flush();remountPost(page,original);page.mutate();page.intersect();page.tick();
+  assert.equal(card.isConnected,true);assert.equal(card.testShadow.querySelector('.answer').textContent,'Completed detached fact.');assert.equal(card.testShadow.querySelectorAll('.comment-copy').length,3);assert.equal(card.testShadow.querySelector('.generate-comments').disabled,false);assertTokenCount(card,55);assert.match(tokenHeader(card).title,/detached-comments-model/);assert.match(tokenHeader(card).title,/detached-facts-model/);assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,1);assert.equal(page.port.sent.filter(message=>message.type==='GENERATE_COMMENTS').length,1);assert.equal(page.port.sent.some(message=>['CANCEL','CANCEL_IF_QUEUED'].includes(message.type)&&[request.requestId,draft.requestId].includes(message.requestId)),false);
+});
+
+test('detached jobs follow locale changes but loss of Key readiness cancels them and rejects their late results',()=>{
+  const {page,request,card}=tokenFixture();page.port.onMessage.emit({type:'START',requestId:request.requestId});page.port.onMessage.emit({type:'UPDATE',requestId:request.requestId,phase:'verify',text:'Fact before Key removal.',usage:{total_tokens:20}});page.flush();const original=page.articles[0];original.remove();page.mutate();const before=page.port.sent.length;page.configure({interfaceLanguage:'ja'});
+  assert.equal(card.testShadow.querySelector('.status').textContent,ui.t('status.verifying','ja'));assert.equal(card.testShadow.querySelector('.answer').textContent,'Fact before Key removal.');assert.equal(page.port.sent.slice(before).some(message=>message.type==='CANCEL_ALL'),false);
+  const settings={...core.DEFAULT_SETTINGS,dwellMs:0,interfaceLanguage:'ja'};page.port.onMessage.emit({type:'CONFIG',settings,ready:false});page.flush();assert.equal(page.port.sent.slice(before).some(message=>message.type==='CANCEL_ALL'),true);page.port.onMessage.emit({type:'RESULT',requestId:request.requestId,result:{provider:'api',text:'Rejected stale detached result.',sources:[],usage:{total_tokens:90}}});page.flush();page.port.onMessage.emit({type:'CONFIG',settings,ready:true});page.flush();remountPost(page,original);page.mutate();page.intersect();page.tick();
+  assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,2);assert.equal(card.testShadow.querySelector('.answer').textContent,'');assert.equal(tokenHeader(card).hidden,true);assert.doesNotMatch(card.testShadow.textContent,/Rejected stale/);
+});
+
+test('a translated post remounted after virtualization cancels its detached original-language task in Auto',()=>{
+  const page=fixture({postCount:1}),original=page.articles[0];original.postData={...original.postData,text:'The original English claim is visible.',language:'en'};page.configure({language:'auto'});const oldRequest=page.port.sent.find(message=>message.type==='ANALYZE'),oldCard=page.cards()[0];
+  page.port.onMessage.emit({type:'START',requestId:oldRequest.requestId});page.port.onMessage.emit({type:'UPDATE',requestId:oldRequest.requestId,phase:'verify',text:'Original English finding.',usage:{total_tokens:15}});page.flush();original.remove();page.mutate();assert.equal(page.port.sent.some(message=>message.type==='CANCEL'&&message.requestId===oldRequest.requestId),false);
+  original.postData={...original.postData,text:'当前可见的是这条帖子的中文翻译。',language:'zh-CN'};remountPost(page,original);page.mutate();page.intersect();page.tick();
+  const requests=page.port.sent.filter(message=>message.type==='ANALYZE');assert.equal(requests.length,2);assert.equal(page.port.sent.filter(message=>message.type==='CANCEL'&&message.requestId===oldRequest.requestId).length,1);assert.notEqual(requests[1].requestId,oldRequest.requestId);assert.equal(requests[1].post.id,oldRequest.post.id);assert.equal(requests[1].post.language,'zh-CN');assert.equal(oldCard.isConnected,false);
+  const translatedCard=page.cards()[0];page.port.onMessage.emit({type:'UPDATE',requestId:oldRequest.requestId,phase:'verify',text:'Rejected late English stream.'});page.port.onMessage.emit({type:'RESULT',requestId:oldRequest.requestId,result:{provider:'api',text:'Rejected late English result.',sources:[]}});page.flush();assert.equal(translatedCard.testShadow.querySelector('.answer').textContent,'');
+  page.port.onMessage.emit({type:'RESULT',requestId:requests[1].requestId,result:{provider:'api',text:'中文核查结果只属于当前翻译状态。',verificationStatus:'completed',sources:[],usage:{total_tokens:28}}});page.flush();page.intersect();page.tick(10000);assert.equal(translatedCard.testShadow.querySelector('.answer').textContent,'中文核查结果只属于当前翻译状态。');assertTokenCount(translatedCard,28);assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,2);
 });
 
 test('API failure diagnostics stay in an optional detail and clear before retry', () => {
@@ -2279,13 +2328,13 @@ test('changing analysis mode clears retained failure details before fresh work a
 
 
 
-test('provider quota exhaustion remains visible on subsequent posts and stops automatic dispatch',()=>{
+test('a rate-limit error remains attached only to its failed post and cannot stop recycled visible posts',()=>{
   const page=fixture();page.configure();page.intersect();page.tick();page.tick(400);
   const request=page.port.sent.find(m=>m.type==='ANALYZE');
   page.port.onMessage.emit({type:'ERROR',requestId:request.requestId,code:'RATE_LIMIT',error:'xAI API 额度已用尽，自动分析已暂停。'});
   const second=page.articles.find(a=>a.postData.id!==request.post.id);second.postData={...second.postData,id:'999',url:'https://x.com/test/status/999',text:'Next visible post'};
   page.mutate();page.intersect();page.tick(10000);
-  assert.equal(page.port.sent.filter(m=>m.type==='ANALYZE').length,2);
+  assert.equal(page.port.sent.filter(m=>m.type==='ANALYZE').length,3);
   const visibleText=page.displayedCards().map(c=>c.testShadow.textContent).join('');
   assert.match(visibleText,/额度已用尽/);assert.doesNotMatch(visibleText,/停留片刻，自动解释/);assert.deepEqual(page.writes,[]);
 });
@@ -3053,154 +3102,126 @@ test('quoted-post hydration clears obsolete comment diagnostics without redoing 
 });
 
 const spendingFailure={stage:'verify',code:'ACCESS',errorCode:'API_ERROR',httpStatus:402,providerCode:'spending_limit'};
-test('account limits pause new visible API posts and only a worker-confirmed manual probe resumes them',()=>{
-  const page=fixture({postCount:3});page.articles[2].rect={...page.articles[2].rect,top:1200,bottom:1480};page.configure();
-  const [first,second]=page.port.sent.filter(message=>message.type==='ANALYZE');
-  page.port.onMessage.emit({type:'ERROR',requestId:first.requestId,code:'API_ERROR',verificationFailure:spendingFailure});page.flush();
-  page.port.onMessage.emit({type:'RESULT',requestId:second.requestId,result:{provider:'api',text:'An already-running check completed.',verificationStatus:'completed',sources:[]}});page.flush();
-  page.articles[2].rect={...page.articles[2].rect,top:650,bottom:930};page.intersect();page.tick(1000);
-  const pending=page.cards()[2].testShadow;
-  assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,2);
-  assert.equal(pending.querySelector('.status').textContent,ui.t('error.apiUsage','zh-CN'));
-  assert.equal(pending.querySelector('.note').textContent,ui.t('note.accountLimit','zh-CN'));
-  page.cards()[0].testShadow.querySelector('.retry').emit('click');page.tick(1000);
-  let requests=page.port.sent.filter(message=>message.type==='ANALYZE');assert.equal(requests.length,3);assert.equal(requests[2].force,true);
-  page.port.onMessage.emit({type:'RESULT',requestId:requests[2].requestId,result:{provider:'api',text:'Completed without a recovery confirmation.',verificationStatus:'completed',sources:[]}});page.flush();page.tick();
-  assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,3,'No sibling or unconfirmed result can reopen account spending');
-  page.cards()[0].testShadow.querySelector('.retry').emit('click');requests=page.port.sent.filter(message=>message.type==='ANALYZE');
-  page.port.onMessage.emit({type:'RESULT',requestId:requests[3].requestId,apiBudgetRecovered:true,result:{provider:'api',text:'Manual probe confirmed account recovery.',verificationStatus:'completed',sources:[]}});page.flush();page.tick();
-  assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,5,'Only newly visible, never-submitted work resumes');
-  assert.equal(page.cards()[1].testShadow.querySelector('.answer').textContent,'An already-running check completed.');assert.deepEqual(page.writes,[]);
-});
-test('failed or incomplete manual account probes keep automatic work paused and retain safe diagnostics',()=>{
-  const page=fixture({postCount:2});page.articles[1].rect={...page.articles[1].rect,top:1200,bottom:1480};page.configure();
-  const first=page.port.sent.find(message=>message.type==='ANALYZE');
-  page.port.onMessage.emit({type:'RESULT',requestId:first.requestId,result:{provider:'api',text:'Available findings.',verificationStatus:'incomplete',verificationFailure:spendingFailure,sources:[]}});page.flush();
-  assert.equal(page.cards()[0].testShadow.querySelector('.note').textContent,ui.t('note.accountLimit','zh-CN'));
-  page.cards()[0].testShadow.querySelector('.retry').emit('click');const probe=page.port.sent.filter(message=>message.type==='ANALYZE')[1];
-  page.port.onMessage.emit({type:'ERROR',requestId:probe.requestId,code:'API_ERROR',verificationFailure:{stage:'verify',code:'SERVER',httpStatus:503,providerCode:'service_unavailable'}});page.flush();
-  page.articles[1].rect={...page.articles[1].rect,top:400,bottom:680};page.intersect();page.tick(10000);
-  assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,2);assert.equal(page.cards()[1].testShadow.querySelector('.status').textContent,ui.t('error.apiUsage','zh-CN'));
-});
-test('saved account pause reaches a new tab before dispatch and recovery in another tab resumes new work',()=>{
-  const page=fixture({postCount:1});
-  page.port.onMessage.emit({type:'CONFIG',settings:{...core.DEFAULT_SETTINGS,dwellMs:0},ready:true,apiBudgetPaused:true,apiBudgetFailure:spendingFailure,historyEnabled:true,historyEpoch:0});page.flush();page.intersect();page.tick(1000);
-  assert.equal(page.port.sent.some(message=>message.type==='ANALYZE'),false);assert.equal(page.port.sent.some(message=>message.type==='HISTORY_VISIT'),true,'Local history remains available while API spending is paused');
-  assert.equal(page.cards()[0].testShadow.querySelector('.note').textContent,ui.t('note.accountLimit','zh-CN'));
-  page.port.onMessage.emit({type:'API_BUDGET_RECOVERED'});page.flush();page.tick();
-  assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,1);
-});
-test('ordinary service or access errors do not pause new automatic posts or infer an account spending limit',()=>{
-  for(const failure of [{stage:'verify',code:'SERVER',httpStatus:503},{stage:'verify',code:'ACCESS',httpStatus:403,providerCode:'permission_denied'},{stage:'verify',code:'UNKNOWN',providerCode:'private_spending_limit_canary'}]){
-    const page=fixture({postCount:2});page.articles[1].rect={...page.articles[1].rect,top:1200,bottom:1480};page.configure();const first=page.port.sent.find(message=>message.type==='ANALYZE');
-    page.port.onMessage.emit({type:'ERROR',requestId:first.requestId,code:'API_ERROR',verificationFailure:failure});page.flush();
-    page.articles[1].rect={...page.articles[1].rect,top:400,bottom:680};page.intersect();page.tick(1000);
-    assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,2);assert.doesNotMatch(page.cards()[0].testShadow.querySelector('.diagnostics').textContent,/private_spending/);
-  }
-});
-test('comment account limits pause analysis too and a confirmed comment probe recovers without replaying failed posts',()=>{
-  const page=fixture({postCount:2});page.articles[1].rect={...page.articles[1].rect,top:1200,bottom:1480};page.configure();const first=page.port.sent.find(message=>message.type==='ANALYZE');
-  page.port.onMessage.emit({type:'RESULT',requestId:first.requestId,result:{provider:'api',text:'A completed fact check.',verificationStatus:'completed',sources:[]}});page.flush();
-  const card=page.cards()[0].testShadow;card.querySelector('.generate-comments').emit('click');
-  const draft=page.port.sent.find(message=>message.type==='GENERATE_COMMENTS');assert.ok(draft);
-  page.port.onMessage.emit({type:'COMMENT_ERROR',requestId:draft.requestId,code:'API_ERROR',verificationFailure:spendingFailure});page.flush();
-  assert.equal(card.querySelector('.comment-status').textContent,ui.t('error.apiUsage','zh-CN'));
-  page.articles[1].rect={...page.articles[1].rect,top:400,bottom:680};page.intersect();page.tick(1000);assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,1);
-  card.querySelector('.generate-comments').emit('click');const probe=page.port.sent.filter(message=>message.type==='GENERATE_COMMENTS')[1];assert.equal(probe.force,true);
-  page.port.onMessage.emit({type:'COMMENT_RESULT',requestId:probe.requestId,comments:['First suggestion.','Second suggestion.','Third suggestion.'],apiBudgetRecovered:true});page.flush();page.tick();
-  assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,2);assert.equal(card.querySelector('.answer').textContent,'A completed fact check.');assert.deepEqual(page.writes,[]);
-});
-test('an already-running rate-limit error cannot replace the account pause or clear it on a prompt relabel',()=>{
-  const page=fixture({postCount:3});page.articles[2].rect={...page.articles[2].rect,top:1200,bottom:1480};page.configure();const [first,second]=page.port.sent.filter(message=>message.type==='ANALYZE');
-  page.port.onMessage.emit({type:'ERROR',requestId:first.requestId,code:'API_ERROR',verificationFailure:spendingFailure});page.flush();
-  page.port.onMessage.emit({type:'ERROR',requestId:second.requestId,code:'RATE_LIMIT'});page.flush();
-  const before=page.port.sent.length;page.port.onMessage.emit({type:'CONFIG',settings:{...core.DEFAULT_SETTINGS,dwellMs:0,verifyPrompt:'A different future style.',interfaceLanguage:'en'},ready:true,apiBudgetPaused:true,apiBudgetFailure:spendingFailure});page.flush();
-  assert.equal(page.port.sent.slice(before).some(message=>message.type==='CANCEL_ALL'),false,'An account notice does not cancel accepted paid work');
-  page.articles[2].rect={...page.articles[2].rect,top:650,bottom:930};page.intersect();page.tick(1000);
-  assert.equal(page.cards()[2].testShadow.querySelector('.status').textContent,ui.t('error.apiUsage','en'));assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,2);
-  page.port.onMessage.emit({type:'API_BUDGET_RECOVERED'});page.flush();page.tick();
-  assert.equal(page.cards()[0].testShadow.querySelector('.note').textContent,'','Recovery clears stale paused notices on retained failed cards');assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,3);
-});
-
 const capacityFailure={stage:'verify',code:'SERVER',errorCode:'API_CAPACITY'};
+function retryWait(page,request,extra={},comments=false){page.port.onMessage.emit({type:comments?'COMMENT_RETRY_WAIT':'RETRY_WAIT',requestId:request.requestId,code:'API_ERROR',retryAttempt:1,maxRetries:5,retryDelayMs:3000,...extra});page.flush();}
+function retryLabel(card,comments=false){return card.testShadow.querySelector(comments?'.comment-retry-status':'.analysis-retry-status');}
 
-test('model capacity errors pause automatic posts, retain safe HTTP200 evidence and allow only one confirmed manual probe',()=>{
-  const page=fixture({postCount:3});page.articles[2].rect={...page.articles[2].rect,top:1200,bottom:1480};page.configure();
-  const [first,second]=page.port.sent.filter(message=>message.type==='ANALYZE');
-  page.port.onMessage.emit({type:'UPDATE',requestId:second.requestId,phase:'verify',text:'Sibling findings are still streaming.',usage:{total_tokens:21}});page.flush();
-  page.port.onMessage.emit({type:'ERROR',requestId:first.requestId,code:'API_CAPACITY',verificationFailure:capacityFailure,usage:{total_tokens:13},requestDiagnostics:{failureOrigin:'stream',transportStatus:200,providerMessage:'The model is temporarily at capacity.'}});page.flush();
-  const failed=page.cards()[0].testShadow,sibling=page.cards()[1].testShadow;
-  assert.equal(failed.querySelector('.status').textContent,ui.t('error.apiCapacity','zh-CN'));assert.equal(failed.querySelector('.status').title,ui.t('error.apiCapacity','zh-CN'));
-  const detail=failed.querySelector('.diagnostics').textContent;assert.match(detail,/"transportStatus": 200/);assert.match(detail,/"errorCode": "API_CAPACITY"/);assert.match(detail,/"code": "SERVER"/);assert.doesNotMatch(detail,/402|spending_limit|UNKNOWN/);assertTokenCount(page.cards()[0],13);
-  assert.equal(sibling.querySelector('.answer').textContent,'Sibling findings are still streaming.');assertTokenCount(page.cards()[1],21);
-  page.articles[2].rect={...page.articles[2].rect,top:650,bottom:930};page.intersect();page.tick(10000);
-  const waiting=page.cards()[2].testShadow;assert.equal(waiting.querySelector('.status').textContent,ui.t('error.apiCapacity','zh-CN'));assert.equal(waiting.querySelector('.retry').hidden,false);assert.equal(waiting.querySelector('.note').textContent,'');
-  assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,2);
-  failed.querySelector('.retry').emit('click');page.flush();let requests=page.port.sent.filter(message=>message.type==='ANALYZE');assert.equal(requests.length,3);assert.equal(requests[2].force,true);
-  assert.equal(waiting.querySelector('.retry').disabled,true);assert.equal(sibling.querySelector('.generate-comments').disabled,true);waiting.querySelector('.retry').emit('click');page.tick();assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,3);
-  page.port.onMessage.emit({type:'RESULT',requestId:second.requestId,apiCapacityRecovered:true,result:{provider:'api',text:'Sibling completed.',verificationStatus:'completed',usage:{total_tokens:30},sources:[]}});page.flush();page.tick();assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,3,'A sibling success is not the manual probe');
-  page.port.onMessage.emit({type:'RESULT',requestId:requests[2].requestId,result:{provider:'api',text:'Manual result without recovery confirmation.',verificationStatus:'completed',sources:[]}});page.flush();page.tick();assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,3);assert.equal(waiting.querySelector('.retry').disabled,false);
-  failed.querySelector('.retry').emit('click');requests=page.port.sent.filter(message=>message.type==='ANALYZE');
-  page.port.onMessage.emit({type:'RESULT',requestId:requests[3].requestId,apiCapacityRecovered:true,result:{provider:'api',text:'Confirmed capacity recovery.',verificationStatus:'completed',sources:[]}});page.flush();page.tick();
-  assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,5);assert.equal(sibling.querySelector('.answer').textContent,'Sibling completed.');assertTokenCount(page.cards()[1],30);assert.deepEqual(page.writes,[]);
-});
-
-test('capacity partial results keep their category and failed or cached probes cannot resume automatic requests',()=>{
-  for(const scenario of ['partial-error','partial-result','empty-result','cached-probe','failed-probe']){
-    const page=fixture({postCount:2});page.articles[1].rect={...page.articles[1].rect,top:1200,bottom:1480};page.configure();const first=page.port.sent.find(message=>message.type==='ANALYZE'),card=page.cards()[0].testShadow;
-    const partial={provider:'api',text:scenario==='empty-result'?'':'Available checked findings.',verificationStatus:'incomplete',verificationFailure:capacityFailure,usage:{total_tokens:8},sources:[]};
-    if(scenario==='partial-error')page.port.onMessage.emit({type:'ERROR',requestId:first.requestId,code:'API_CAPACITY',verificationFailure:capacityFailure,partialResult:partial});
-    else page.port.onMessage.emit({type:'RESULT',requestId:first.requestId,result:partial});page.flush();
-    assert.equal(card.querySelector('.status').textContent,ui.t('error.apiCapacity','zh-CN'),scenario);assert.doesNotMatch(card.querySelector('.diagnostics').textContent,/UNKNOWN|"httpStatus": 402/);assertTokenCount(page.cards()[0],8);
-    if(scenario==='cached-probe'||scenario==='failed-probe'){
-      card.querySelector('.retry').emit('click');const probe=page.port.sent.filter(message=>message.type==='ANALYZE')[1];
-      page.port.onMessage.emit(scenario==='cached-probe'?{type:'RESULT',requestId:probe.requestId,cached:true,apiCapacityRecovered:true,result:{provider:'api',text:'Cached findings.',verificationStatus:'completed',sources:[]}}:{type:'ERROR',requestId:probe.requestId,code:'API_CAPACITY',verificationFailure:capacityFailure});page.flush();
+test('402, 429, capacity and ordinary API failures stay local while newly visible posts continue independently',()=>{
+  for(const [code,verificationFailure]of [['API_ERROR',spendingFailure],['RATE_LIMIT',{stage:'verify',code:'RATE_LIMIT',httpStatus:429}],['API_CAPACITY',capacityFailure],['API_ERROR',{stage:'verify',code:'SERVER',httpStatus:503}]]){
+    for(const waiting of [true,false]){
+      const page=fixture({postCount:3});page.articles[2].rect={...page.articles[2].rect,top:1200,bottom:1480};page.configure();const [failed,sibling]=page.port.sent.filter(message=>message.type==='ANALYZE');
+      page.port.onMessage.emit({type:'UPDATE',requestId:sibling.requestId,phase:'verify',text:'Sibling findings remain live.',usage:{total_tokens:21}});page.flush();
+      if(waiting)retryWait(page,failed,{code,verificationFailure});else{page.port.onMessage.emit({type:'ERROR',requestId:failed.requestId,code,verificationFailure,retryAttempts:5});page.flush();}
+      page.articles[2].rect={...page.articles[2].rect,top:650,bottom:930};page.intersect();page.elapse(10000);
+      const requests=page.port.sent.filter(message=>message.type==='ANALYZE');assert.equal(requests.length,3,code);assert.equal(requests[2].post.id,'102');assert.equal(page.cards()[1].testShadow.querySelector('.answer').textContent,'Sibling findings remain live.');assertTokenCount(page.cards()[1],21);
+      assert.equal(page.cards()[2].testShadow.querySelector('.status').textContent,ui.t('status.queued','zh-CN'));assert.equal(page.port.sent.some(message=>message.type==='CANCEL_ALL'),false);assert.deepEqual(page.writes,[]);
     }
-    page.articles[1].rect={...page.articles[1].rect,top:400,bottom:680};page.intersect();page.tick(100000);
-    assert.equal(page.cards()[1].testShadow.querySelector('.status').textContent,ui.t('error.apiCapacity','zh-CN'),scenario);
-    assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,scenario.endsWith('probe')?2:1,scenario);
   }
 });
 
-test('capacity CONFIG pauses before dispatch and ordinary settings cannot recover it or change the selected model',()=>{
-  const page=fixture({postCount:1}),settings={...core.DEFAULT_SETTINGS,dwellMs:0,interfaceLanguage:'en'};
-  page.port.onMessage.emit({type:'CONFIG',settings,ready:true,apiCapacityPaused:true});page.flush();page.intersect();page.tick();
-  assert.equal(page.port.sent.some(message=>message.type==='ANALYZE'),false);assert.equal(page.port.sent.some(message=>message.type==='HISTORY_VISIT'),true);
-  const card=page.cards()[0].testShadow;assert.equal(card.querySelector('.status').textContent,ui.t('error.apiCapacity','en'));assert.equal(card.querySelector('.retry').disabled,false);
-  page.port.onMessage.emit({type:'CONFIG',settings:{...settings,verifyPrompt:'A new future style.'},ready:true,apiCapacityPaused:false});page.flush();page.tick(10000);
-  assert.equal(page.port.sent.some(message=>message.type==='ANALYZE'),false,'A same-model settings acknowledgment is not a recovery probe');
-  page.port.onMessage.emit({type:'CONFIG',settings:{...settings,apiModel:'grok-4.5'},ready:true,apiCapacityPaused:false});page.flush();page.tick();
-  assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,1);assert.equal(page.port.sent.some(message=>['SET_LANGUAGE','SAVE_SETTINGS','SET_PROVIDER'].includes(message.type)),false);
+test('five worker-owned retry waits retain the same request, partial findings and aggregate usage until exhausted',()=>{
+  const {page,request,card}=tokenFixture(),shadow=card.testShadow,partial={provider:'api',text:'Available primary-source finding.',sources:[{url:'https://example.com/evidence',title:'Primary evidence'}],verificationStatus:'incomplete',verificationFailure:{stage:'verify',code:'CONNECTION'}};
+  page.port.onMessage.emit({type:'START',requestId:request.requestId});page.port.onMessage.emit({type:'UPDATE',requestId:request.requestId,phase:'verify',text:partial.text,usage:{total_tokens:12},model:'first-attempt-model'});page.flush();
+  for(let attempt=1;attempt<=5;attempt++){
+    retryWait(page,request,{code:'NETWORK_ERROR',retryAttempt:attempt,partialResult:partial,usage:{total_tokens:attempt*20},model:'aggregate-request-model'});
+    const label=retryLabel(card);assert.equal(label.hidden,false);assert.equal(label.textContent,ui.t('retry.waiting','zh-CN',{seconds:3,attempt,max:5}));assert.equal(label.getAttribute('aria-live'),'polite');assert.equal(shadow.querySelector('.card').getAttribute('aria-busy'),'true');assert.equal(shadow.querySelector('.retry').disabled,true);assert.equal(shadow.querySelector('.retry').hidden,true);assert.equal(shadow.querySelector('.answer').textContent,partial.text);assertTokenCount(card,attempt*20);
+    shadow.querySelector('.retry').emit('click');page.elapse(3000);assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,1,'Only the worker schedules retries');assert.equal(page.pendingTimeouts().some(delay=>delay===3000),false);
+    page.port.onMessage.emit({type:'START',requestId:request.requestId,retryAttempt:attempt,maxRetries:5});page.flush();assert.equal(label.textContent,ui.t('retry.running','zh-CN',{attempt,max:5}));
+    page.port.onMessage.emit({type:'UPDATE',requestId:request.requestId,phase:'starting',text:''});page.flush();assert.equal(shadow.querySelector('.answer').textContent,partial.text,'An empty reconnect/starting snapshot cannot erase retained findings');
+  }
+  page.port.onMessage.emit({type:'ERROR',requestId:request.requestId,code:'NETWORK_ERROR',retryAttempts:5,partialResult:partial,usage:{total_tokens:140},model:'aggregate-request-model'});page.flush();
+  assert.equal(retryLabel(card).textContent,ui.t('retry.exhausted','zh-CN',{attempt:5,max:5}));assert.equal(shadow.querySelector('.retry').disabled,false);assert.equal(shadow.querySelector('.retry').hidden,false);assertTokenCount(card,140);page.elapse(60000);assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,1);assert.equal(shadow.querySelector('.answer').textContent,partial.text);
 });
 
-test('capacity and account pauses recover independently and budget guidance takes priority',()=>{
-  for(const recovered of ['API_CAPACITY_RECOVERED','API_BUDGET_RECOVERED']){
-    const page=fixture({postCount:1});page.port.onMessage.emit({type:'CONFIG',settings:{...core.DEFAULT_SETTINGS,dwellMs:0},ready:true,apiBudgetPaused:true,apiCapacityPaused:true});page.flush();page.intersect();page.tick();
-    const card=page.cards()[0].testShadow;assert.equal(card.querySelector('.status').textContent,ui.t('error.apiUsage','zh-CN'));assert.equal(card.querySelector('.note').textContent,ui.t('note.accountLimit','zh-CN'));
-    page.port.onMessage.emit({type:recovered});page.flush();page.tick();assert.equal(page.port.sent.some(message=>message.type==='ANALYZE'),false);
-    assert.equal(card.querySelector('.status').textContent,ui.t(recovered==='API_CAPACITY_RECOVERED'?'error.apiUsage':'error.apiCapacity','zh-CN'));
-    if(recovered==='API_BUDGET_RECOVERED')assert.equal(card.querySelector('.note').textContent,'');
-    page.port.onMessage.emit({type:recovered==='API_CAPACITY_RECOVERED'?'API_BUDGET_RECOVERED':'API_CAPACITY_RECOVERED'});page.flush();page.tick();assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,1);
+test('successful retry replaces retained prose only when new reader text arrives and clears retry labels',()=>{
+  const {page,request,card}=tokenFixture(),shadow=card.testShadow;retryWait(page,request,{partialResult:{provider:'api',text:'Preserved earlier findings.',sources:[]},usage:{total_tokens:30},model:'first-model'});
+  page.port.onMessage.emit({type:'START',requestId:request.requestId,retryAttempt:1,maxRetries:5});page.port.onMessage.emit({type:'UPDATE',requestId:request.requestId,phase:'verify',text:''});page.flush();assert.equal(shadow.querySelector('.answer').textContent,'Preserved earlier findings.');
+  page.port.onMessage.emit({type:'UPDATE',requestId:request.requestId,phase:'verify',text:'New evidence corrects the date.',usage:{total_tokens:45},model:'retry-model'});page.flush();assert.equal(shadow.querySelector('.answer').textContent,'New evidence corrects the date.');assert.doesNotMatch(shadow.querySelector('.answer').textContent,/Preserved/);assertTokenCount(card,45);
+  tokenResult(page,request,{text:'Final corrected finding.',usage:{total_tokens:70},model:'retry-model',verificationStatus:'completed'});assert.equal(shadow.querySelector('.answer').textContent,'Final corrected finding.');assert.equal(retryLabel(card).hidden,true);assert.equal(retryLabel(card).textContent,'');assert.equal(shadow.querySelector('.retry').disabled,false);assertTokenCount(card,70);assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,1);
+});
+
+test('expired retry delays show an actual queue wait until analysis or comment dispatch starts',()=>{
+  for(const interfaceLanguage of ['en','zh-CN']){
+    const {page,request,card}=tokenFixture({interfaceLanguage}),shadow=card.testShadow,queuedLabel=attempt=>ui.t('status.queued',interfaceLanguage)+' · '+ui.t('retry.running',interfaceLanguage,{attempt,max:5});retryWait(page,request,{retryAttempt:2,partialResult:{provider:'api',text:'Retained fact while the shared queue is full.',sources:[]},usage:{total_tokens:35}});
+    page.port.onMessage.emit({type:'QUEUED',requestId:request.requestId,retryAttempt:2,maxRetries:5});page.flush();assert.equal(retryLabel(card).textContent,queuedLabel(2));assert.equal(shadow.querySelector('.status').textContent,ui.t('status.queued',interfaceLanguage));assert.notEqual(shadow.querySelector('.status').textContent,ui.t('status.verifying',interfaceLanguage));assert.equal(shadow.querySelector('.retry').disabled,true);assert.equal(shadow.querySelector('.answer').textContent,'Retained fact while the shared queue is full.');assertTokenCount(card,35);page.elapse(10000);assert.equal(retryLabel(card).textContent,queuedLabel(2));assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,1);
+    page.port.onMessage.emit({type:'START',requestId:request.requestId,retryAttempt:2,maxRetries:5});page.flush();assert.equal(retryLabel(card).textContent,ui.t('retry.running',interfaceLanguage,{attempt:2,max:5}));assert.equal(shadow.querySelector('.status').textContent,ui.t('status.verifying',interfaceLanguage));tokenResult(page,request,{text:'Completed after its actual dispatch.',verificationStatus:'completed',usage:{total_tokens:60}});assert.equal(retryLabel(card).hidden,true);
+    shadow.querySelector('.generate-comments').emit('click');const draft=page.port.sent.find(message=>message.type==='GENERATE_COMMENTS');retryWait(page,draft,{retryAttempt:3,usage:{total_tokens:15}},true);page.port.onMessage.emit({type:'COMMENT_QUEUED',requestId:draft.requestId,retryAttempt:3,maxRetries:5});page.flush();assert.equal(retryLabel(card,true).textContent,queuedLabel(3));assert.equal(shadow.querySelector('.comment-status').textContent,ui.t('comments.pending',interfaceLanguage));assert.notEqual(shadow.querySelector('.comment-status').textContent,ui.t('comments.loading',interfaceLanguage));assert.equal(shadow.querySelector('.generate-comments').disabled,true);assertTokenCount(card,75);page.elapse(10000);assert.equal(retryLabel(card,true).textContent,queuedLabel(3));assert.equal(page.port.sent.filter(message=>message.type==='GENERATE_COMMENTS').length,1);
+    page.port.onMessage.emit({type:'COMMENT_START',requestId:draft.requestId,retryAttempt:3,maxRetries:5});page.flush();assert.equal(retryLabel(card,true).textContent,ui.t('retry.running',interfaceLanguage,{attempt:3,max:5}));assert.equal(shadow.querySelector('.comment-status').textContent,ui.t('comments.loading',interfaceLanguage));page.port.onMessage.emit({type:'COMMENT_RESULT',requestId:draft.requestId,comments:suggestions,usage:{total_tokens:30}});page.flush();assert.equal(retryLabel(card,true).hidden,true);assert.equal(shadow.querySelector('.generate-comments').disabled,false);assertTokenCount(card,90);assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,1);
   }
 });
 
-test('comment capacity failures preserve completed findings and recover through one explicit comment probe',()=>{
-  const page=fixture({postCount:2});page.articles[1].rect={...page.articles[1].rect,top:1200,bottom:1480};page.configure();const first=page.port.sent.find(message=>message.type==='ANALYZE');
-  page.port.onMessage.emit({type:'RESULT',requestId:first.requestId,result:{provider:'api',text:'Completed findings remain visible.',verificationStatus:'completed',usage:{total_tokens:17},sources:[]}});page.flush();
-  const card=page.cards()[0].testShadow;card.querySelector('.generate-comments').emit('click');const draft=page.port.sent.find(message=>message.type==='GENERATE_COMMENTS');
-  page.port.onMessage.emit({type:'COMMENT_ERROR',requestId:draft.requestId,code:'API_CAPACITY',verificationFailure:capacityFailure});page.flush();assert.equal(card.querySelector('.comment-status').textContent,ui.t('error.apiCapacity','zh-CN'));assert.equal(card.querySelector('.answer').textContent,'Completed findings remain visible.');assertTokenCount(page.cards()[0],17);
-  page.articles[1].rect={...page.articles[1].rect,top:400,bottom:680};page.intersect();page.tick(10000);assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,1);
-  card.querySelector('.generate-comments').emit('click');const probe=page.port.sent.filter(message=>message.type==='GENERATE_COMMENTS')[1];assert.equal(probe.force,true);assert.equal(page.cards()[1].testShadow.querySelector('.retry').disabled,true);
-  page.port.onMessage.emit({type:'COMMENT_RESULT',requestId:probe.requestId,comments:['First idea.','Second idea.','Third idea.'],apiCapacityRecovered:true});page.flush();page.tick();
-  assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,2);assert.equal(card.querySelector('.answer').textContent,'Completed findings remain visible.');assert.deepEqual(page.writes,[]);
+test('retry labels redraw in every interface locale without changing paid requests, findings or counts',()=>{
+  const {page,request,card}=tokenFixture();retryWait(page,request,{retryAttempt:2,partialResult:{provider:'api',text:'The finding stays in its chosen output language.',sources:[]},usage:{total_tokens:40}});const before=page.port.sent.length;
+  for(const interfaceLanguage of ui.SUPPORTED_LANGUAGES){page.configure({interfaceLanguage});assert.equal(retryLabel(card).textContent,ui.t('retry.waiting',interfaceLanguage,{seconds:3,attempt:2,max:5}));assert.equal(card.testShadow.querySelector('.answer').textContent,'The finding stays in its chosen output language.');assertTokenCount(card,40);}
+  assert.equal(page.port.sent.slice(before).some(message=>['ANALYZE','CANCEL','CANCEL_ALL'].includes(message.type)),false);
 });
 
-test('a capacity notice does not cancel accepted requests and API-only pauses do not affect Build',()=>{
-  const page=fixture();page.configure();const requests=page.port.sent.filter(message=>message.type==='ANALYZE');
-  page.port.onMessage.emit({type:'UPDATE',requestId:requests[0].requestId,phase:'verify',text:'Retained live findings.',usage:{total_tokens:6}});page.flush();const before=page.port.sent.length;
-  page.port.onMessage.emit({type:'CONFIG',settings:core.DEFAULT_SETTINGS,ready:true,apiCapacityPaused:true});page.flush();
-  assert.equal(page.port.sent.slice(before).some(message=>['CANCEL','CANCEL_ALL'].includes(message.type)),false);assert.equal(page.cards()[0].testShadow.querySelector('.answer').textContent,'Retained live findings.');assertTokenCount(page.cards()[0],6);
-  const build=fixture();build.port.onMessage.emit({type:'CONFIG',settings:{...core.DEFAULT_SETTINGS,provider:'build',dwellMs:0},ready:true,apiCapacityPaused:true});build.flush();build.tick();assert.equal(build.port.sent.filter(message=>message.type==='ANALYZE').length,2);
+test('comment retry waits retain completed facts, use worker aggregate usage and cannot duplicate a draft',()=>{
+  const page=fixture({postCount:2});page.articles[1].rect={...page.articles[1].rect,top:1200,bottom:1480};page.configure();const {card,generate}=completeFirst(page,'Completed fact-check finding.');const analysis=page.port.sent.find(message=>message.type==='ANALYZE');
+  generate.emit('click');const draft=page.port.sent.find(message=>message.type==='GENERATE_COMMENTS');
+  retryWait(page,draft,{code:'API_CAPACITY',verificationFailure:capacityFailure,retryAttempt:1,usage:{total_tokens:13},model:'draft-model'},true);assert.equal(retryLabel(card,true).textContent,ui.t('retry.waiting','zh-CN',{seconds:3,attempt:1,max:5}));assert.equal(generate.disabled,true);assert.equal(card.testShadow.querySelector('.answer').textContent,'Completed fact-check finding.');assertTokenCount(card,13);
+  generate.emit('click');page.elapse(3000);assert.equal(page.port.sent.filter(message=>message.type==='GENERATE_COMMENTS').length,1);
+  page.articles[1].rect={...page.articles[1].rect,top:400,bottom:680};page.intersect();page.tick();assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,2);
+  page.port.onMessage.emit({type:'COMMENT_START',requestId:draft.requestId,retryAttempt:1,maxRetries:5});page.flush();assert.equal(retryLabel(card,true).textContent,ui.t('retry.running','zh-CN',{attempt:1,max:5}));
+  page.port.onMessage.emit({type:'COMMENT_RESULT',requestId:draft.requestId,comments:suggestions,usage:{total_tokens:30},model:'draft-model'});page.flush();assert.equal(retryLabel(card,true).hidden,true);assert.equal(generate.disabled,false);assert.equal(card.testShadow.querySelectorAll('.comment-copy').length,3);assertTokenCount(card,30);assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE'&&message.requestId===analysis.requestId).length,1);
+});
+
+test('exhausted comment retries show the five-attempt limit and leave manual retry available only after terminal failure',()=>{
+  const page=fixture({postCount:1});page.configure();const {card,generate}=completeFirst(page);generate.emit('click');const draft=page.port.sent.find(message=>message.type==='GENERATE_COMMENTS');
+  for(let retryAttempt=1;retryAttempt<=5;retryAttempt++){retryWait(page,draft,{retryAttempt,code:'RATE_LIMIT'},true);generate.emit('click');assert.equal(generate.disabled,true);assert.equal(page.port.sent.filter(message=>message.type==='GENERATE_COMMENTS').length,1);}
+  page.port.onMessage.emit({type:'COMMENT_ERROR',requestId:draft.requestId,code:'RATE_LIMIT',retryAttempts:5,usage:{total_tokens:25}});page.flush();assert.equal(retryLabel(card,true).textContent,ui.t('retry.exhausted','zh-CN',{attempt:5,max:5}));assert.equal(generate.disabled,false);assert.equal(generate.textContent,ui.t('common.retryComments','zh-CN'));generate.emit('click');page.flush();assert.equal(retryLabel(card,true).hidden,true);assert.equal(page.port.sent.filter(message=>message.type==='GENERATE_COMMENTS').length,2);
+});
+
+test('legacy CONFIG account, capacity and rate pause flags cannot freeze new posts or cancel accepted paid work',()=>{
+  for(const provider of ['api','build']){
+    const page=fixture();const settings={...core.DEFAULT_SETTINGS,provider,dwellMs:0};page.port.onMessage.emit({type:'CONFIG',settings,ready:true,apiBudgetPaused:true,apiBudgetFailure:spendingFailure,apiCapacityPaused:true,ratePaused:true});page.flush();page.intersect();page.tick();const requests=page.port.sent.filter(message=>message.type==='ANALYZE');assert.equal(requests.length,2);assert.equal(page.port.sent.some(message=>message.type==='HISTORY_VISIT'),true);
+    page.port.onMessage.emit({type:'UPDATE',requestId:requests[0].requestId,phase:'verify',text:'Accepted facts stay visible.',usage:{total_tokens:6}});page.flush();const before=page.port.sent.length;
+    page.port.onMessage.emit({type:'CONFIG',settings,ready:true,apiBudgetPaused:true,apiCapacityPaused:true});page.port.onMessage.emit({type:'API_BUDGET_RECOVERED'});page.port.onMessage.emit({type:'API_CAPACITY_RECOVERED'});page.flush();assert.equal(page.port.sent.slice(before).some(message=>['CANCEL','CANCEL_ALL','ANALYZE'].includes(message.type)),false);assert.equal(page.cards()[0].testShadow.querySelector('.answer').textContent,'Accepted facts stay visible.');assertTokenCount(page.cards()[0],6);
+  }
+});
+
+test('retry-wait capacity diagnostics retain HTTP200 evidence without inventing payment errors or leaking arbitrary fields',()=>{
+  const {page,request,card}=tokenFixture();retryWait(page,request,{code:'API_CAPACITY',verificationFailure:capacityFailure,partialResult:{provider:'api',text:'Available checked finding.',sources:[]},usage:{total_tokens:13},requestDiagnostics:{failureOrigin:'stream',transportStatus:200,providerMessage:'The model is temporarily at capacity.',apiKey:'PRIVATE_KEY_CANARY'}});
+  const shadow=card.testShadow;assert.equal(shadow.querySelector('.status').textContent,ui.t('error.apiCapacity','zh-CN'));const detail=shadow.querySelector('.diagnostics').textContent;assert.match(detail,/"transportStatus": 200/);assert.match(detail,/"errorCode": "API_CAPACITY"/);assert.doesNotMatch(detail,/402|spending_limit|UNKNOWN|PRIVATE_KEY_CANARY/);assertTokenCount(card,13);assert.equal(shadow.querySelector('.answer').textContent,'Available checked finding.');
+});
+
+test('transient CLI disconnection retries one post without disabling other visible CLI posts',()=>{
+  const page=fixture({postCount:2});page.articles[1].rect={...page.articles[1].rect,top:1200,bottom:1480};page.configure({provider:'build'});const first=page.port.sent.find(message=>message.type==='ANALYZE');retryWait(page,first,{code:'BUILD_DISCONNECTED'});assert.equal(retryLabel(page.cards()[0]).hidden,false);
+  page.articles[1].rect={...page.articles[1].rect,top:400,bottom:680};page.intersect();page.tick();assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,2);assert.equal(page.cards()[1].testShadow.querySelector('.generate-comments').hidden,false);
+});
+
+test('collapsing, hiding, disabling or navigating cancels scheduled retries and late results cannot revive their labels',()=>{
+  for(const action of ['collapse','hidden','disable','navigate']){
+    const page=fixture({postCount:1});page.configure();const analysis=page.port.sent.find(message=>message.type==='ANALYZE'),card=page.cards()[0];retryWait(page,analysis,{partialResult:{provider:'api',text:'Retained until canceled.',sources:[]}});card.testShadow.querySelector('.generate-comments').emit('click');const draft=page.port.sent.find(message=>message.type==='GENERATE_COMMENTS');retryWait(page,draft,{},true);const before=page.port.sent.length;
+    if(action==='collapse')page.nodes.find(node=>node.className==='rail-collapse').emit('click');else if(action==='hidden'){page.document.hidden=true;page.document.emit('visibilitychange');}else if(action==='disable')page.configure({enabled:false});else{page.location.pathname='/settings/account';page.tick();}page.flush();
+    const cancellations=page.port.sent.slice(before).filter(message=>['CANCEL','CANCEL_ALL'].includes(message.type));assert.ok(cancellations.some(message=>message.type==='CANCEL_ALL')||[analysis,draft].every(request=>cancellations.some(message=>message.requestId===request.requestId)),action);
+    assert.equal(retryLabel(card).hidden,true,action);assert.equal(retryLabel(card,true).hidden,true,action);page.port.onMessage.emit({type:'RESULT',requestId:analysis.requestId,result:{provider:'api',text:'Obsolete retry result.',sources:[]}});page.port.onMessage.emit({type:'COMMENT_RESULT',requestId:draft.requestId,comments:suggestions});page.flush();assert.doesNotMatch(card.testShadow.querySelector('.answer').textContent,/Obsolete/);assert.equal(card.testShadow.querySelectorAll('.comment-copy').length,0);
+  }
+});
+
+test('narrow rails and X modals ask the worker to cancel retry waits without canceling a crossed START',()=>{
+  for(const action of ['resize','modal']){
+    const page=fixture({postCount:1});page.configure();const analysis=page.port.sent.find(message=>message.type==='ANALYZE'),card=page.cards()[0];retryWait(page,analysis,{partialResult:{provider:'api',text:'Existing fact.',sources:[]}});card.testShadow.querySelector('.generate-comments').emit('click');const draft=page.port.sent.find(message=>message.type==='GENERATE_COMMENTS');retryWait(page,draft,{},true);const before=page.port.sent.length;
+    if(action==='resize')page.resize(950);else{xModal(page,{ariaModal:true});page.mutate([{type:'childList',target:page.document.body}]);}page.flush();
+    const cancellations=page.port.sent.slice(before).filter(message=>message.type==='CANCEL_IF_QUEUED');assert.equal(cancellations.length,2,action);assert.equal(page.port.sent.slice(before).some(message=>['CANCEL','CANCEL_ALL'].includes(message.type)),false);
+    page.port.onMessage.emit({type:'START',requestId:analysis.requestId,retryAttempt:1,maxRetries:5});page.port.onMessage.emit({type:'ERROR',requestId:draft.requestId,code:'CANCELLED'});page.port.onMessage.emit({type:'RESULT',requestId:analysis.requestId,result:{provider:'api',text:'Paid retry crossed cancellation.',sources:[],verificationStatus:'completed'}});page.flush();assert.equal(card.testShadow.querySelector('.answer').textContent,'Paid retry crossed cancellation.');assert.equal(retryLabel(card).hidden,true);assert.equal(retryLabel(card,true).hidden,true);assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,1);
+  }
+});
+
+test('offscreen retry waits retain their subscription until cancellation is confirmed or the next START crosses it',()=>{
+  for(const crossedStart of [true,false]){
+    const page=fixture({postCount:1});page.configure({dwellMs:120});page.elapse(120);const request=page.port.sent.find(message=>message.type==='ANALYZE'),card=page.cards()[0];retryWait(page,request,{partialResult:{provider:'api',text:'Retained before scrolling.',sources:[]}});page.articles[0].rect={...page.articles[0].rect,top:-500,bottom:-220};page.tick(1100);
+    assert.equal(page.port.sent.filter(message=>message.type==='CANCEL_IF_QUEUED'&&message.requestId===request.requestId).length,1);assert.equal(page.port.sent.some(message=>message.type==='CANCEL'&&message.requestId===request.requestId),false);
+    if(crossedStart){page.port.onMessage.emit({type:'START',requestId:request.requestId,retryAttempt:1,maxRetries:5});page.port.onMessage.emit({type:'UPDATE',requestId:request.requestId,phase:'verify',text:'Retry already started offscreen.'});}else{page.port.onMessage.emit({type:'ERROR',requestId:request.requestId,code:'CANCELLED'});page.port.onMessage.emit({type:'START',requestId:request.requestId,retryAttempt:1,maxRetries:5});page.port.onMessage.emit({type:'UPDATE',requestId:request.requestId,phase:'verify',text:'Obsolete canceled retry.'});}page.flush();
+    page.articles[0].rect={...page.articles[0].rect,top:90,bottom:370};page.intersect();page.elapse(120);assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,crossedStart?1:2);assert.doesNotMatch(card.testShadow.querySelector('.answer').textContent,/Obsolete canceled/);
+    if(crossedStart){assert.equal(card.testShadow.querySelector('.answer').textContent,'Retry already started offscreen.');page.port.onMessage.emit({type:'RESULT',requestId:request.requestId,result:{provider:'api',text:'Same paid retry completed.',sources:[],verificationStatus:'completed'}});page.flush();assert.equal(card.testShadow.querySelector('.answer').textContent,'Same paid retry completed.');assert.equal(retryLabel(card).hidden,true);}
+  }
+});
+
+test('port loss during retry waits clears scheduled labels, retains findings and never replays paid work on reconnect',()=>{
+  const {page,request,card}=tokenFixture();retryWait(page,request,{partialResult:{provider:'api',text:'The partial finding survives disconnect.',sources:[]},usage:{total_tokens:30}});card.testShadow.querySelector('.generate-comments').emit('click');const draft=page.port.sent.find(message=>message.type==='GENERATE_COMMENTS');retryWait(page,draft,{usage:{total_tokens:7}},true);
+  page.port.onDisconnect.emit();page.flush();assert.equal(retryLabel(card).hidden,true);assert.equal(retryLabel(card,true).hidden,true);assert.equal(card.testShadow.querySelector('.answer').textContent,'The partial finding survives disconnect.');assertTokenCount(card,37);assert.equal(card.testShadow.querySelector('.status').textContent,ui.t('status.connectionLost','zh-CN'));
+  page.replacePort();page.runTimeouts(3000);page.configure();page.elapse(10000);assert.equal(page.port.sent.some(message=>['ANALYZE','GENERATE_COMMENTS'].includes(message.type)),false);assert.equal(card.testShadow.querySelector('.answer').textContent,'The partial finding survives disconnect.');assertTokenCount(card,37);
 });
 
 test('an active port disconnect marks only interrupted work and reconnect never automatically replays it',()=>{

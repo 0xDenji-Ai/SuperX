@@ -122,33 +122,33 @@
     "ru": ["Стиль проверки фактов","Встроенные инструкции SuperX (по умолчанию)","Свои инструкции","Проверяет полную публикацию встроенными инструкциями SuperX, не повторяя её. Сохранённые свои черновики не используются.","Проверяет полную публикацию с вашими редактируемыми инструкциями. При смене стиля черновики сохраняются.","Всем стилям API нужен поиск в X или интернете для чтения исходной публикации. Включите один из них.","Для чтения исходной публикации во всех стилях API нужен поиск в X или интернете. Включите один из них в настройках."],
     "hi": ["तथ्य जाँच का तरीका","SuperX के अंतर्निहित प्रॉम्प्ट (डिफ़ॉल्ट)","कस्टम प्रॉम्प्ट","SuperX के अंतर्निहित निर्देशों से पूरी पोस्ट की जाँच करता है, उसे दोहराता नहीं। सहेजे हुए कस्टम ड्राफ़्ट इस्तेमाल नहीं होते।","आपके संपादन योग्य निर्देशों से पूरी पोस्ट की जाँच करता है। तरीका बदलने पर कस्टम ड्राफ़्ट बने रहते हैं।","हर API तरीके में मूल पोस्ट पढ़ने के लिए X खोज या वेब खोज चाहिए। इनमें से कोई एक चालू करें।","हर API तरीके में मूल पोस्ट पढ़ने के लिए X खोज या वेब खोज चाहिए। सेटिंग में इनमें से कोई एक चालू करें।"]
   });
-  section(['error.apiKeyRejected','error.apiUsage','error.apiAccess','error.apiRequest','error.apiServer','error.apiConnection','error.apiTimeout','error.apiOutputLimit','error.apiIncomplete','error.apiFailed'], {
-    en:['Grok API Key rejected. Check it in Settings.','Check your account balance, budget or usage limit.','This Key cannot access the selected model or feature.','xAI rejected the request. Check model and search support.','xAI returned a service error. You can retry manually.','The xAI response was interrupted. You can retry manually.','The request timed out. You can retry manually.','The answer reached its output limit and is incomplete.','xAI did not return a complete answer. You can retry manually.','xAI returned an error. You can retry manually.'],
-    'zh-CN':['Grok API Key 被拒绝，请在设置中检查。','请检查账号余额、预算或用量限制。','此 Key 无权使用所选模型或功能。','xAI 拒绝了请求，请检查模型和搜索支持。','xAI 服务返回错误，可手动重试。','与 xAI 的响应连接中断，可手动重试。','请求超时，可手动重试。','回答达到输出上限，内容未完成。','xAI 未返回完整答案，可手动重试。','xAI 返回错误，可手动重试。'],
-    'zh-TW':['Grok API Key 被拒絕，請在設定中檢查。','請檢查帳號餘額、預算或用量限制。','此 Key 無權使用所選模型或功能。','xAI 拒絕了請求，請檢查模型和搜尋支援。','xAI 服務傳回錯誤，可手動重試。','與 xAI 的回應連線中斷，可手動重試。','請求逾時，可手動重試。','回答達到輸出上限，內容未完成。','xAI 未傳回完整答案，可手動重試。','xAI 傳回錯誤，可手動重試。'],
-    ja:['Grok API Key が拒否されました。設定を確認してください。','残高、予算、使用量の制限を確認してください。','この Key では選択したモデルや機能を利用できません。','xAI がリクエストを拒否しました。モデルと検索対応を確認してください。','xAI サービスでエラーが発生しました。手動で再試行できます。','xAI の応答が中断されました。手動で再試行できます。','リクエストがタイムアウトしました。手動で再試行できます。','出力上限に達したため、回答は未完成です。','xAI から完全な回答が返りませんでした。手動で再試行できます。','xAI がエラーを返しました。手動で再試行できます。'],
-    ko:['Grok API Key가 거부되었습니다. 설정에서 확인하세요.','계정 잔액, 예산 또는 사용량 제한을 확인하세요.','이 Key는 선택한 모델이나 기능에 접근할 수 없습니다.','xAI가 요청을 거부했습니다. 모델과 검색 지원을 확인하세요.','xAI 서비스 오류입니다. 직접 다시 시도할 수 있습니다.','xAI 응답이 중단되었습니다. 직접 다시 시도할 수 있습니다.','요청 시간이 초과되었습니다. 직접 다시 시도할 수 있습니다.','출력 한도에 도달하여 답변이 완성되지 않았습니다.','xAI가 완전한 답변을 반환하지 않았습니다. 직접 다시 시도할 수 있습니다.','xAI가 오류를 반환했습니다. 직접 다시 시도할 수 있습니다.'],
-    es:['Grok API Key rechazada. Revísala en Ajustes.','Revisa el saldo, presupuesto o límite de uso de tu cuenta.','Esta Key no permite usar el modelo o función elegidos.','xAI rechazó la solicitud. Revisa el modelo y la búsqueda.','xAI devolvió un error de servicio. Puedes reintentar manualmente.','La respuesta de xAI se interrumpió. Puedes reintentar manualmente.','La solicitud agotó el tiempo de espera. Puedes reintentar.','La respuesta alcanzó el límite de salida y está incompleta.','xAI no devolvió una respuesta completa. Puedes reintentar.','xAI devolvió un error. Puedes reintentar manualmente.'],
-    fr:['Grok API Key refusée. Vérifiez-la dans les paramètres.','Vérifiez le solde, le budget ou la limite d’utilisation du compte.','Cette Key ne donne pas accès au modèle ou à la fonction choisis.','xAI a refusé la requête. Vérifiez le modèle et la recherche.','xAI a renvoyé une erreur de service. Réessayez manuellement.','La réponse de xAI a été interrompue. Réessayez manuellement.','Le délai de la requête est dépassé. Réessayez manuellement.','La réponse a atteint sa limite de sortie et reste incomplète.','xAI n’a pas renvoyé de réponse complète. Réessayez manuellement.','xAI a renvoyé une erreur. Réessayez manuellement.'],
-    de:['Grok API Key abgelehnt. Bitte in den Einstellungen prüfen.','Kontostand, Budget oder Nutzungslimit prüfen.','Dieser Key erlaubt das gewählte Modell oder die Funktion nicht.','xAI hat die Anfrage abgelehnt. Modell und Suche prüfen.','xAI meldet einen Dienstfehler. Manuell erneut versuchen.','Die xAI-Antwort wurde unterbrochen. Manuell erneut versuchen.','Zeitüberschreitung. Manuell erneut versuchen.','Die Antwort hat das Ausgabelimit erreicht und ist unvollständig.','xAI hat keine vollständige Antwort geliefert. Manuell erneut versuchen.','xAI meldet einen Fehler. Manuell erneut versuchen.'],
-    pt:['Grok API Key recusada. Verifique nas configurações.','Verifique o saldo, orçamento ou limite de uso da conta.','Esta Key não permite usar o modelo ou recurso escolhido.','A xAI recusou a solicitação. Verifique o modelo e a busca.','A xAI retornou um erro de serviço. Tente novamente manualmente.','A resposta da xAI foi interrompida. Tente novamente manualmente.','O tempo da solicitação esgotou. Tente novamente manualmente.','A resposta atingiu o limite de saída e está incompleta.','A xAI não retornou uma resposta completa. Tente novamente.','A xAI retornou um erro. Tente novamente manualmente.'],
-    ar:['تم رفض Grok API Key. تحقق منه في الإعدادات.','تحقق من رصيد الحساب أو الميزانية أو حد الاستخدام.','لا يتيح هذا المفتاح الوصول إلى النموذج أو الميزة المحددة.','رفضت xAI الطلب. تحقق من دعم النموذج والبحث.','أعادت خدمة xAI خطأ. يمكنك إعادة المحاولة يدويًا.','انقطعت استجابة xAI. يمكنك إعادة المحاولة يدويًا.','انتهت مهلة الطلب. يمكنك إعادة المحاولة يدويًا.','بلغت الإجابة حد الإخراج وهي غير مكتملة.','لم تُرجع xAI إجابة كاملة. يمكنك إعادة المحاولة يدويًا.','أعادت xAI خطأ. يمكنك إعادة المحاولة يدويًا.'],
-    ru:['Grok API Key отклонён. Проверьте его в настройках.','Проверьте баланс, бюджет или лимит использования аккаунта.','Этот Key не даёт доступа к выбранной модели или функции.','xAI отклонил запрос. Проверьте модель и поддержку поиска.','Ошибка сервиса xAI. Можно повторить вручную.','Ответ xAI прервался. Можно повторить вручную.','Время ожидания истекло. Можно повторить вручную.','Ответ достиг лимита вывода и остался незавершённым.','xAI не вернул полный ответ. Можно повторить вручную.','xAI вернул ошибку. Можно повторить вручную.'],
-    hi:['Grok API Key अस्वीकार हुई। सेटिंग में जाँचें।','खाते का बैलेंस, बजट या उपयोग सीमा जाँचें।','इस Key को चुने गए मॉडल या सुविधा की अनुमति नहीं है।','xAI ने अनुरोध अस्वीकार किया। मॉडल और खोज समर्थन जाँचें।','xAI सेवा में त्रुटि आई। आप फिर से मैन्युअल कोशिश कर सकते हैं।','xAI का उत्तर बीच में रुक गया। आप फिर से कोशिश कर सकते हैं।','अनुरोध का समय समाप्त हुआ। आप फिर से कोशिश कर सकते हैं।','उत्तर आउटपुट सीमा तक पहुँच गया और अधूरा है।','xAI ने पूरा उत्तर नहीं दिया। आप फिर से कोशिश कर सकते हैं।','xAI ने त्रुटि लौटाई। आप फिर से मैन्युअल कोशिश कर सकते हैं।']
+  section(["error.apiKeyRejected","error.apiUsage","error.apiAccess","error.apiRequest","error.apiServer","error.apiConnection","error.apiTimeout","error.apiOutputLimit","error.apiIncomplete","error.apiFailed"], {
+    "en": ["Grok API Key rejected. Check it in Settings.","Check your account balance, budget or usage limit.","This Key cannot access the selected model or feature.","xAI rejected the request. Check model and search support.","xAI returned a service error.","The xAI response was interrupted.","The request timed out.","The answer reached its output limit and is incomplete.","xAI did not return a complete answer.","xAI returned an error."],
+    "zh-CN": ["Grok API Key 被拒绝，请在设置中检查。","请检查账号余额、预算或用量限制。","此 Key 无权使用所选模型或功能。","xAI 拒绝了请求，请检查模型和搜索支持。","xAI 服务返回错误。","与 xAI 的响应连接中断。","请求超时。","回答达到输出上限，内容未完成。","xAI 未返回完整答案。","xAI 返回错误。"],
+    "zh-TW": ["Grok API Key 被拒絕，請在設定中檢查。","請檢查帳號餘額、預算或用量限制。","此 Key 無權使用所選模型或功能。","xAI 拒絕了請求，請檢查模型和搜尋支援。","xAI 服務傳回錯誤。","與 xAI 的回應連線中斷。","請求逾時。","回答達到輸出上限，內容未完成。","xAI 未傳回完整答案。","xAI 傳回錯誤。"],
+    "ja": ["Grok API Key が拒否されました。設定を確認してください。","残高、予算、使用量の制限を確認してください。","この Key では選択したモデルや機能を利用できません。","xAI がリクエストを拒否しました。モデルと検索対応を確認してください。","xAI サービスでエラーが発生しました。","xAI の応答が中断されました。","リクエストがタイムアウトしました。","出力上限に達したため、回答は未完成です。","xAI から完全な回答が返りませんでした。","xAI がエラーを返しました。"],
+    "ko": ["Grok API Key가 거부되었습니다. 설정에서 확인하세요.","계정 잔액, 예산 또는 사용량 제한을 확인하세요.","이 Key는 선택한 모델이나 기능에 접근할 수 없습니다.","xAI가 요청을 거부했습니다. 모델과 검색 지원을 확인하세요.","xAI 서비스 오류입니다.","xAI 응답이 중단되었습니다.","요청 시간이 초과되었습니다.","출력 한도에 도달하여 답변이 완성되지 않았습니다.","xAI가 완전한 답변을 반환하지 않았습니다.","xAI가 오류를 반환했습니다."],
+    "es": ["Grok API Key rechazada. Revísala en Ajustes.","Revisa el saldo, presupuesto o límite de uso de tu cuenta.","Esta Key no permite usar el modelo o función elegidos.","xAI rechazó la solicitud. Revisa el modelo y la búsqueda.","xAI devolvió un error de servicio.","La respuesta de xAI se interrumpió.","La solicitud agotó el tiempo de espera.","La respuesta alcanzó el límite de salida y está incompleta.","xAI no devolvió una respuesta completa.","xAI devolvió un error."],
+    "fr": ["Grok API Key refusée. Vérifiez-la dans les paramètres.","Vérifiez le solde, le budget ou la limite d’utilisation du compte.","Cette Key ne donne pas accès au modèle ou à la fonction choisis.","xAI a refusé la requête. Vérifiez le modèle et la recherche.","xAI a renvoyé une erreur de service.","La réponse de xAI a été interrompue.","Le délai de la requête est dépassé.","La réponse a atteint sa limite de sortie et reste incomplète.","xAI n’a pas renvoyé de réponse complète.","xAI a renvoyé une erreur."],
+    "de": ["Grok API Key abgelehnt. Bitte in den Einstellungen prüfen.","Kontostand, Budget oder Nutzungslimit prüfen.","Dieser Key erlaubt das gewählte Modell oder die Funktion nicht.","xAI hat die Anfrage abgelehnt. Modell und Suche prüfen.","xAI meldet einen Dienstfehler.","Die xAI-Antwort wurde unterbrochen.","Zeitüberschreitung der Anfrage.","Die Antwort hat das Ausgabelimit erreicht und ist unvollständig.","xAI hat keine vollständige Antwort geliefert.","xAI meldet einen Fehler."],
+    "pt": ["Grok API Key recusada. Verifique nas configurações.","Verifique o saldo, orçamento ou limite de uso da conta.","Esta Key não permite usar o modelo ou recurso escolhido.","A xAI recusou a solicitação. Verifique o modelo e a busca.","A xAI retornou um erro de serviço.","A resposta da xAI foi interrompida.","O tempo da solicitação esgotou.","A resposta atingiu o limite de saída e está incompleta.","A xAI não retornou uma resposta completa.","A xAI retornou um erro."],
+    "ar": ["تم رفض Grok API Key. تحقق منه في الإعدادات.","تحقق من رصيد الحساب أو الميزانية أو حد الاستخدام.","لا يتيح هذا المفتاح الوصول إلى النموذج أو الميزة المحددة.","رفضت xAI الطلب. تحقق من دعم النموذج والبحث.","أعادت خدمة xAI خطأ.","انقطعت استجابة xAI.","انتهت مهلة الطلب.","بلغت الإجابة حد الإخراج وهي غير مكتملة.","لم تُرجع xAI إجابة كاملة.","أعادت xAI خطأ."],
+    "ru": ["Grok API Key отклонён. Проверьте его в настройках.","Проверьте баланс, бюджет или лимит использования аккаунта.","Этот Key не даёт доступа к выбранной модели или функции.","xAI отклонил запрос. Проверьте модель и поддержку поиска.","Ошибка сервиса xAI.","Ответ xAI прервался.","Время ожидания запроса истекло.","Ответ достиг лимита вывода и остался незавершённым.","xAI не вернул полный ответ.","xAI вернул ошибку."],
+    "hi": ["Grok API Key अस्वीकार हुई। सेटिंग में जाँचें।","खाते का बैलेंस, बजट या उपयोग सीमा जाँचें।","इस Key को चुने गए मॉडल या सुविधा की अनुमति नहीं है।","xAI ने अनुरोध अस्वीकार किया। मॉडल और खोज समर्थन जाँचें।","xAI सेवा में त्रुटि आई।","xAI का उत्तर बीच में रुक गया।","अनुरोध का समय समाप्त हुआ।","उत्तर आउटपुट सीमा तक पहुँच गया और अधूरा है।","xAI ने पूरा उत्तर नहीं दिया।","xAI ने त्रुटि लौटाई।"]
   });
   section(["error.outputLanguageMismatch"], {
-    "en": ["The answer did not follow the requested language. Reanalyze to try again; no automatic retry was sent."],
-    "zh-CN": ["回答未遵循要求的语言。可点击“重新分析”重试，插件未自动追加请求。"],
-    "zh-TW": ["回答未遵循要求的語言。可點選「重新分析」重試，擴充功能未自動追加請求。"],
-    "ja": ["回答が指定した言語に従っていません。「再分析」で再試行できます。自動で追加リクエストは送っていません。"],
-    "ko": ["답변이 요청한 언어를 따르지 않았습니다. 다시 분석하여 재시도할 수 있으며 자동 추가 요청은 보내지 않았습니다."],
-    "es": ["La respuesta no usó el idioma solicitado. Vuelve a analizar para reintentar; no se envió otro intento automáticamente."],
-    "fr": ["La réponse ne respecte pas la langue demandée. Relancez l’analyse pour réessayer ; aucune requête supplémentaire n’a été envoyée automatiquement."],
-    "de": ["Die Antwort entspricht nicht der gewünschten Sprache. Erneut analysieren, um es nochmals zu versuchen; keine automatische Wiederholung wurde gesendet."],
-    "pt": ["A resposta não seguiu o idioma solicitado. Analise novamente para tentar; nenhuma nova solicitação foi enviada automaticamente."],
-    "ar": ["لم تتبع الإجابة اللغة المطلوبة. أعد التحليل للمحاولة مجدداً؛ لم يُرسل طلب إضافي تلقائياً."],
-    "ru": ["Ответ не соответствует запрошенному языку. Повторите анализ, чтобы попробовать снова; автоматический повторный запрос не отправлялся."],
-    "hi": ["उत्तर ने अनुरोधित भाषा का पालन नहीं किया। फिर कोशिश करने के लिए दोबारा विश्लेषण करें; कोई अतिरिक्त अनुरोध अपने आप नहीं भेजा गया।"]
+    "en": ["The answer did not follow the requested language."],
+    "zh-CN": ["回答未遵循要求的语言。"],
+    "zh-TW": ["回答未遵循要求的語言。"],
+    "ja": ["回答が指定した言語に従っていません。"],
+    "ko": ["답변이 요청한 언어를 따르지 않았습니다."],
+    "es": ["La respuesta no usó el idioma solicitado."],
+    "fr": ["La réponse ne respecte pas la langue demandée."],
+    "de": ["Die Antwort entspricht nicht der gewünschten Sprache."],
+    "pt": ["A resposta não seguiu o idioma solicitado."],
+    "ar": ["لم تتبع الإجابة اللغة المطلوبة."],
+    "ru": ["Ответ не соответствует запрошенному языку."],
+    "hi": ["उत्तर ने अनुरोधित भाषा का पालन नहीं किया।"]
   });
   section(["usage.total","usage.known","usage.pending","usage.unavailable","usage.model","usage.requested","usage.input","usage.output","usage.analysis","usage.comments","usage.cached","usage.partial","usage.scope","usage.unknownModel"], {
     "en": ["{count} tokens","{count}+ tokens","Token usage pending","Token usage unavailable","Model: {model}","Requested model: {model}","Input: {count}","Output: {count}","Analysis","Comments","Cached result; no new tokens for this part.","Only reported tokens are shown; the total may be incomplete.","Current analysis and comments; excludes earlier retries.","Model not reported"],
@@ -276,47 +276,47 @@
     ru:['Локальный журнал диагностики','До {maxEntries} ошибок за последние {hours} часов этой сессии. Содержит очищенные сведения и ID запросов, без API Key, постов и промптов. Ничего не отправляется.','Обновить журнал','Копировать журнал','Очистить журнал','Ошибки API не записаны.','Не удалось прочитать локальный журнал.','Журнал диагностики скопирован.'],
     hi:['स्थानीय निदान लॉग','इस ब्राउज़र सत्र के पिछले {hours} घंटों की अधिकतम {maxEntries} त्रुटियाँ। संशोधित विवरण और अनुरोध ID शामिल हैं; API Key, पोस्ट और प्रॉम्प्ट नहीं। कुछ अपलोड नहीं होता।','लॉग रीफ़्रेश करें','लॉग कॉपी करें','लॉग साफ़ करें','कोई API त्रुटि दर्ज नहीं है।','स्थानीय निदान लॉग पढ़ा नहीं जा सका।','निदान लॉग कॉपी किया गया।']
   });
-  section(['error.apiCapacity'], {
-    en:['The Grok model is temporarily busy. Automatic fact-checking is paused; retry one post manually later.'],
-    'zh-CN':['Grok 模型暂时繁忙；自动核查已暂停，可稍后手动重试一条帖子。'],
-    'zh-TW':['Grok 模型暫時繁忙；自動查核已暫停，可稍後手動重試一則貼文。'],
-    ja:['Grok モデルが一時的に混み合っています。自動事実確認を停止しました。後で投稿を1件手動で再試行してください。'],
-    ko:['Grok 모델이 일시적으로 혼잡합니다. 자동 사실 확인이 일시 중지되었습니다. 나중에 게시물 하나를 수동으로 재시도하세요.'],
-    es:['El modelo Grok está ocupado temporalmente. La verificación automática está pausada; reintenta una publicación manualmente más tarde.'],
-    fr:['Le modèle Grok est temporairement occupé. La vérification automatique est suspendue ; réessayez une publication manuellement plus tard.'],
-    de:['Das Grok-Modell ist vorübergehend ausgelastet. Automatische Faktenprüfungen sind pausiert; versuche später einen Beitrag manuell erneut.'],
-    pt:['O modelo Grok está temporariamente ocupado. A verificação automática está pausada; tente uma publicação manualmente mais tarde.'],
-    ar:['نموذج Grok مشغول مؤقتًا. تم إيقاف التحقق التلقائي؛ أعد محاولة منشور واحد يدويًا لاحقًا.'],
-    ru:['Модель Grok временно перегружена. Автопроверка фактов приостановлена; повторите один пост вручную позже.'],
-    hi:['Grok मॉडल अभी व्यस्त है। स्वतः तथ्य-जाँच रुकी हुई है; बाद में एक पोस्ट पर मैन्युअल कोशिश करें।']
+  section(["error.apiCapacity"], {
+    "en": ["The Grok model is temporarily busy."],
+    "zh-CN": ["Grok 模型暂时繁忙。"],
+    "zh-TW": ["Grok 模型暫時繁忙。"],
+    "ja": ["Grok モデルが一時的に混み合っています。"],
+    "ko": ["Grok 모델이 일시적으로 혼잡합니다."],
+    "es": ["El modelo Grok está ocupado temporalmente."],
+    "fr": ["Le modèle Grok est temporairement occupé."],
+    "de": ["Das Grok-Modell ist vorübergehend ausgelastet."],
+    "pt": ["O modelo Grok está temporariamente ocupado."],
+    "ar": ["نموذج Grok مشغول مؤقتًا."],
+    "ru": ["Модель Grok временно перегружена."],
+    "hi": ["Grok मॉडल अभी व्यस्त है।"]
   });
-  section(['note.accountLimit'], {
-    en:['Automatic API requests are paused. Check your account usage or budget, then retry one post manually to resume.'],
-    'zh-CN':['自动 API 请求已暂停。请检查账户用量或预算，解决后手动重试一条帖子以恢复。'],
-    'zh-TW':['自動 API 請求已暫停。請檢查帳戶用量或預算，解決後手動重試一則貼文以恢復。'],
-    ja:['API の自動リクエストを停止しました。アカウントの使用量や予算を確認し、解決後に投稿を1件手動で再試行すると再開します。'],
-    ko:['자동 API 요청이 일시 중지되었습니다. 계정 사용량이나 예산을 확인하고 해결한 후 게시물 하나를 수동으로 재시도하면 재개됩니다.'],
-    es:['Las solicitudes automáticas de la API están pausadas. Revisa el uso o presupuesto de tu cuenta y reintenta una publicación manualmente para reanudar.'],
-    fr:['Les requêtes API automatiques sont suspendues. Vérifiez l’utilisation ou le budget du compte, puis réessayez une publication manuellement pour reprendre.'],
-    de:['Automatische API-Anfragen sind pausiert. Prüfe Kontonutzung oder Budget und versuche danach einen Beitrag manuell erneut, um fortzufahren.'],
-    pt:['As solicitações automáticas da API estão pausadas. Confira o uso ou orçamento da conta e tente uma publicação manualmente para retomar.'],
-    ar:['تم إيقاف طلبات API التلقائية مؤقتًا. تحقق من استخدام الحساب أو ميزانيته، ثم أعد محاولة منشور واحد يدويًا للاستئناف.'],
-    ru:['Автоматические API-запросы приостановлены. Проверьте использование или бюджет аккаунта, затем повторите один пост вручную, чтобы продолжить.'],
-    hi:['स्वतः API अनुरोध रुके हैं। खाते का उपयोग या बजट जाँचें, फिर दोबारा शुरू करने के लिए एक पोस्ट पर मैन्युअल कोशिश करें।']
+  section(["note.accountLimit"], {
+    "en": ["This request was blocked by an account usage or budget limit. Check your account before retrying."],
+    "zh-CN": ["这条请求受到账号用量或预算限制，请检查账号后重试。"],
+    "zh-TW": ["這則請求受到帳號用量或預算限制，請檢查帳號後重試。"],
+    "ja": ["このリクエストはアカウントの使用量や予算の制限で拒否されました。再試行する前にアカウントを確認してください。"],
+    "ko": ["이 요청이 계정 사용량 또는 예산 한도로 차단되었습니다. 다시 시도하기 전에 계정을 확인하세요."],
+    "es": ["Un límite de uso o presupuesto de la cuenta bloqueó esta solicitud. Revisa tu cuenta antes de reintentar."],
+    "fr": ["Une limite d’utilisation ou de budget du compte a bloqué cette requête. Vérifiez le compte avant de réessayer."],
+    "de": ["Diese Anfrage wurde durch ein Konto- oder Budgetlimit blockiert. Prüfe dein Konto vor einem neuen Versuch."],
+    "pt": ["Um limite de uso ou orçamento da conta bloqueou esta solicitação. Confira sua conta antes de tentar novamente."],
+    "ar": ["حُظر هذا الطلب بسبب حد استخدام الحساب أو ميزانيته. تحقق من الحساب قبل إعادة المحاولة."],
+    "ru": ["Этот запрос заблокирован лимитом использования или бюджета аккаунта. Проверьте аккаунт перед повторной попыткой."],
+    "hi": ["यह अनुरोध खाते की उपयोग या बजट सीमा के कारण रोक दिया गया। दोबारा कोशिश से पहले खाता जाँचें।"]
   });
   section(["status.needsKeyAction","note.rateLimited","options.unsavedChanges","popup.addKey"], {
-    "en":["Set a Grok API Key in {settings}","Automatic analysis is paused by the API limit. Check your xAI quota or balance before retrying.","Unsaved changes.","Add Grok API Key"],
-    "zh-CN":["请在{settings}中填写 Grok API Key","API 额度或请求频率达到上限，自动分析已暂停。请确认 xAI 额度或余额后重试。","有未保存的更改。","填写 Grok API Key"],
-    "zh-TW":["請在{settings}中填寫 Grok API Key","API 額度或請求頻率達到上限，自動分析已暫停。請確認 xAI 額度或餘額後重試。","有尚未儲存的變更。","填寫 Grok API Key"],
-    "ja":["{settings}で Grok API Key を設定してください","API の上限により自動分析を停止しています。再試行する前に xAI の利用枠や残高を確認してください。","未保存の変更があります。","Grok API Key を設定"],
-    "ko":["{settings}에서 Grok API Key를 입력하세요","API 한도로 자동 분석이 일시 중지되었습니다. 재시도 전에 xAI 한도나 잔액을 확인하세요.","저장하지 않은 변경 사항이 있습니다.","Grok API Key 입력"],
-    "es":["Introduce una Grok API Key en {settings}","El límite de la API ha pausado el análisis automático. Comprueba tu cuota o saldo de xAI antes de reintentar.","Cambios sin guardar.","Añadir Grok API Key"],
-    "fr":["Ajoutez une Grok API Key dans {settings}","La limite API a suspendu l’analyse automatique. Vérifiez votre quota ou solde xAI avant de réessayer.","Modifications non enregistrées.","Ajouter une Grok API Key"],
-    "de":["Grok API Key in {settings} eingeben","Das API-Limit hat die automatische Analyse pausiert. Prüfe dein xAI-Kontingent oder Guthaben vor einem neuen Versuch.","Ungespeicherte Änderungen.","Grok API Key hinzufügen"],
-    "pt":["Defina uma Grok API Key em {settings}","O limite da API pausou a análise automática. Verifique sua cota ou saldo xAI antes de tentar novamente.","Alterações não salvas.","Adicionar Grok API Key"],
-    "ar":["أدخل Grok API Key في {settings}","أوقف حد API التحليل التلقائي مؤقتاً. تحقّق من حصتك أو رصيد xAI قبل المحاولة مجدداً.","تغييرات غير محفوظة.","إضافة Grok API Key"],
-    "ru":["Укажите Grok API Key в {settings}","Лимит API приостановил автоматический анализ. Проверьте квоту или баланс xAI перед повторной попыткой.","Есть несохранённые изменения.","Добавить Grok API Key"],
-    "hi":["{settings} में Grok API Key दर्ज करें","API सीमा के कारण स्वतः विश्लेषण रुका है। दोबारा प्रयास से पहले xAI कोटा या शेष राशि जाँचें।","बदलाव अभी सहेजे नहीं गए हैं।","Grok API Key जोड़ें"]
+    "en": ["Set a Grok API Key in {settings}","This request reached the provider's rate limit.","Unsaved changes.","Add Grok API Key"],
+    "zh-CN": ["请在{settings}中填写 Grok API Key","这条请求触发了服务商的请求频率限制。","有未保存的更改。","填写 Grok API Key"],
+    "zh-TW": ["請在{settings}中填寫 Grok API Key","這則請求觸發了服務商的請求頻率限制。","有尚未儲存的變更。","填寫 Grok API Key"],
+    "ja": ["{settings}で Grok API Key を設定してください","このリクエストはサービスのレート制限に達しました。","未保存の変更があります。","Grok API Key を設定"],
+    "ko": ["{settings}에서 Grok API Key를 입력하세요","이 요청이 서비스의 요청 빈도 한도에 도달했습니다.","저장하지 않은 변경 사항이 있습니다.","Grok API Key 입력"],
+    "es": ["Introduce una Grok API Key en {settings}","Esta solicitud alcanzó el límite de frecuencia del proveedor.","Cambios sin guardar.","Añadir Grok API Key"],
+    "fr": ["Ajoutez une Grok API Key dans {settings}","Cette requête a atteint la limite de fréquence du fournisseur.","Modifications non enregistrées.","Ajouter une Grok API Key"],
+    "de": ["Grok API Key in {settings} eingeben","Diese Anfrage hat das Ratenlimit des Anbieters erreicht.","Ungespeicherte Änderungen.","Grok API Key hinzufügen"],
+    "pt": ["Defina uma Grok API Key em {settings}","Esta solicitação atingiu o limite de frequência do provedor.","Alterações não salvas.","Adicionar Grok API Key"],
+    "ar": ["أدخل Grok API Key في {settings}","بلغ هذا الطلب حد معدل الطلبات لدى مزوّد الخدمة.","تغييرات غير محفوظة.","إضافة Grok API Key"],
+    "ru": ["Укажите Grok API Key в {settings}","Этот запрос достиг ограничения частоты у провайдера.","Есть несохранённые изменения.","Добавить Grok API Key"],
+    "hi": ["{settings} में Grok API Key दर्ज करें","यह अनुरोध सेवा प्रदाता की अनुरोध दर सीमा तक पहुँच गया।","बदलाव अभी सहेजे नहीं गए हैं।","Grok API Key जोड़ें"]
   });
   section(["common.refreshPage","status.refreshRequired","status.refreshRequiredAction"], {
     "en":["Refresh X","Refresh X to reconnect to SuperX.","{refresh} to reconnect to SuperX."],
@@ -1079,6 +1079,20 @@
       'तेज़ जवाब और कम टोकन कीमतों के लिए grok-4.3 सुझाया जाता है।',
       'केवल चुने गए मॉडल के समर्थित स्तर दिखते हैं। ऊँचे स्तर अधिक समय और टोकन ले सकते हैं।'
     ]
+  });
+  section(["retry.waiting","retry.running","retry.exhausted"], {
+    "en": ["Retrying in {seconds}s ({attempt}/{max})","Automatic retry {attempt}/{max}","Still unsuccessful after {max} automatic retries. You can retry manually."],
+    "zh-CN": ["{seconds} 秒后重试（{attempt}/{max}）","自动重试 {attempt}/{max}","自动重试 {max} 次后仍未成功，可手动重试。"],
+    "zh-TW": ["{seconds} 秒後重試（{attempt}/{max}）","自動重試 {attempt}/{max}","自動重試 {max} 次後仍未成功，可手動重試。"],
+    "ja": ["{seconds}秒後に再試行（{attempt}/{max}）","自動再試行 {attempt}/{max}","自動で{max}回再試行しましたが成功しませんでした。手動で再試行できます。"],
+    "ko": ["{seconds}초 후 재시도 ({attempt}/{max})","자동 재시도 {attempt}/{max}","자동으로 {max}회 재시도했지만 성공하지 못했습니다. 직접 다시 시도할 수 있습니다."],
+    "es": ["Reintentando en {seconds}s ({attempt}/{max})","Reintento automático {attempt}/{max}","Sin éxito tras {max} reintentos automáticos. Puedes reintentar manualmente."],
+    "fr": ["Nouvelle tentative dans {seconds}s ({attempt}/{max})","Nouvelle tentative automatique {attempt}/{max}","Toujours sans succès après {max} tentatives automatiques. Vous pouvez réessayer manuellement."],
+    "de": ["Erneuter Versuch in {seconds}s ({attempt}/{max})","Automatischer Versuch {attempt}/{max}","Nach {max} automatischen Versuchen weiterhin erfolglos. Du kannst es manuell erneut versuchen."],
+    "pt": ["Nova tentativa em {seconds}s ({attempt}/{max})","Nova tentativa automática {attempt}/{max}","Sem sucesso após {max} tentativas automáticas. Você pode tentar manualmente."],
+    "ar": ["إعادة المحاولة خلال {seconds} ث ({attempt}/{max})","إعادة محاولة تلقائية {attempt}/{max}","لم تنجح المحاولة بعد {max} محاولات تلقائية. يمكنك إعادة المحاولة يدويًا."],
+    "ru": ["Повтор через {seconds} с ({attempt}/{max})","Автоповтор {attempt}/{max}","После {max} автоматических попыток запрос не выполнен. Можно повторить вручную."],
+    "hi": ["{seconds} सेकंड में फिर कोशिश ({attempt}/{max})","स्वतः पुनः प्रयास {attempt}/{max}","{max} स्वतः प्रयासों के बाद भी सफलता नहीं मिली। आप मैन्युअल कोशिश कर सकते हैं।"]
   });
   const aliases = {'common.auto':'lang.auto','common.failed':'status.failed','tooltip.collapse':'common.collapse','tooltip.expand':'common.expand'};
   for (const language of SUPPORTED_LANGUAGES) {

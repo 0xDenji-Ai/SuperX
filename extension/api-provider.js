@@ -703,7 +703,8 @@
       const text=typeof error.partialText==='string'?error.partialText:'';
       if(!text.trim())throw error;
       // Retain only an actual unfinished Fact Check in the selected language.
-      // Never retry automatically or combine this with a separate summary.
+      // The shared worker schedules bounded retries; this provider executes
+      // one attempt and never combines it with a separate summary.
       try {assertMatchingScript(text,settings.language,false,'verify');}
       catch(languageError) {
         Object.assign(languageError,sanitizedMetadata(error));

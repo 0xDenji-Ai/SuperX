@@ -98,7 +98,11 @@ X's compose/reply dialogs, enlarged media and fullscreen content take precedence
 
 ## Costs and cache
 
-Automatic analysis can generate paid requests for every visible post. All X tabs share the configured request slots; excess work queues. Cancelled requests retain their slots until local transport cleanup finishes; aborting locally does not confirm that server-side work has stopped. The local mode uses a serial queue and its own model / effort selections; keep the official service terminal open and check the connection in Settings. There is no extension-level post-count limit or spending cap. Faster scrolling, more tabs, search tools and **Reanalyze** can increase usage. The 0.9.10 candidate uses one generation request per fact check; comment suggestions use another request. Removing the separate explanation step avoids that extra request, but retrieval and model processing can still take time. A single request can invoke search tools multiple times. Missing final answers are shown as incomplete without an automatic paid retry. Structured API account-limit errors pause new automatic requests across tabs and background-worker sleep; check the account, then retry one post manually to confirm recovery. Explicit model-capacity failures also pause subsequent automatic requests, with a separate model-busy message. Retry one post manually after waiting; a complete successful response resumes automatic work. SuperX does not enable premium Priority Processing or switch models automatically. Check pricing and actual charges in the xAI console.
+Automatic analysis can generate paid requests for every visible post. All X tabs share the configured request slots; excess work queues. Started answers keep generating when you scroll away, including while X temporarily unmounts a post. Returning to that post restores its answer without another request. Work not yet started can be withdrawn when it leaves view. Cancelled requests retain their slots until local transport cleanup finishes; aborting locally does not confirm that server-side work has stopped. The local mode uses a serial queue and its own model / effort selections; keep the official service terminal open and check the connection in Settings.
+
+Fact checks and comments retry transient failures after 3 seconds, up to 5 additional attempts per task. Waiting retries hold no request slot and rejoin the shared queue; other posts continue. Partial findings and reported usage are retained across attempts. Invalid credentials, account/balance restrictions, unsupported settings, output limits and unconfirmed local cancellation require user action instead of automatic retries. An error on one post does not pause the whole queue. Retried attempts can incur additional provider usage and charges.
+
+There is no extension-level post-count limit or spending cap. More tabs, search tools, retries and **Reanalyze** can increase usage. The 0.9.10 candidate uses one generation request per fact-check attempt; comment suggestions use a separate request. Retrieval and model processing can still take time, and a request can invoke search tools multiple times. SuperX does not enable premium Priority Processing or switch models automatically. Check pricing and actual charges in the matching Grok Dashboard or xAI Console account.
 
 The per-post Token display uses provider-reported usage for the current fact check and comments. Hover it for model and stage details. It does not total earlier reanalyses or all account spending. Cached results show their original usage and that no new usage was incurred for that cache hit; partial or missing statistics are marked rather than estimated.
 
@@ -126,10 +130,10 @@ History is separate from the API result cache: **Clear cache**, clearing/replaci
 | Local Grok cannot connect | Keep its terminal open and check the saved local code/port; follow the [connection guide](docs/CONNECTIONS.md) |
 | Wrong answer language | Select Auto to follow the displayed post, or choose your preferred fixed language; cached answers are separated by target language |
 | Fact check incomplete | Expand the result's diagnostic details; possible causes include an output limit, connection failure, language mismatch, timeout, rate limit or account access |
-| Requests stop after a rate limit | Wait for your API allowance to recover, then reanalyze manually; SuperX does not automatically pay for retries |
+| Rate limit or model busy | The affected task retries after 3 seconds, up to 5 times; other posts keep queuing. If it still fails, check diagnostics and retry later |
 | Unusual sidebar layout | Reload the extension and refresh X; report the page type, browser version and a redacted screenshot |
 
-An answer with sources is not a guarantee of correctness. An incomplete fact check does not certify the post. Any partial findings are labelled incomplete; retry manually when appropriate.
+An answer with sources is not a guarantee of correctness. An incomplete fact check does not certify the post. Partial findings stay labelled incomplete during retries and after exhaustion; retry manually when appropriate.
 
 ## Development
 

@@ -52,13 +52,12 @@ Model-provided Markdown is parsed locally. SuperX does not execute model HTML or
 | Completed analyses and comments | Browser session result cache, reusable for up to 24 hours within that session, bounded to 160 entries and approximately 4 MB; removed when the browser session ends |
 | Recent X browsing history | Unencrypted, restricted local extension storage (`superxHistory`), retained for 24 hours after each post's latest view across browser restart; bounded to 1,000 posts and approximately 6 MB |
 | Per-tab counters, collapse state and session interface language | Session extension storage |
-| API account-limit pause | Restricted session extension storage (`apiBudgetPause`): a fixed reason and sanitized HTTP/error category only, until a successful manual recovery check, Key replacement/clearing or browser-session end; no post text, credentials or usage totals |
 | Local API diagnostic log | Restricted session extension storage (`apiRequestDiagnostics`): up to 30 API failures for 24 hours within the browser session; bounded redacted provider error details, safe failure categories, trace IDs, local times/duration, transport status and requested/server-reported model metadata; cleared by its separate Settings control or browser-session end |
 | Active page snapshots, partial answers and queued jobs | Runtime memory while their page / worker remains active |
 | Local Grok connection code and port | Code encrypted in local extension storage with a separate local CryptoKey; restored into trusted session storage. Port is a local setting; credentials are not browser-synced |
 | Official Grok prompts, turns and isolated home | Official-runtime memory and its temporary home/working directory. Normal command exit attempts temporary cleanup; crashes or forced termination can leave remnants, and the provider's own retention rules apply |
 
-The diagnostic log deliberately excludes request bodies, API Keys and post/prompt fields; current request context is removed from provider messages before they are retained. It is not a raw HTTP or browser log. Error text originates with the provider, so review operational details and trace IDs before sharing a copied log. Copying does not upload it, and clearing it does not remove history, saved Keys, answer caches or the account-limit pause.
+The diagnostic log deliberately excludes request bodies, API Keys and post/prompt fields; current request context is removed from provider messages before they are retained. It is not a raw HTTP or browser log. Error text originates with the provider, so review operational details and trace IDs before sharing a copied log. Copying does not upload it, and clearing it does not remove history, saved Keys or answer caches. Legacy account-limit and capacity-pause session records are discarded on startup; a failed task no longer pauses other posts.
 
 The official client's login remains in its own default storage. SuperX's Clear saved Key does not log that client out, revoke subscription access or remove its provider records. Use official Grok logout to end that login. Removing SuperX does not uninstall or stop the official client. Runtime/account services can make supporting requests such as session titles, so one SuperX Fact Check prompt is not a promise of exactly one upstream network request.
 
@@ -95,6 +94,8 @@ History's separate 24-hour lifetime runs from the post's latest view. Expired en
 If a storage write fails, session cleanup can be delayed. Expired entries still remain excluded from reuse in worker memory, and a later cache write retries without preventing the extension from starting. Removal of a legacy local cache can also fail and should be retried by reopening the extension or clearing its data.
 
 There is no extension-level monetary budget or post-count cap. All visible eligible posts can trigger paid work. Keep automatic analysis paused until you have configured the Key and reviewed API billing.
+
+Transient failures in fact checks and comments retry after 3 seconds, up to 5 additional attempts per task, using the same selected provider, model and reasoning settings. Retries resend that task's context and can consume additional provider allowance or paid usage. Invalid credentials, account/balance restrictions, unsupported settings, output limits and unconfirmed local cancellation are not automatically retried. A failed task does not stop other posts. Started answers remain in memory when scrolling or X's timeline virtualization removes a post from view; returning to it restores the task instead of automatically starting it again. The page retains up to 100 inactive detached cards in addition to active requests, and discards them on navigation or page closure.
 
 ## Permissions
 

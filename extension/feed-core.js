@@ -51,6 +51,38 @@
     const code=value.toLowerCase().replace(/-/g,'_');
     return API_FAILURE_PROVIDER_CODES.has(code)?code:undefined;
   }
+  const AUTO_RETRY_DELAY_MS=3000;
+  const AUTO_RETRY_LIMIT=5;
+  const RETRY_CANCEL_CODES=new Set(['CANCELED','CANCELLED','BUILD_CANCELED','BUILD_CANCELLED','BUILD_CANCEL_UNCONFIRMED','RAIL_COLLAPSED']);
+  const RETRY_SETUP_CODES=new Set(['NEEDS_KEY','KEY_MIGRATION_REQUIRED','POST_INVALID','URL_SEARCH_REQUIRED','BUILD_CONNECTION_REQUIRED','BUILD_AUTH_FAILED','BUILD_PERMISSION_REQUIRED','BUILD_LOGIN_REQUIRED','BUILD_NATIVE_MISSING','BUILD_UNAVAILABLE','BUILD_VERSION_UNSUPPORTED','BUILD_CONFIG_UNSUPPORTED','BUILD_MODEL_UNSUPPORTED','BUILD_EFFORT_UNSUPPORTED','BUILD_TOOL_POLICY','BUILD_PROTOCOL_ERROR','BUILD_ACCESS_DENIED']);
+  const RETRY_BUDGET_CODES=new Set(['insufficient_quota','insufficient_credits','spending_limit','usage_limit_exceeded']);
+  const RETRY_ACCESS_CODES=new Set(['invalid_request_error','invalid_request','bad_request','invalid_api_key','authentication_error','unauthenticated','permission_error','permission_denied','forbidden','model_not_found','model_not_supported','unsupported_model','unsupported_parameter','invalid_parameter','invalid_argument','context_length_exceeded','content_filter']);
+  const RETRY_SERVICE_CODES=new Set(['API_ERROR','API_INCOMPLETE','API_STREAM_INTERRUPTED','API_STREAM_ERROR','API_LANGUAGE_MISMATCH','API_CAPACITY','RATE_LIMIT','TIMEOUT','COMMENTS_INVALID_RESPONSE','BUILD_BUSY','BUILD_TIMEOUT','BUILD_DISCONNECTED','BUILD_RATE_LIMIT','BUILD_QUOTA','BUILD_OUTPUT_INVALID','BUILD_LANGUAGE_MISMATCH','BUILD_SEARCH_NOT_PERFORMED','UNKNOWN']);
+  function autoRetryDecision(value) {
+    // A terminal error and its retained partial answer belong to one attempt.
+    // Stronger structured refusal/cancellation evidence wins over a generic
+    // network classification. Never inspect or return provider prose here.
+    const object=item=>item&&typeof item==='object'&&!Array.isArray(item)?item:null;
+    const values=[object(value),object(value?.partialResult)].filter(Boolean);
+    if(!values.length)return {retryable:false,reason:'not_failure'};
+    const failures=values.flatMap(item=>[object(item.verificationFailure),object(item.failureDetails)]).filter(Boolean);
+    const codes=values.map(item=>item.code).concat(failures.map(item=>item.errorCode));
+    const providers=failures.map(item=>apiFailureProviderCode(item.providerCode)).filter(Boolean);
+    const statuses=failures.map(item=>item.httpStatus).concat(values.map(item=>item.requestDiagnostics?.transportStatus)).filter(item=>Number.isInteger(item)&&item>=400&&item<=599);
+    if(values.some(item=>item.name==='AbortError')||codes.some(code=>RETRY_CANCEL_CODES.has(code)))return {retryable:false,reason:'cancelled'};
+    if(codes.some(code=>RETRY_SETUP_CODES.has(code)))return {retryable:false,reason:'setup_required'};
+    if(providers.some(code=>RETRY_BUDGET_CODES.has(code))||statuses.includes(402))return {retryable:false,reason:'account_limit'};
+    if(failures.some(item=>item.code==='OUTPUT_LIMIT'||['max_output_tokens','content_filter'].includes(item.reason))||codes.includes('BUILD_LIMIT'))return {retryable:false,reason:'output_limit'};
+    if(providers.some(code=>RETRY_ACCESS_CODES.has(code)))return {retryable:false,reason:'request_rejected'};
+    if(statuses.some(status=>status<500&&![408,425,429].includes(status)))return {retryable:false,reason:'request_rejected'};
+    if(failures.some(item=>item.code==='ACCESS'))return {retryable:false,reason:'request_rejected'};
+    if(codes.includes('API_CAPACITY'))return {retryable:true,reason:'capacity'};
+    if(codes.some(code=>['RATE_LIMIT','BUILD_RATE_LIMIT','BUILD_QUOTA','BUILD_BUSY'].includes(code))||statuses.includes(429)||failures.some(item=>item.code==='RATE_LIMIT'))return {retryable:true,reason:'rate_limit'};
+    if(statuses.some(status=>status>=500))return {retryable:true,reason:'server'};
+    if(statuses.some(status=>status===408||status===425)||values.some(item=>item.requestDiagnostics?.failureOrigin==='network')||failures.some(item=>['CONNECTION','TIMEOUT'].includes(item.code))||codes.some(code=>['TIMEOUT','BUILD_TIMEOUT','BUILD_DISCONNECTED','API_STREAM_INTERRUPTED','API_STREAM_ERROR'].includes(code)))return {retryable:true,reason:'connection'};
+    if(codes.some(code=>RETRY_SERVICE_CODES.has(code))||failures.some(item=>['INCOMPLETE','LANGUAGE_MISMATCH','SERVER','UNKNOWN'].includes(item.code))||values.some(item=>['incomplete','failed'].includes(item.verificationStatus)))return {retryable:true,reason:'service'};
+    return {retryable:false,reason:'not_failure'};
+  }
   const REQUEST_FAILURE_ORIGINS=new Set(['http','stream','network']);
   const REQUEST_EFFORTS=new Set(['auto','none','minimal','low','medium','high','xhigh','max']);
   const DIAGNOSTIC_UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -574,5 +606,5 @@
     clear() { this.items.clear(); }
   }
 
-  return Object.freeze({ LANGUAGES, API_MODELS, modelProfile, reasoningEffort, buildReasoningEffort, apiFailureProviderCode, sanitizedRequestDiagnostics, DEFAULT_SETTINGS, DEFAULT_PROMPTS, MAX_PROMPT_LENGTH, normalizePrompt, readerOutput, explanationMode, normalizeSettings, resolvePostLanguage, canonicalPostUrl, extractPost, postFingerprint, nativePostIdentity, apiPostIdentity, visibilityEligibility, BoundedPostQueue });
+  return Object.freeze({ LANGUAGES, API_MODELS, modelProfile, reasoningEffort, buildReasoningEffort, apiFailureProviderCode, AUTO_RETRY_DELAY_MS, AUTO_RETRY_LIMIT, autoRetryDecision, sanitizedRequestDiagnostics, DEFAULT_SETTINGS, DEFAULT_PROMPTS, MAX_PROMPT_LENGTH, normalizePrompt, readerOutput, explanationMode, normalizeSettings, resolvePostLanguage, canonicalPostUrl, extractPost, postFingerprint, nativePostIdentity, apiPostIdentity, visibilityEligibility, BoundedPostQueue });
 });

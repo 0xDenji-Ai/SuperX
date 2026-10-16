@@ -39,6 +39,8 @@ Closing a browser connection alone does not guarantee that an official-service t
 
 In both connection modes, automatic analysis waits until feed/page scrolling stops and a post remains visible for the configured time: 1 second by default, adjustable from 0 to 30 seconds in Settings. Further scrolling resets pending work's timer; scrolling inside SuperX's answers does not. Zero starts immediately, and manual reanalysis/comments bypass the wait. API concurrency defaults to 3 (configurable from 1 to 8); local Grok tasks run serially with a fresh session per post. Neither ACP nor the selected reasoning effort guarantees lower latency or lower quota consumption. Reported Token counts are not a measurement of subscription cash charges.
 
+Started answers and comments continue when their posts scroll out of view, including when X temporarily unmounts their articles. Returning restores the same task and partial output. Unstarted work can be withdrawn. Each task retries transient failures after 3 seconds, up to 5 additional attempts, without pausing other posts. Waiting retries release their request slots and rejoin the shared queue only after local transport cleanup finishes. Reported usage accumulates across attempts; retries may consume additional provider allowance or paid API usage. Invalid credentials, account restrictions, output limits, unsupported settings and unconfirmed local cancellation do not automatically retry. No retry changes the selected connection, model or reasoning level.
+
 ## Troubleshooting
 
 | Message or situation | Next step |
@@ -51,7 +53,8 @@ In both connection modes, automatic analysis waits until feed/page scrolling sto
 | Model / effort unavailable | Select the choices reported by the connected account. API and CLI catalogs may differ; no model is silently substituted. |
 | Restricted session could not be confirmed | Use the generated command. Managed-device policy may prevent this setup; do not disable company protections. API mode remains available. |
 | Stop could not be confirmed | Press Ctrl+C in the official service terminal. SuperX does not replay the request automatically. |
-| Usage / account limit | A structured API 402 or account-limit code pauses automatic API work across tabs and worker sleep. Check the matching account's usage and billing; after resolving the limit, retry one post manually. A complete successful probe resumes new work; failed checks are not automatically replayed. Ordinary settings edits or saving the same Key do not reset this pause. Switching transport is not a quota workaround. |
+| Usage / account limit | Check the matching account's usage and billing, then retry the affected post manually. This task does not automatically retry; other posts are not globally paused. Switching transport is not a quota workaround. |
+| Rate limit / model busy / interrupted stream | The affected task retries after 3 seconds, up to 5 times, while other posts continue through the shared queue. After exhaustion, check diagnostics and retry later. |
 
 Windows and macOS command generation and protocol behavior have automated coverage. Installed-browser acceptance with a real account, including macOS devices, remains a separate release check; simulated paths are not a live-device pass.
 
@@ -65,7 +68,7 @@ For API failures, open **Local diagnostic log** at the bottom of Settings. It ke
 
 **Grok CLI / ACP 模式**无需安装 SuperX 提供的其他程序：先按 [Grok 官方说明](https://github.com/xai-org/grok-build) 安装并用 `grok login` 登录。打开 SuperX 的逐步引导，选择 Windows 或 macOS，生成并复制启动命令；Windows 在 PowerShell、Mac 在终端执行。保持该窗口打开，回到 SuperX 检查连接、保存连接，再选择模型／推理档位并保存设置。检查连接不发送核查问题。
 
-启动命令只监听本机地址，自动生成连接码并隔离工作／配置目录。连接码只用于本机官方服务，不是账号密码或 API Key；请勿公开连接码、完整命令或相关截图。SuperX 本机加密保存连接码，不读取或复制官方登录文件。重启电脑后需要重新运行启动命令；按 Ctrl+C 停止服务。浏览器断线不等于官方任务已经停止，若提示停止未确认，请在终端按 Ctrl+C 手动停止。停止后若提示仍在，请从设置重新加载 SuperX，再启动服务并重新检查连接；不会自动重试或转为 API 计费。
+启动命令只监听本机地址，自动生成连接码并隔离工作／配置目录。连接码只用于本机官方服务，不是账号密码或 API Key；请勿公开连接码、完整命令或相关截图。SuperX 本机加密保存连接码，不读取或复制官方登录文件。重启电脑后需要重新运行启动命令；按 Ctrl+C 停止服务。浏览器断线不等于官方任务已经停止，若提示停止未确认，请在终端按 Ctrl+C 手动停止。停止后若提示仍在，请从设置重新加载 SuperX，再启动服务并重新检查连接；停止未确认时不会自动重试，也不会转为 API 计费。
 
 支持 Windows 和 macOS 引导；此候选按官方 Grok 1.0.60 检查兼容性。工具限制不等同于系统沙箱，Mac 及真实账号实机验收仍需另行完成。完整数据说明见 [隐私说明](../PRIVACY.md)。
 

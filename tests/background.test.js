@@ -130,13 +130,13 @@ function createBackground(options = {}) {
   let now = options.now ?? 1800000000000;
   class ClockDate extends Date { static now() { return now; } }
   const context = vm.createContext({
-    chrome, XGrokCore: core, GrokFirstUI:ui, SuperXKeyStore:options.keyStore||keyStore,SuperXBuildConnectionStore:buildStore,SuperXBuildSetup:setup, SuperXHistoryStore:{...historyStore,create(area){return historyStore.create(area,{now:()=>now});}}, importScripts() {}, URL, AbortController, DOMException, crypto, Date: ClockDate, TextEncoder, TextDecoder,
+    chrome, XGrokCore: options.retryLimit===undefined?core:{...core,AUTO_RETRY_LIMIT:options.retryLimit}, GrokFirstUI:ui, SuperXKeyStore:options.keyStore||keyStore,SuperXBuildConnectionStore:buildStore,SuperXBuildSetup:setup, SuperXHistoryStore:{...historyStore,create(area){return historyStore.create(area,{now:()=>now});}}, importScripts() {}, URL, AbortController, DOMException, crypto, Date: ClockDate, TextEncoder, TextDecoder,
     navigator: Object.hasOwn(options, 'navigator') ? options.navigator : { language: 'en-US' },
     SuperXBuild:{publicError:buildProvider.publicError,async close(){if(options.buildClose)await options.buildClose();},async status(input){buildStatusCalls.push(clone(input));return options.buildStatus?options.buildStatus(input):{connected:true,installed:true,available:true,authenticated:true,version:'1.0.60'};},
       async run(post,settings,callbacks){const call={post,settings,...callbacks};buildCalls.push(call);return options.buildRun?options.buildRun(call,harness):{text:'Checked '+post.id,provider:'build',searched:true,verificationStatus:'completed',model:'grok-4.7',usage:{total_tokens:17}};},
       async generateComments(post,settings,callbacks){const call={post,settings,...callbacks};buildCommentCalls.push(call);return options.buildCommentRun?options.buildCommentRun(call,harness):{comments:['One '+post.id,'Two '+post.id,'Three '+post.id],provider:'build',model:'grok-4.7'};}
     },
-    GrokFirstAPI: { safeUrl: provider.safeUrl, sanitizedUsage:provider.sanitizedUsage, sanitizedMetadata:provider.sanitizedMetadata, sanitizedVerificationFailure:provider.sanitizedVerificationFailure, publicError:provider.publicError, validateComments:provider.validateComments, async generateComments(post,settings,key,callbacks) {
+    GrokFirstAPI: { mergeUsage:provider.mergeUsage,usageComplete:provider.usageComplete,safeUrl: provider.safeUrl, sanitizedUsage:provider.sanitizedUsage, sanitizedMetadata:provider.sanitizedMetadata, sanitizedVerificationFailure:provider.sanitizedVerificationFailure, publicError:provider.publicError, validateComments:provider.validateComments, async generateComments(post,settings,key,callbacks) {
       const call={post,settings,key,...callbacks};commentCalls.push(call);
       return options.commentRun?options.commentRun(call,harness):{comments:['First view '+post.id+'.','Second view '+post.id+'.','Third view '+post.id+'.'],provider:'api',task:'comments'};
     }, async run(post, settings, key, callbacks) {
@@ -145,7 +145,7 @@ function createBackground(options = {}) {
     } },
     // Keep generation deadlines inert; accelerate cooldown/handshake delays.
     setTimeout(fn, delay) {
-      if (delay >= 100000 || (options.manualCancelTimers && delay === 3000)) { const timer = { deadline: fn, delay, cancelled: false }; deadlines.push(timer); return timer; }
+      if (delay >= 100000 || ((options.manualCancelTimers||options.manualRetryTimers) && delay === 3000)) { const timer = { deadline: fn, delay, dueAt:now+delay,cancelled: false }; deadlines.push(timer); return timer; }
       return { immediate: setImmediate(() => { now += Math.max(0, delay); fn(); }) };
     },
     clearTimeout(timer) { if (timer?.immediate) clearImmediate(timer.immediate); if (timer?.deadline) timer.cancelled = true; }
@@ -154,6 +154,12 @@ function createBackground(options = {}) {
     chrome, permissionState, local, session, alarmCalls, buildStore,buildState,buildStoreCalls, keyStore:options.keyStore||keyStore, keyStoreState, keyStoreCalls, apiCalls, commentCalls, buildCalls,buildCommentCalls,buildStatusCalls,runtimeMessages, createdTabs, removedTabs, tabMessages, tabs, windows, createdWindows, removedWindows, deadlines,
     now() { return now; },
     advance(ms) { now += ms; },
+    advanceRetryTimers(ms) {
+      now+=ms;
+      for(const timer of deadlines.filter(value=>!value.cancelled&&value.delay===3000&&value.dueAt<=now)){
+        timer.cancelled=true;timer.deadline();
+      }
+    },
     expireDeadline(delay) {
       const timer = deadlines.find(value => !value.cancelled && (delay === undefined || value.delay === delay));
       assert.ok(timer, 'An active generation deadline exists');
@@ -223,8 +229,10 @@ test('versioned dwell validation bounds integers and atomic credential saves ret
   const bg=createBackground();await bg.ready();for(const [input,expected]of [[-10,0],[0,0],[0.6,1],[1234.6,1235],[30001,30000],[Infinity,1000],['invalid',1000]]){await bg.message({type:'SAVE_SETTINGS',settings:{...bg.local.data.settings,dwellMs:input}});assert.equal(bg.local.data.settings.dwellMs,expected);assert.equal(bg.local.data.settings.analysisDefaultsVersion,1);}
   assert.equal((await bg.message({type:'SAVE_KEY',apiKey:'new-timing-fixture-key',remember:false,settings:{...bg.local.data.settings,dwellMs:0,apiConcurrency:4}})).ok,true);const worker=createBackground({local:bg.local.data,session:bg.session.data});await worker.ready();assert.equal(worker.local.data.settings.dwellMs,0);assert.equal(worker.local.data.settings.apiConcurrency,4);assert.equal(worker.local.data.settings.analysisDefaultsVersion,1);assert.equal(worker.apiCalls.length,0);
 });
-test('upgrading default timing and concurrency never clears stored budget or model-capacity pauses',async()=>{
-  const budget={version:1,reason:'api-budget',verificationFailure:{stage:'verify',code:'ACCESS',errorCode:'API_ERROR',httpStatus:402,providerCode:'spending_limit'}},capacity={version:1,reason:'api-capacity',model:'grok-4.3'};const bg=createBackground({local:{settings:{provider:'api',dwellMs:0,apiConcurrency:4}},session:{apiBudgetPause:budget,apiCapacityPause:capacity}});await bg.ready();const config=await bg.message({type:'GET_CONFIG'});assert.equal(config.settings.apiConcurrency,3);assert.equal(config.settings.dwellMs,1000);assert.equal(config.apiBudgetPaused,true);assert.equal(config.apiCapacityPaused,true);await bg.message({type:'SAVE_SETTINGS',settings:{...bg.local.data.settings,dwellMs:0,apiConcurrency:4}});assert.deepEqual(bg.session.data.apiBudgetPause,budget);assert.deepEqual(bg.session.data.apiCapacityPause,capacity);assert.equal((await analyze(bg,bg.connect(),'defaults-upgrade-still-paused')).code,'API_ERROR');assert.equal(bg.apiCalls.length,0);
+test('upgrading settings removes retired worker-session error pauses without a provider request',async()=>{
+  const bg=createBackground({local:{settings:{provider:'api',dwellMs:0,apiConcurrency:4}},session:{apiBudgetPause:{version:1,reason:'api-budget'},apiCapacityPause:{version:1,reason:'api-capacity',model:'grok-4.3'}}});await bg.ready();
+  assert.equal(bg.session.data.apiBudgetPause,undefined);assert.equal(bg.session.data.apiCapacityPause,undefined);
+  const config=await bg.message({type:'GET_CONFIG'});assert.equal(config.apiBudgetPaused,false);assert.equal(config.apiCapacityPaused,false);assert.equal(config.settings.apiConcurrency,3);assert.equal(bg.apiCalls.length,0);
 });
 test('changing only visibility dwell preserves active paid work and accepted queue snapshots',async()=>{
   const pending=deferred(),bg=createBackground({settings:{apiConcurrency:1},apiRun:call=>call.post.id==='100'?pending.promise:{text:'Completed evidence.',provider:'api'}});await bg.ready();const port=bg.connect();port.send({type:'ANALYZE',requestId:'dwell-active-analysis',post:post(100)});await until(()=>bg.apiCalls.length===1);port.send({type:'GENERATE_COMMENTS',requestId:'dwell-accepted-comments',post:post(101)});port.send({type:'ANALYZE',requestId:'dwell-accepted-analysis',post:post(102)});await until(()=>port.messages.some(message=>message.requestId==='dwell-accepted-analysis'&&message.type==='QUEUED'));assert.equal((await bg.message({type:'SAVE_SETTINGS',settings:{...bg.local.data.settings,dwellMs:2500}})).ok,true);assert.equal(bg.apiCalls[0].signal.aborted,false);assert.equal(port.messages.some(message=>['ERROR','COMMENT_ERROR'].includes(message.type)),false);pending.resolve({text:'Paid evidence preserved.',provider:'api'});await until(()=>port.messages.filter(message=>['RESULT','COMMENT_RESULT'].includes(message.type)).length===3);assert.equal(bg.apiCalls.every(call=>call.settings.dwellMs===1000),true);assert.equal(bg.commentCalls[0].settings.dwellMs,1000);await analyze(bg,port,'dwell-new-snapshot',103);assert.equal(bg.apiCalls.at(-1).settings.dwellMs,2500);
@@ -239,7 +247,7 @@ test('local launch is a draft, uses a random connection code, and never saves or
 });
 test('an API stream error without reader output retains safe upstream diagnostics through the worker',async()=>{
   let calls=0;
-  const bg=createBackground({apiRun:call=>provider.run(call.post,call.settings,call.key,{...call,fetchImpl:async()=>{calls++;return new Response('data: '+JSON.stringify({type:'response.failed',response:{error:{code:'service_unavailable',status:503,message:'PRIVATE_UPSTREAM_CANARY',account_id:'PRIVATE_ACCOUNT'},usage:{total_tokens:4}}})+'\n\n',{status:200,headers:{'Content-Type':'text/event-stream'}});}})});await bg.ready();const port=bg.connect();await until(()=>port.messages.some(value=>value.type==='CONFIG'));
+  const bg=createBackground({retryLimit:0,apiRun:call=>provider.run(call.post,call.settings,call.key,{...call,fetchImpl:async()=>{calls++;return new Response('data: '+JSON.stringify({type:'response.failed',response:{error:{code:'service_unavailable',status:503,message:'PRIVATE_UPSTREAM_CANARY',account_id:'PRIVATE_ACCOUNT'},usage:{total_tokens:4}}})+'\n\n',{status:200,headers:{'Content-Type':'text/event-stream'}});}})});await bg.ready();const port=bg.connect();await until(()=>port.messages.some(value=>value.type==='CONFIG'));
   const result=await analyze(bg,port,'provider-stream-failure');assert.equal(result.code,'API_ERROR');assert.deepEqual(result.verificationFailure,{stage:'verify',code:'SERVER',errorCode:'API_ERROR',httpStatus:503,providerCode:'service_unavailable'});assert.equal(result.partialResult,undefined);assert.equal(result.usage.total_tokens,4);assert.doesNotMatch(result.error,/PRIVATE_UPSTREAM_CANARY|PRIVATE_ACCOUNT/);assert.doesNotMatch(JSON.stringify(result),/PRIVATE_ACCOUNT/);assert.equal(result.requestDiagnostics.providerMessage,'PRIVATE_UPSTREAM_CANARY');assert.equal(result.requestDiagnostics.failureOrigin,'stream');assert.equal(result.requestDiagnostics.transportStatus,200);assert.equal(calls,1);assert.equal(bg.buildCalls.length,0);
 });
 
@@ -255,7 +263,7 @@ test('request diagnostics preserve stream transport versus event failure and usa
 });
 
 test('comment failures and partial Fact Checks forward separately sanitized request diagnostics',async()=>{
-  const bg=createBackground({apiRun:()=>{throw diagnosticError({partialResult:{text:'Evidence retained.',provider:'api',verificationStatus:'incomplete',verificationFailure:diagnosticFailure,usage:{total_tokens:6},requestDiagnostics:safeRequestDiagnostics}});},commentRun:()=>{throw diagnosticError({verificationFailure:undefined,usage:{total_tokens:3}});}});await bg.ready();const port=bg.connect();const partial=await analyze(bg,port,'diagnostic-partial');assert.equal(partial.partialResult.text,'Evidence retained.');assert.equal(partial.partialResult.usage.total_tokens,6);assert.deepEqual(partial.partialResult.requestDiagnostics,safeRequestDiagnostics);assert.deepEqual(partial.requestDiagnostics,safeRequestDiagnostics);
+  const bg=createBackground({retryLimit:0,apiRun:()=>{throw diagnosticError({partialResult:{text:'Evidence retained.',provider:'api',verificationStatus:'incomplete',verificationFailure:diagnosticFailure,usage:{total_tokens:6},requestDiagnostics:safeRequestDiagnostics}});},commentRun:()=>{throw diagnosticError({verificationFailure:undefined,usage:{total_tokens:3}});}});await bg.ready();const port=bg.connect();const partial=await analyze(bg,port,'diagnostic-partial');assert.equal(partial.partialResult.text,'Evidence retained.');assert.equal(partial.partialResult.usage.total_tokens,6);assert.deepEqual(partial.partialResult.requestDiagnostics,safeRequestDiagnostics);assert.deepEqual(partial.requestDiagnostics,safeRequestDiagnostics);
   const comments=await draftComments(bg,port,'diagnostic-comments',101,{force:true});assert.equal(comments.type,'COMMENT_ERROR');assert.deepEqual(comments.requestDiagnostics,safeRequestDiagnostics);assert.equal(comments.usage.total_tokens,3);assert.equal((await readDiagnostics(bg)).entries.length,2);
 });
 
@@ -264,14 +272,14 @@ test('returned incomplete results retain request diagnostics and one safe local 
 });
 
 test('diagnostic log access is limited to trusted extension pages and Clear affects neither history nor Key',async()=>{
-  const bg=createBackground({apiRun:()=>{throw diagnosticError({verificationFailure:undefined});},local:{superxHistory:[{privateHistoryFixture:true}]}});await bg.ready();await analyze(bg,bg.connect(),'trusted-diagnostic');const before=clone(bg.local.data.superxHistory);
+  const bg=createBackground({retryLimit:0,apiRun:()=>{throw diagnosticError({verificationFailure:undefined});},local:{superxHistory:[{privateHistoryFixture:true}]}});await bg.ready();await analyze(bg,bg.connect(),'trusted-diagnostic');const before=clone(bg.local.data.superxHistory);
   for(const sender of [{id:bg.chrome.runtime.id,url:'https://x.com/home',tab:{id:7}},{id:'another-extension',url:bg.chrome.runtime.getURL('options.html')},{id:bg.chrome.runtime.id,url:bg.chrome.runtime.getURL('not-settings.html')},{id:bg.chrome.runtime.id,url:'https://malicious.example/options.html'}])for(const type of ['GET_API_DIAGNOSTICS','CLEAR_API_DIAGNOSTICS'])assert.equal((await bg.message({type},sender)).ok,false);
   assert.equal((await readDiagnostics(bg)).entries.length,1);assert.equal((await bg.message({type:'CLEAR_API_DIAGNOSTICS'})).ok,true);assert.deepEqual((await readDiagnostics(bg)).entries,[]);assert.equal(bg.session.data.apiRequestDiagnostics,undefined);assert.deepEqual(bg.local.data.superxHistory,before);assert.equal(bg.session.data.apiKey,'session-secret');
 });
 
 test('diagnostic logs retain only the latest 30 requests for 24 hours and restore without provider calls',async()=>{
-  const bg=createBackground({apiRun:()=>{throw diagnosticError({verificationFailure:undefined});}});await bg.ready();const port=bg.connect();for(let i=0;i<35;i++){bg.advance(1);await analyze(bg,port,'bounded-diag-'+i,100+i);}
-  const log=await readDiagnostics(bg);assert.equal(log.entries.length,30);assert.equal(log.entries[0].recordedAt,bg.now());assert.equal(log.entries.at(-1).recordedAt,bg.now()-29);assert.equal(bg.session.data.apiRequestDiagnostics.length,30);const fresh=createBackground({local:bg.local.data,session:bg.session.data,now:bg.now()});await fresh.ready();assert.deepEqual((await readDiagnostics(fresh)).entries,log.entries);assert.equal(fresh.apiCalls.length,0);
+  const bg=createBackground({retryLimit:0,apiRun:()=>{throw diagnosticError({verificationFailure:undefined});}});await bg.ready();const port=bg.connect();for(let i=0;i<35;i++){bg.advance(1);await analyze(bg,port,'bounded-diag-'+i,100+i);}
+  const log=await readDiagnostics(bg);assert.equal(log.entries.length,30);assert.equal(log.entries[0].recordedAt,bg.now());assert.equal(log.entries.at(-1).recordedAt,bg.now()-29);assert.equal(bg.session.data.apiRequestDiagnostics.length,30);const fresh=createBackground({retryLimit:0,local:bg.local.data,session:bg.session.data,now:bg.now()});await fresh.ready();assert.deepEqual((await readDiagnostics(fresh)).entries,log.entries);assert.equal(fresh.apiCalls.length,0);
   bg.advance(24*60*60*1000);bg.chrome.alarms.onAlarm.emit({name:'SUPERX_HISTORY_CLEANUP'});await until(()=>bg.session.data.apiRequestDiagnostics.length===0);assert.deepEqual((await readDiagnostics(bg)).entries,[]);assert.equal(bg.apiCalls.length,35);
 });
 
@@ -280,8 +288,8 @@ test('restored diagnostics discard stale, future, unknown and sensitive fields b
   const bg=createBackground({session:{apiRequestDiagnostics:[valid,{...valid,recordedAt:now-24*60*60*1000},{...valid,recordedAt:now+1},{...valid,code:'PRIVATE_ERROR_CODE'},{...valid,requestDiagnostics:{failureOrigin:'PRIVATE_ORIGIN'}}]}});await bg.ready();const log=await readDiagnostics(bg);assert.equal(log.entries.length,1);assert.equal(log.entries[0].requestDiagnostics.requestId,undefined);assert.deepEqual(log.entries[0].verificationFailure,diagnosticFailure);assert.doesNotMatch(JSON.stringify(log),/PRIVATE|super-secret|owner@|token=|total_tokens|rawBody/);assert.deepEqual(bg.session.data.apiRequestDiagnostics,log.entries);assert.equal(bg.apiCalls.length,0);
 });
 
-test('diagnostic read and write failures cannot block analysis, Key readiness or account-spending pause',async()=>{
-  for(const phase of ['get','set']){let failed=false;const bg=createBackground({sessionGet:keys=>{if(phase==='get'&&keys==='apiRequestDiagnostics'){failed=true;throw Error('PRIVATE_DIAGNOSTIC_STORAGE');}},sessionSet:values=>{if(phase==='set'&&values.apiRequestDiagnostics){failed=true;throw Error('PRIVATE_DIAGNOSTIC_STORAGE');}},apiRun:()=>{throw diagnosticError();}});await bg.ready();const port=bg.connect();const result=await analyze(bg,port,'optional-diagnostic-'+phase);assert.equal(result.code,'API_ERROR');assert.equal(result.usage,undefined);assert.equal((await bg.message({type:'GET_CONFIG'})).apiBudgetPaused,true);assert.equal((await bg.message({type:'GET_CONFIG'})).ready,true);const log=await readDiagnostics(bg);assert.equal(log.entries.length,1);assert.equal(failed,true);assert.equal(bg.session.data.apiBudgetPause.verificationFailure.providerCode,'spending_limit');assert.doesNotMatch(JSON.stringify(log),/PRIVATE_DIAGNOSTIC_STORAGE/);}
+test('diagnostic read and write failures cannot block analysis or Key readiness',async()=>{
+  for(const phase of ['get','set']){let failed=false;const bg=createBackground({retryLimit:0,sessionGet:keys=>{if(phase==='get'&&keys==='apiRequestDiagnostics'){failed=true;throw Error('PRIVATE_DIAGNOSTIC_STORAGE');}},sessionSet:values=>{if(phase==='set'&&values.apiRequestDiagnostics){failed=true;throw Error('PRIVATE_DIAGNOSTIC_STORAGE');}},apiRun:()=>{throw diagnosticError();}});await bg.ready();const port=bg.connect();const result=await analyze(bg,port,'optional-diagnostic-'+phase);assert.equal(result.code,'API_ERROR');assert.equal(result.usage,undefined);assert.equal((await bg.message({type:'GET_CONFIG'})).apiBudgetPaused,false);assert.equal((await bg.message({type:'GET_CONFIG'})).ready,true);const log=await readDiagnostics(bg);assert.equal(log.entries.length,1);assert.equal(failed,true);assert.equal(bg.session.data.apiBudgetPause,undefined);assert.doesNotMatch(JSON.stringify(log),/PRIVATE_DIAGNOSTIC_STORAGE/);}
 });
 
 test('a slow optional diagnostic restore does not delay startup or analysis and Clear prevents stale revival',async()=>{
@@ -289,7 +297,7 @@ test('a slow optional diagnostic restore does not delay startup or analysis and 
 });
 
 test('failed diagnostic Clear returns a fixed safe status while ordinary requests continue',async()=>{
-  let reject=false;const bg=createBackground({sessionRemove:keys=>{if(reject&&keys==='apiRequestDiagnostics')throw Error('PRIVATE_REMOVE_LOG');},apiRun:()=>{throw diagnosticError({verificationFailure:undefined});}});await bg.ready();await analyze(bg,bg.connect(),'diagnostic-before-remove');await readDiagnostics(bg);reject=true;const result=await bg.message({type:'CLEAR_API_DIAGNOSTICS'});assert.deepEqual(clone(result),{ok:false,errorKey:'diagnostics.storageError'});assert.equal((await bg.message({type:'GET_CONFIG'})).ready,true);assert.equal((await readDiagnostics(bg)).entries.length,0);assert.equal(bg.apiCalls.length,1);assert.doesNotMatch(JSON.stringify(result),/PRIVATE/);
+  let reject=false;const bg=createBackground({retryLimit:0,sessionRemove:keys=>{if(reject&&keys==='apiRequestDiagnostics')throw Error('PRIVATE_REMOVE_LOG');},apiRun:()=>{throw diagnosticError({verificationFailure:undefined});}});await bg.ready();await analyze(bg,bg.connect(),'diagnostic-before-remove');await readDiagnostics(bg);reject=true;const result=await bg.message({type:'CLEAR_API_DIAGNOSTICS'});assert.deepEqual(clone(result),{ok:false,errorKey:'diagnostics.storageError'});assert.equal((await bg.message({type:'GET_CONFIG'})).ready,true);assert.equal((await readDiagnostics(bg)).entries.length,0);assert.equal(bg.apiCalls.length,1);assert.doesNotMatch(JSON.stringify(result),/PRIVATE/);
 });
 
 test('Build failures and API jobs held before dispatch do not create fake provider diagnostics',async()=>{
@@ -384,16 +392,6 @@ test('provider, Build port, model and effort produce separate answer caches',asy
   await change({buildReasoningEffort:'high'});assert.equal((await analyze(bg,port,'cache-high')).cached,false);
   await change({provider:'api'});assert.equal((await analyze(bg,port,'cache-api-hit')).cached,true);assert.equal(bg.apiCalls.length,1);assert.equal(bg.buildCalls.length,4);
 });
-test('Build disconnect stops queued tasks, retains actual billed usage and does not auto-retry',async()=>{
-  const task=deferred();const bg=createBackground({settings:{provider:'build'},buildRun:()=>task.promise});await bg.ready();await bg.configureBuild();await bg.message({type:'GET_CONFIG'});
-  const port=bg.connect();await until(()=>port.messages.some(m=>m.type==='CONFIG'&&m.ready));
-  port.send({type:'ANALYZE',requestId:'running-build',post:post(100)});await until(()=>bg.buildCalls.length===1);
-  port.send({type:'ANALYZE',requestId:'waiting-build',post:post(101)});await until(()=>port.messages.some(m=>m.type==='QUEUED'&&m.requestId==='waiting-build'));
-  task.reject(Object.assign(new Error('local connection'),{code:'BUILD_DISCONNECTED',usage:{total_tokens:42},model:'grok-4.7'}));
-  await until(()=>port.messages.some(m=>m.type==='ERROR'&&m.requestId==='waiting-build'));
-  const failed=port.messages.find(m=>m.type==='ERROR'&&m.requestId==='running-build');assert.equal(failed.code,'BUILD_DISCONNECTED');assert.equal(failed.usage.total_tokens,42);
-  assert.equal(bg.buildCalls.length,1);assert.equal(bg.apiCalls.length,0);assert.equal(port.messages.findLast(m=>m.type==='CONFIG').ready,false);
-});
 test('only trusted extension UI can inspect official status or open its guide',async()=>{
   const bg=createBackground();await bg.ready();await bg.configureBuild();
   const feed={id:bg.chrome.runtime.id,frameId:0,tab:{id:7},url:'https://x.com/home'};
@@ -475,7 +473,7 @@ test('analysis without a recorded visible visit never creates browsing history',
 });
 
 test('history retains completed explanations and explicit partial answers when fact checking fails',async()=>{
-  const bg=createBackground({apiRun:async call=>{call.onUpdate({text:'Completed first explanation',phase:'verification_queued',verificationStatus:'pending',sources:[],model:'grok-4.3',usage:{total_tokens:25}});const error=new Error('Interrupted');error.code='API_STREAM_INTERRUPTED';error.partialResult={text:'Completed first explanation',sources:[],provider:'api',verificationFailure:{stage:'verify',code:'CONNECTION'},model:'grok-4.3',usage:{total_tokens:25}};throw error;}});
+  const bg=createBackground({retryLimit:0,apiRun:async call=>{call.onUpdate({text:'Completed first explanation',phase:'verification_queued',verificationStatus:'pending',sources:[],model:'grok-4.3',usage:{total_tokens:25}});const error=new Error('Interrupted');error.code='API_STREAM_INTERRUPTED';error.partialResult={text:'Completed first explanation',sources:[],provider:'api',verificationFailure:{stage:'verify',code:'CONNECTION'},model:'grok-4.3',usage:{total_tokens:25}};throw error;}});
   await bg.ready();const port=bg.connect();await until(()=>port.messages.some(m=>m.type==='CONFIG'));await visitHistory(bg,port,[100]);const failed=await analyze(bg,port,'partial-history');assert.equal(failed.type,'ERROR');
   await until(()=>bg.local.data.superxHistory?.[0]?.analysis?.verificationFailure?.code==='CONNECTION');const entry=(await bg.message({type:'GET_HISTORY'})).entries[0];assert.equal(entry.analysis.text,'Completed first explanation');assert.equal(entry.analysis.verificationStatus,'incomplete');assert.equal(entry.analysis.usage.total_tokens,25);
 });
@@ -1272,21 +1270,6 @@ test('changing settings aborts active work and removes queued work before provid
   assert.equal(port.messages.findLast(message => message.type === 'CONFIG').settings.language, 'en');
 });
 
-test('RATE_LIMIT pauses queued work and reports every affected request without extra attempts', async () => {
-  const pending = deferred();
-  const bg = createBackground({ settings: { apiConcurrency: 1 }, apiRun: () => pending.promise }); await bg.ready(); const port = bg.connect();
-  port.send({ type: 'ANALYZE', requestId: 'active', post: post(100) });
-  await until(() => bg.apiCalls.length === 1);
-  port.send({ type: 'ANALYZE', requestId: 'waiting-one', post: post(101) });
-  port.send({ type: 'ANALYZE', requestId: 'waiting-two', post: post(102) });
-  await until(() => port.messages.filter(message => message.type === 'QUEUED').length === 3);
-  pending.reject(Object.assign(new Error('Rate limit'), { code: 'RATE_LIMIT' }));
-  await until(() => port.messages.filter(message => message.code === 'RATE_LIMIT').length === 3);
-  assert.equal(bg.apiCalls.length, 1);
-  assert.equal(bg.session.data.quotas[7], 1);
-  assert.equal(port.messages.some(message => message.type === 'RESULT'), false);
-});
-
 test('pre-enqueue async credential reads cannot resurrect cancelled, disconnected or outdated requests', async () => {
   for (const action of ['cancel', 'disconnect', 'settings']) {
     const gate = deferred(); let holdNextRead = false, blocked = false;
@@ -1457,7 +1440,7 @@ test('cancelling one API job retains its slot until the provider settles and lat
 
 test('an API timeout reports promptly but retains its slot until the provider settles without accepting late output', async () => {
   const gates = new Map(Array.from({ length: 3 }, (_, i) => [String(100 + i), deferred()]));
-  const bg = createBackground({ settings: { apiConcurrency: 2 }, apiRun: call => gates.get(call.post.id).promise });
+  const bg = createBackground({retryLimit:0, settings: { apiConcurrency: 2 }, apiRun: call => gates.get(call.post.id).promise });
   await bg.ready(); const port = bg.connect();
   for (let i = 0; i < 3; i += 1) port.send({ type: 'ANALYZE', requestId: 'timeout-' + i, post: post(100 + i) });
   await until(() => bg.apiCalls.length === 2); bg.expireDeadline(150000);
@@ -1531,13 +1514,6 @@ test('cancellation during a dispatch Key read does not start a provider or retai
   const bg=createBackground({settings:{apiConcurrency:1},sessionGet:async keys=>{if(keys==='apiKey'&&++reads===2){blocked=true;await reading.promise;}}});await bg.ready();const port=bg.connect();port.send({type:'ANALYZE',requestId:'cancel-before-fetch',post:post(100)});await until(()=>blocked);port.send({type:'CANCEL',requestId:'cancel-before-fetch'});port.send({type:'ANALYZE',requestId:'after-canceled-key-read',post:post(101)});await until(()=>port.messages.some(message=>message.requestId==='after-canceled-key-read'&&message.type==='RESULT'));assert.equal(bg.apiCalls.length,1);assert.equal(bg.apiCalls[0].post.id,'101');reading.resolve();await tick();assert.equal(bg.apiCalls.length,1);
 });
 
-test('a canceled account-budget probe blocks a second probe until its actual provider settles',async()=>{
-  const cleanup=deferred();let calls=0;
-  const bg=createBackground({apiRun:()=>{calls++;if(calls===1)throw spendingError();if(calls===2)return cleanup.promise;return {text:'Accepted complete manual check.',provider:'api',verificationStatus:'completed'};}});await bg.ready();const port=bg.connect();await analyze(bg,port,'before-pending-budget-probe');port.send({type:'ANALYZE',requestId:'pending-budget-probe',post:post(101),force:true});await until(()=>calls===2);port.send({type:'CANCEL',requestId:'pending-budget-probe'});await until(()=>port.messages.some(message=>message.requestId==='pending-budget-probe'&&message.type==='ERROR'));
-  const blocked=await analyze(bg,port,'second-pending-budget-probe',102,{force:true});assert.equal(blocked.code,'API_ERROR');assert.deepEqual(blocked.verificationFailure,spendingFailure);assert.equal(calls,2);assert.equal((await bg.message({type:'GET_CONFIG'})).apiBudgetPaused,true);
-  cleanup.resolve({text:'Canceled probe response must not reopen automatic work.',provider:'api',verificationStatus:'completed'});await tick();await tick();assert.equal(port.messages.some(message=>message.type==='API_BUDGET_RECOVERED'),false);assert.equal((await analyze(bg,port,'after-budget-probe-cleanup',102,{force:true})).apiBudgetRecovered,true);assert.equal(calls,3);
-});
-
 test('an idle feed disconnect and worker wake retain session credentials and cached answers without replaying paid tasks', async () => {
   const bg=createBackground({settings:{apiVerification:'off'}});
   await bg.ready();const port=bg.connect();
@@ -1607,220 +1583,11 @@ test('settings changes and client cancellation stop all old parallel jobs before
   }
 });
 
-test('a 429 stops waiting API work but other dispatched streams finish and only explicit retry resumes new work', async () => {
-  const gates = new Map(Array.from({ length: 6 }, (_, i) => [String(100 + i), deferred()]));
-  const bg = createBackground({ settings:{apiConcurrency:4}, apiRun: call => gates.get(call.post.id).promise }); await bg.ready(); const port = bg.connect();
-  for (let i = 0; i < 5; i += 1) port.send({ type: 'ANALYZE', requestId: 'rate-' + i, post: post(100 + i) });
-  await until(() => bg.apiCalls.length === 4);
-  gates.get('100').reject(Object.assign(new Error('Rate limit'), { code: 'RATE_LIMIT', partialResult: { text: 'Completed explanation', verificationStatus: 'incomplete', warning: 'Unfinished checking' } }));
-  await until(() => port.messages.filter(message => message.code === 'RATE_LIMIT').length === 2);
-  assert.equal(port.messages.find(message => message.requestId === 'rate-0' && message.type === 'ERROR').partialResult.text, 'Completed explanation');
-  for (const id of ['101', '102', '103']) gates.get(id).resolve({ text: 'Allowed finish ' + id, provider: 'api' });
-  await until(() => port.messages.filter(message => message.type === 'RESULT').length === 3);
-  assert.equal(bg.apiCalls.length, 4); assert.equal(bg.apiCalls.slice(1).every(call => !call.signal.aborted), true);
-  assert.equal((await analyze(bg, port, 'blocked-new', 105)).code, 'RATE_LIMIT');
-  assert.equal(bg.apiCalls.length, 4);
-  const retried = analyze(bg, port, 'manual-retry', 104, { force: true });
-  await until(() => bg.apiCalls.length === 5); gates.get('104').resolve({ text: 'Explicit retry result', provider: 'api' });
-  assert.equal((await retried).type, 'RESULT');
-  assert.equal(Object.values(bg.session.data.cache).some(value => value.text === 'Completed explanation'), false);
-});
-
 const spendingFailure={stage:'verify',code:'ACCESS',errorCode:'API_ERROR',httpStatus:402,providerCode:'spending_limit'};
 const spendingError=(extra={})=>Object.assign(new Error('PRIVATE_ACCOUNT_BUDGET_CANARY'),{code:'API_ERROR',verificationFailure:{...spendingFailure,message:'PRIVATE_DETAIL_CANARY'},...extra});
 const capacityFailure={stage:'verify',code:'SERVER',errorCode:'API_CAPACITY'};
 const capacityError=(extra={})=>Object.assign(new Error('PRIVATE_CAPACITY_BODY'),{code:'API_CAPACITY',verificationFailure:capacityFailure,...extra});
-const capacitySummary='The model is currently at capacity due to high demand. Please try again in a few minutes, or use a higher service tier for priority processing: https://docs.x.ai/developers/advanced-api-usage/priority-processing';
-
-test('the observed real HTTP 200 capacity failure stops a 12-post queue after at most its first four requests',async()=>{
-  let calls=0;const bg=createBackground({settings:{apiConcurrency:4},apiRun:call=>provider.run(call.post,call.settings,call.key,{...call,fetchImpl:async()=>{calls++;return new Response('data: '+JSON.stringify({type:'error',error:capacitySummary})+'\n\n',{status:200});}})});await bg.ready();const port=bg.connect();for(let i=0;i<12;i++)port.send({type:'ANALYZE',requestId:'capacity-real-'+i,post:post(100+i)});await until(()=>port.messages.filter(message=>message.type==='ERROR').length===12);assert.equal(calls,4);assert.equal(bg.apiCalls.length,4);for(const error of port.messages.filter(message=>message.type==='ERROR'))assert.equal(error.code,'API_CAPACITY');
-  const actual=port.messages.find(message=>message.type==='ERROR'&&message.requestDiagnostics);assert.deepEqual(actual.verificationFailure,capacityFailure);assert.equal(actual.requestDiagnostics.transportStatus,200);assert.equal(actual.verificationFailure.httpStatus,undefined);assert.equal(actual.verificationFailure.providerCode,undefined);assert.equal((await analyze(bg,port,'capacity-real-new',112)).code,'API_CAPACITY');assert.equal(calls,4);const config=await bg.message({type:'GET_CONFIG'});assert.equal(config.apiCapacityPaused,true);assert.equal(config.apiBudgetPaused,false);assert.equal(config.ready,true);assert.equal((await readDiagnostics(bg)).entries.length,4,'Queued posts did not send requests and cannot create provider error records');
-});
-
-test('a real partial capacity failure remains ERROR with billed partial evidence and pauses untouched requests',async()=>{
-  let calls=0;const bg=createBackground({settings:{apiConcurrency:1,language:'en'},apiRun:call=>provider.run(call.post,call.settings,call.key,{...call,fetchImpl:async()=>{calls++;return new Response([
-    {type:'response.output_text.delta',delta:'The primary source contradicts that date.'},
-    {type:'error',error:capacitySummary,response:{usage:{total_tokens:7}}}
-  ].map(event=>'data: '+JSON.stringify(event)+'\n\n').join(''),{status:200});}})});await bg.ready();const port=bg.connect();port.send({type:'ANALYZE',requestId:'capacity-partial',post:post(100)});port.send({type:'ANALYZE',requestId:'capacity-untouched',post:post(101)});await until(()=>port.messages.filter(message=>message.type==='ERROR').length===2);const error=port.messages.find(message=>message.requestId==='capacity-partial'&&message.type==='ERROR');assert.equal(error.code,'API_CAPACITY');assert.equal(error.usage.total_tokens,7);assert.equal(error.partialResult.text,'The primary source contradicts that date.');assert.equal(error.partialResult.verificationStatus,'incomplete');assert.equal(error.partialResult.requestDiagnostics.transportStatus,200);assert.deepEqual(error.verificationFailure,capacityFailure);assert.equal(calls,1);assert.equal(port.messages.some(message=>message.type==='RESULT'),false);assert.equal(Object.keys(bg.session.data.cache||{}).length,0);
-});
-
-test('a capacity pause permits only one manual probe and notifies all tabs only after a complete accepted response',async()=>{
-  const probe=deferred();let count=0;const bg=createBackground({apiRun:()=>{if(count++===0)throw capacityError();if(count===2)return probe.promise;return {text:'Completed normal evidence.',provider:'api',verificationStatus:'completed'};}});await bg.ready();const first=bg.connect(),second=bg.connect({sender:{id:bg.chrome.runtime.id,frameId:0,url:'https://x.com/home',tab:{id:8}}});await analyze(bg,first,'capacity-first');const pending=analyze(bg,first,'capacity-probe',101,{force:true});await until(()=>bg.apiCalls.length===2);assert.equal((await analyze(bg,second,'capacity-other-auto',102)).code,'API_CAPACITY');assert.equal((await analyze(bg,second,'capacity-other-probe',103,{force:true})).code,'API_CAPACITY');assert.equal(bg.apiCalls.length,2);
-  probe.resolve({text:'The model accepted a complete manual check.',provider:'api',verificationStatus:'completed',usage:{total_tokens:6}});const result=await pending;assert.equal(result.apiCapacityRecovered,true);assert.equal(result.apiBudgetRecovered,undefined);assert.equal(result.result.apiCapacityRecovered,undefined);assert.equal(bg.session.data.apiCapacityPause,undefined);for(const port of [first,second])await until(()=>port.messages.some(message=>message.type==='API_CAPACITY_RECOVERED'));await until(()=>second.messages.some(message=>message.type==='CONFIG'&&message.apiCapacityPaused===false));assert.equal((await analyze(bg,second,'capacity-auto-restored',102)).type,'RESULT');assert.equal(bg.apiCalls.length,3);
-});
-
-test('failed, partial, failed-status and failure-bearing capacity probes never reopen automatic work',async()=>{
-  let count=0;const bg=createBackground({apiRun:()=>{count++;if(count<=2)throw capacityError();if(count===3)return {text:'Unfinished evidence.',provider:'api',verificationStatus:'incomplete'};if(count===4)return {text:'Failed evidence.',provider:'api',verificationStatus:'failed'};if(count===5)return {text:'Failure-bearing evidence.',provider:'api',verificationFailure:{stage:'verify',code:'CONNECTION'}};return {text:'Full evidence.',provider:'api',verificationStatus:'completed'};}});await bg.ready();const port=bg.connect();await analyze(bg,port,'capacity-init');for(let i=0;i<4;i++){const result=await analyze(bg,port,'capacity-unsuccessful-'+i,101+i,{force:true});assert.equal(result.apiCapacityRecovered,undefined);assert.equal((await bg.message({type:'GET_CONFIG'})).apiCapacityPaused,true);assert.equal((await analyze(bg,port,'capacity-auto-held-'+i,110+i)).code,'API_CAPACITY');}assert.equal(port.messages.some(message=>message.type==='API_CAPACITY_RECOVERED'),false);assert.equal((await analyze(bg,port,'capacity-full-probe',120,{force:true})).apiCapacityRecovered,true);assert.equal(bg.apiCalls.length,6);
-});
-
-test('capacity metadata returned in a partial provider result is still emitted as an error and cannot cache',async()=>{
-  const bg=createBackground({apiRun:()=>({text:'Actual unfinished evidence.',provider:'api',verificationStatus:'incomplete',verificationFailure:capacityFailure,usage:{total_tokens:5}})});await bg.ready();const result=await analyze(bg,bg.connect(),'returned-capacity-partial');assert.equal(result.type,'ERROR');assert.equal(result.code,'API_CAPACITY');assert.equal(result.partialResult.text,'Actual unfinished evidence.');assert.equal(result.usage.total_tokens,5);assert.equal((await bg.message({type:'GET_CONFIG'})).apiCapacityPaused,true);assert.equal(Object.keys(bg.session.data.cache||{}).length,0);
-});
-
-test('capacity records restore across worker sleep and contain only the fixed reason and safe selected model',async()=>{
-  const bg=createBackground({apiRun:()=>{throw capacityError({requestDiagnostics:safeRequestDiagnostics,usage:{total_tokens:9}});}});await bg.ready();await analyze(bg,bg.connect(),'capacity-before-sleep');await until(()=>Boolean(bg.session.data.apiCapacityPause));assert.deepEqual(bg.session.data.apiCapacityPause,{version:1,reason:'api-capacity',model:'grok-4.3'});assert.doesNotMatch(JSON.stringify(bg.session.data.apiCapacityPause),/PRIVATE|session-secret|usage|total_tokens|prompt|post|message/);const worker=createBackground({local:bg.local.data,session:bg.session.data});await worker.ready();const port=worker.connect();await until(()=>port.messages.some(message=>message.type==='CONFIG'));assert.equal(port.messages.find(message=>message.type==='CONFIG').apiCapacityPaused,true);assert.equal((await analyze(worker,port,'capacity-after-wake',101)).code,'API_CAPACITY');assert.equal(worker.apiCalls.length,0);assert.equal((await analyze(worker,port,'capacity-wake-manual',101,{force:true})).apiCapacityRecovered,true);assert.equal(worker.session.data.apiCapacityPause,undefined);
-});
-
-test('same Key and ordinary settings preserve model capacity pauses while an explicit API model change clears them',async()=>{
-  const bg=createBackground({apiRun:()=>{throw capacityError();}});await bg.ready();const port=bg.connect();await analyze(bg,port,'capacity-before-settings');await until(()=>Boolean(bg.session.data.apiCapacityPause));const saved=clone(bg.session.data.apiCapacityPause);await bg.message({type:'SAVE_KEY',apiKey:' \tsession-secret \t',remember:false});for(const change of [{language:'ja'},{apiReasoningEffort:'low'},{apiConcurrency:8},{enabled:false},{enabled:true},{interfaceLanguage:'zh-CN'},{verifyPrompt:'Updated instructions.'}]){await bg.message({type:'SAVE_SETTINGS',settings:{...bg.local.data.settings,...change}});assert.equal((await bg.message({type:'GET_CONFIG'})).apiCapacityPaused,true);assert.deepEqual(bg.session.data.apiCapacityPause,saved);}assert.equal(bg.apiCalls.length,1);await bg.message({type:'SAVE_SETTINGS',settings:{...bg.local.data.settings,apiModel:'grok-4.5'}});assert.equal((await bg.message({type:'GET_CONFIG'})).apiCapacityPaused,false);assert.equal(bg.session.data.apiCapacityPause,undefined);assert.equal(bg.apiCalls.length,1,'Saving a model only changes configuration and never sends a probe');
-});
-
-test('atomic Key and model saves clear only model capacity while same-model Key replacements retain it',async()=>{
-  const bg=createBackground({apiRun:()=>{throw capacityError();}});await bg.ready();await analyze(bg,bg.connect(),'atomic-capacity');await until(()=>Boolean(bg.session.data.apiCapacityPause));await bg.message({type:'SAVE_KEY',apiKey:'new-explicit-account',remember:false});assert.equal((await bg.message({type:'GET_CONFIG'})).apiCapacityPaused,true);await bg.message({type:'SAVE_KEY',apiKey:'new-explicit-account',remember:false,settings:{...bg.local.data.settings,apiModel:'grok-4.7'}});assert.equal((await bg.message({type:'GET_CONFIG'})).apiCapacityPaused,false);assert.equal(bg.session.data.apiCapacityPause,undefined);
-});
-
-test('Build does not apply model capacity pauses and returning to the same API model preserves them',async()=>{
-  const bg=createBackground({apiRun:()=>{throw capacityError();}});await bg.ready();const port=bg.connect();await analyze(bg,port,'capacity-api-before-build');await until(()=>Boolean(bg.session.data.apiCapacityPause));await bg.configureBuild();await bg.message({type:'SAVE_SETTINGS',settings:{...bg.local.data.settings,provider:'build'}});await until(()=>port.messages.some(message=>message.type==='CONFIG'&&message.settings.provider==='build'&&message.ready));assert.equal((await bg.message({type:'GET_CONFIG'})).apiCapacityPaused,false);assert.equal((await analyze(bg,port,'capacity-explicit-build',101)).type,'RESULT');assert.equal(bg.buildCalls.length,1);await bg.message({type:'SAVE_SETTINGS',settings:{...bg.local.data.settings,provider:'api'}});assert.equal((await bg.message({type:'GET_CONFIG'})).apiCapacityPaused,true);assert.equal((await analyze(bg,port,'capacity-api-back',102)).code,'API_CAPACITY');assert.equal(bg.apiCalls.length,1);
-});
-
-test('canceling a capacity probe retains its probe lease until cleanup and never clears its pause on a late answer',async()=>{
-  const cleanup=deferred();let count=0;const bg=createBackground({apiRun:()=>{if(count++===0)throw capacityError();if(count===2)return cleanup.promise;return {text:'Complete later probe.',provider:'api',verificationStatus:'completed'};}});await bg.ready();const port=bg.connect();await analyze(bg,port,'capacity-before-cancel');port.send({type:'ANALYZE',requestId:'capacity-canceled-probe',post:post(101),force:true});await until(()=>bg.apiCalls.length===2);port.send({type:'CANCEL',requestId:'capacity-canceled-probe'});await until(()=>port.messages.some(message=>message.requestId==='capacity-canceled-probe'&&message.type==='ERROR'));assert.equal((await analyze(bg,port,'capacity-second-pending-probe',102,{force:true})).code,'API_CAPACITY');assert.equal(bg.apiCalls.length,2);cleanup.resolve({text:'Late canceled response.',provider:'api',verificationStatus:'completed'});await tick();await tick();assert.equal((await bg.message({type:'GET_CONFIG'})).apiCapacityPaused,true);assert.equal(port.messages.some(message=>message.type==='API_CAPACITY_RECOVERED'),false);assert.equal((await analyze(bg,port,'capacity-after-probe-cleanup',102,{force:true})).apiCapacityRecovered,true);
-});
-
-test('a newer sibling capacity error prevents an older probe from clearing the current pause',async()=>{
-  const gates=new Map([['100',deferred()],['101',deferred()],['102',deferred()]]);const bg=createBackground({settings:{apiConcurrency:2},apiRun:call=>gates.get(call.post.id)?.promise??{text:'Fresh complete probe.',provider:'api',verificationStatus:'completed'}});await bg.ready();const port=bg.connect();for(const id of [100,101])port.send({type:'ANALYZE',requestId:'capacity-sibling-'+id,post:post(id)});await until(()=>bg.apiCalls.length===2);gates.get('100').reject(capacityError());await until(()=>port.messages.some(message=>message.requestId==='capacity-sibling-100'&&message.type==='ERROR'));const old=analyze(bg,port,'capacity-old-probe',102,{force:true});await until(()=>bg.apiCalls.length===3);gates.get('101').reject(capacityError());await until(()=>port.messages.some(message=>message.requestId==='capacity-sibling-101'&&message.type==='ERROR'));gates.get('102').resolve({text:'Earlier complete probe.',provider:'api',verificationStatus:'completed'});assert.equal((await old).apiCapacityRecovered,undefined);assert.equal((await analyze(bg,port,'capacity-after-new-sibling',104)).code,'API_CAPACITY');assert.equal((await analyze(bg,port,'capacity-fresh-probe',103,{force:true})).apiCapacityRecovered,true);
-});
-
-test('capacity recovery cannot clear a budget pause raised after that capacity probe began',async()=>{
-  const gates=new Map([['100',deferred()],['101',deferred()],['102',deferred()]]);const bg=createBackground({settings:{apiConcurrency:2},apiRun:call=>gates.get(call.post.id)?.promise??{text:'Explicit account probe accepted.',provider:'api',verificationStatus:'completed'}});await bg.ready();const port=bg.connect();for(const id of [100,101])port.send({type:'ANALYZE',requestId:'capacity-budget-'+id,post:post(id)});await until(()=>bg.apiCalls.length===2);gates.get('100').reject(capacityError());await until(()=>port.messages.some(message=>message.requestId==='capacity-budget-100'&&message.type==='ERROR'));const capacityProbe=analyze(bg,port,'capacity-before-budget-probe',102,{force:true});await until(()=>bg.apiCalls.length===3);gates.get('101').reject(spendingError());await until(()=>port.messages.some(message=>message.requestId==='capacity-budget-101'&&message.type==='ERROR'));gates.get('102').resolve({text:'This model accepted the earlier probe.',provider:'api',verificationStatus:'completed'});const result=await capacityProbe;assert.equal(result.apiCapacityRecovered,true);assert.equal(result.apiBudgetRecovered,undefined);assert.equal((await bg.message({type:'GET_CONFIG'})).apiBudgetPaused,true);assert.equal(port.messages.some(message=>message.type==='API_BUDGET_RECOVERED'),false);assert.deepEqual((await analyze(bg,port,'capacity-budget-auto-still-held',104)).verificationFailure,spendingFailure);
-});
-
-test('explicit API model changes clear model capacity but never clear the account budget cause',async()=>{
-  const bg=createBackground({session:{apiCapacityPause:{version:1,reason:'api-capacity',model:'grok-4.3'},apiBudgetPause:{version:1,reason:'api-budget',verificationFailure:spendingFailure}}});await bg.ready();const port=bg.connect();assert.equal((await analyze(bg,port,'both-pauses-budget-first')).code,'API_ERROR');await bg.message({type:'SAVE_SETTINGS',settings:{...bg.local.data.settings,apiModel:'grok-4.5'}});const config=await bg.message({type:'GET_CONFIG'});assert.equal(config.apiCapacityPaused,false);assert.equal(config.apiBudgetPaused,true);assert.deepEqual(config.apiBudgetFailure,spendingFailure);assert.equal((await analyze(bg,port,'new-model-still-budget-held',101)).code,'API_ERROR');assert.equal(bg.apiCalls.length,0);
-});
-
-test('only valid complete comment probes can recover model capacity and comment failures retain their safe classification',async()=>{
-  let state='capacity';const bg=createBackground({apiRun:()=>{throw capacityError();},commentRun:()=>{if(state==='capacity')throw capacityError({verificationFailure:undefined,failureDetails:{code:'SERVER',errorCode:'API_CAPACITY'},requestDiagnostics:safeRequestDiagnostics});return {comments:state==='invalid'?['Same.','Same.','Third.']:['First.','Second.','Third.'],provider:'api'};}});await bg.ready();const port=bg.connect();await analyze(bg,port,'capacity-before-comment');const failure=await draftComments(bg,port,'capacity-comment-failed',101,{force:true});assert.equal(failure.code,'API_CAPACITY');assert.deepEqual(failure.verificationFailure,capacityFailure);state='invalid';assert.equal((await draftComments(bg,port,'capacity-comment-invalid',101,{force:true})).code,'COMMENTS_INVALID_RESPONSE');assert.equal((await bg.message({type:'GET_CONFIG'})).apiCapacityPaused,true);state='valid';assert.equal((await draftComments(bg,port,'capacity-comment-valid',101,{force:true})).apiCapacityRecovered,true);assert.equal((await bg.message({type:'GET_CONFIG'})).apiCapacityPaused,false);
-});
-
-test('cached answers and ordinary already-running successes cannot recover a capacity pause',async()=>{
-  let count=0;const gates=new Map([['101',deferred()],['102',deferred()]]);const bg=createBackground({apiRun:call=>{count++;return gates.get(call.post.id)?.promise??{text:'Cached evidence.',provider:'api',verificationStatus:'completed'};}});await bg.ready();const port=bg.connect();await analyze(bg,port,'capacity-cache-seed');for(const id of [101,102])port.send({type:'ANALYZE',requestId:'capacity-cache-'+id,post:post(id)});await until(()=>count===3);gates.get('101').reject(capacityError());await until(()=>port.messages.some(message=>message.requestId==='capacity-cache-101'&&message.type==='ERROR'));gates.get('102').resolve({text:'An ordinary sibling completed.',provider:'api',verificationStatus:'completed'});await until(()=>port.messages.some(message=>message.requestId==='capacity-cache-102'&&message.type==='RESULT'));const cached=await analyze(bg,port,'capacity-cached-readable');assert.equal(cached.cached,true);assert.equal(cached.apiCapacityRecovered,undefined);assert.equal((await bg.message({type:'GET_CONFIG'})).apiCapacityPaused,true);assert.equal(port.messages.some(message=>message.type==='API_CAPACITY_RECOVERED'),false);assert.equal(count,3);
-});
-
-test('capacity persistence failures do not hide answers, remove other safety gates or claim unconfirmed recovery',async()=>{
-  let failWrite=true,failRemove=false,count=0;const bg=createBackground({sessionSet:values=>{if(failWrite&&values.apiCapacityPause)throw Error('PRIVATE_CAPACITY_STORAGE');},sessionRemove:keys=>{if(failRemove&&keys==='apiCapacityPause')throw Error('PRIVATE_CAPACITY_REMOVE');},apiRun:()=>{if(count++===0)throw capacityError();return {text:'Actual complete manual check.',provider:'api',verificationStatus:'completed',usage:{total_tokens:10}};}});await bg.ready();const port=bg.connect();await analyze(bg,port,'capacity-storage-first');await tick();assert.equal((await bg.message({type:'GET_CONFIG'})).apiCapacityPaused,true);assert.equal((await analyze(bg,port,'capacity-write-failed-auto',101)).code,'API_CAPACITY');failWrite=false;failRemove=true;const result=await analyze(bg,port,'capacity-remove-failed-probe',101,{force:true});assert.equal(result.type,'RESULT');assert.equal(result.result.usage.total_tokens,10);assert.equal(result.apiCapacityRecovered,undefined);assert.equal((await bg.message({type:'GET_CONFIG'})).apiCapacityPaused,true);assert.equal(port.messages.some(message=>message.type==='API_CAPACITY_RECOVERED'),false);failRemove=false;assert.equal((await analyze(bg,port,'capacity-storage-recovered',102,{force:true})).apiCapacityRecovered,true);assert.doesNotMatch(JSON.stringify(port.messages),/PRIVATE_CAPACITY_/);
-});
-
-test('canceling a capacity probe during durable recovery cannot clear or revive the wrong model pause',async()=>{
-  const removing=deferred();let pending=false,count=0;const bg=createBackground({sessionRemove:async keys=>{if(pending&&keys==='apiCapacityPause')await removing.promise;},apiRun:()=>{if(count++===0)throw capacityError();return {text:'Provider finished before UI cancellation.',provider:'api',verificationStatus:'completed'};}});await bg.ready();const port=bg.connect();await analyze(bg,port,'capacity-before-recovery-cancel');await until(()=>Boolean(bg.session.data.apiCapacityPause));pending=true;port.send({type:'ANALYZE',requestId:'capacity-durable-probe',post:post(101),force:true});await until(()=>bg.apiCalls.length===2);await tick();port.send({type:'CANCEL',requestId:'capacity-durable-probe'});await tick();removing.resolve();await until(()=>port.messages.some(message=>message.requestId==='capacity-durable-probe'&&message.type==='ERROR'));assert.equal((await bg.message({type:'GET_CONFIG'})).apiCapacityPaused,true);await until(()=>bg.session.data.apiCapacityPause?.reason==='api-capacity');assert.equal(port.messages.some(message=>message.type==='API_CAPACITY_RECOVERED'),false);
-});
-
-test('a newer explicit model change cannot be undone by canceled capacity recovery restoring an older record',async()=>{
-  const removing=deferred();let block=false,started=false,count=0;const bg=createBackground({sessionRemove:async keys=>{if(block&&keys==='apiCapacityPause'){started=true;await removing.promise;}},apiRun:()=>{if(count++===0)throw capacityError();return {text:'Complete model response.',provider:'api',verificationStatus:'completed'};}});await bg.ready();const port=bg.connect();await analyze(bg,port,'capacity-before-model-recovery');await until(()=>Boolean(bg.session.data.apiCapacityPause));block=true;port.send({type:'ANALYZE',requestId:'capacity-reset-probe',post:post(101),force:true});await until(()=>started);const changing=bg.message({type:'SAVE_SETTINGS',settings:{...bg.local.data.settings,apiModel:'grok-4.5'}});await tick();await tick();removing.resolve();assert.equal((await changing).ok,true);await tick();await tick();assert.equal(bg.session.data.apiCapacityPause,undefined);assert.equal((await bg.message({type:'GET_CONFIG'})).apiCapacityPaused,false);assert.equal(port.messages.some(message=>message.type==='API_CAPACITY_RECOVERED'),false);
-});
-
-test('a failed model-settings commit does not remove the previous model capacity record',async()=>{
-  let fail=false;const bg=createBackground({localSet:values=>{if(fail&&values.settings)throw Error('Synthetic settings storage failure');},apiRun:()=>{throw capacityError();}});await bg.ready();await analyze(bg,bg.connect(),'capacity-before-failed-model-save');await until(()=>Boolean(bg.session.data.apiCapacityPause));const saved=clone(bg.session.data.apiCapacityPause);fail=true;assert.equal((await bg.message({type:'SAVE_SETTINGS',settings:{...bg.local.data.settings,apiModel:'grok-4.5'}})).ok,false);assert.deepEqual(bg.session.data.apiCapacityPause,saved);const worker=createBackground({local:bg.local.data,session:bg.session.data});await worker.ready();assert.equal((await worker.message({type:'GET_CONFIG'})).apiCapacityPaused,true);assert.equal(worker.apiCalls.length,0);
-});
-test('an API spending failure stops untouched jobs with its real cause while other paid streams finish',async()=>{
-  const first=deferred(),other=deferred();
-  const bg=createBackground({settings:{apiConcurrency:2},apiRun:call=>(call.post.id==='100'?first:other).promise});await bg.ready();const port=bg.connect();
-  for(let i=0;i<3;i++)port.send({type:'ANALYZE',requestId:'spending-'+i,post:post(100+i)});
-  port.send({type:'GENERATE_COMMENTS',requestId:'spending-draft-waiting',post:post(103)});
-  await until(()=>bg.apiCalls.length===2);await tick();await tick();
-  first.reject(spendingError({usage:{total_tokens:29,secret:'PRIVATE_USAGE_CANARY'},usageComplete:false,model:'grok-4.3'}));
-  await until(()=>port.messages.filter(value=>value.code==='API_ERROR').length===3);
-  const failed=port.messages.find(value=>value.requestId==='spending-0'&&value.type==='ERROR');assert.deepEqual(failed.verificationFailure,spendingFailure);assert.deepEqual(failed.usage,{total_tokens:29});assert.equal(failed.model,'grok-4.3');assert.equal(failed.partialResult,undefined);
-  for(const id of ['spending-2','spending-draft-waiting']){const error=port.messages.find(value=>value.requestId===id&&value.code==='API_ERROR');assert.deepEqual(error.verificationFailure,spendingFailure);assert.equal(error.usage,undefined);}
-  assert.equal(bg.commentCalls.length,0);assert.equal(bg.apiCalls.length,2);assert.equal(bg.apiCalls[1].signal.aborted,false);
-  other.resolve({text:'Already paid check completed.',provider:'api',verificationStatus:'completed'});await until(()=>port.messages.some(value=>value.requestId==='spending-1'&&value.type==='RESULT'));
-  assert.equal((await analyze(bg,port,'spending-new-auto',104)).code,'API_ERROR');assert.deepEqual((await draftComments(bg,port,'spending-new-draft',105)).verificationFailure,spendingFailure);assert.equal(bg.apiCalls.length,2);assert.equal(bg.commentCalls.length,0);
-  assert.equal((await analyze(bg,port,'cached-during-spending',101)).cached,true);assert.equal(bg.apiCalls.length,2);assert.equal(bg.buildCalls.length,0);assert.doesNotMatch(JSON.stringify(port.messages),/PRIVATE_ACCOUNT|PRIVATE_DETAIL|PRIVATE_USAGE/);
-});
-test('only definitive structured API budget diagnostics pause new automatic work',async()=>{
-  for(const details of [{httpStatus:402},...['spending_limit','insufficient_credits','insufficient_quota','usage_limit_exceeded'].map(providerCode=>({providerCode}))]){
-    let count=0;const bg=createBackground({apiRun:()=>{if(count++===0)throw Object.assign(new Error('Private account details'),{code:'API_ERROR',failureDetails:{...details,private:'PRIVATE'}});return {text:'Available.',provider:'api'};}});await bg.ready();const port=bg.connect();
-    const first=await analyze(bg,port,'safe-budget-'+count);assert.equal(first.code,'API_ERROR');assert.equal(first.verificationFailure.stage,'verify');const held=await analyze(bg,port,'held-budget-'+count,101);assert.deepEqual(held.verificationFailure,first.verificationFailure);assert.equal(bg.apiCalls.length,1);assert.equal(held.code,'API_ERROR');
-  }
-  for(const details of [{httpStatus:403,providerCode:'permission_denied'},{httpStatus:503,providerCode:'service_unavailable'},{httpStatus:400,providerCode:'invalid_request'},{httpStatus:'402',providerCode:'something_else'}]){
-    let count=0;const bg=createBackground({apiRun:()=>{if(count++===0)throw Object.assign(new Error('spending_limit 402 in untrusted free text'),{code:'API_ERROR',failureDetails:details});return {text:'A later request succeeds.',provider:'api'};}});await bg.ready();const port=bg.connect();await analyze(bg,port,'not-budget-first');assert.equal((await analyze(bg,port,'not-budget-second',101)).type,'RESULT');assert.equal(bg.apiCalls.length,2);
-  }
-});
-test('a spending pause allows one explicit manual probe and resumes automatic work only after complete success',async()=>{
-  const retry=deferred();let count=0;const bg=createBackground({apiRun:()=>{count++;if(count===1)throw spendingError();if(count===2)return retry.promise;return {text:'Available again.',provider:'api',verificationStatus:'completed'};}});await bg.ready();const port=bg.connect();await analyze(bg,port,'spend-first');
-  const pending=analyze(bg,port,'spend-user-probe',101,{force:true});await until(()=>bg.apiCalls.length===2);
-  assert.deepEqual((await analyze(bg,port,'held-during-probe',102)).verificationFailure,spendingFailure);assert.equal((await analyze(bg,port,'second-user-probe-held',103,{force:true})).code,'API_ERROR');assert.equal(bg.apiCalls.length,2);
-  retry.resolve({text:'The account accepted this complete check.',provider:'api',verificationStatus:'completed',usage:{total_tokens:7}});const result=await pending;assert.equal(result.type,'RESULT');assert.equal(result.apiBudgetRecovered,true);assert.equal(result.result.apiBudgetRecovered,undefined);assert.equal((await analyze(bg,port,'auto-after-recovery',102)).type,'RESULT');assert.equal(bg.apiCalls.length,3);assert.equal(bg.buildCalls.length,0);
-});
-test('a failed or incomplete spending probe keeps automatic work paused without retrying it',async()=>{
-  let count=0;const bg=createBackground({apiRun:()=>{count++;if(count===1||count===2)throw spendingError({usage:{total_tokens:count}});if(count===3)return {text:'Some actual evidence, unfinished.',provider:'api',verificationStatus:'incomplete',verificationFailure:{stage:'verify',code:'CONNECTION'}};return {text:'Complete check.',provider:'api',verificationStatus:'completed'};}});await bg.ready();const port=bg.connect();await analyze(bg,port,'initial-spending');
-  assert.equal((await analyze(bg,port,'failed-user-probe',101,{force:true})).code,'API_ERROR');assert.equal((await analyze(bg,port,'still-blocked',102)).code,'API_ERROR');assert.equal(bg.apiCalls.length,2);
-  const incomplete=await analyze(bg,port,'incomplete-user-probe',101,{force:true});assert.equal(incomplete.type,'RESULT');assert.equal(incomplete.result.verificationStatus,'incomplete');assert.equal(incomplete.apiBudgetRecovered,undefined);assert.equal((await analyze(bg,port,'still-blocked-after-partial',102)).code,'API_ERROR');assert.equal(bg.apiCalls.length,3);
-  assert.equal((await analyze(bg,port,'complete-user-probe',101,{force:true})).apiBudgetRecovered,true);assert.equal((await analyze(bg,port,'auto-resumed',102)).type,'RESULT');assert.equal(bg.apiCalls.length,5);
-});
-test('a returned partial spending result pauses the queue before releasing its API slot',async()=>{
-  const first=deferred();const bg=createBackground({settings:{apiConcurrency:1},apiRun:()=>first.promise});await bg.ready();const port=bg.connect();port.send({type:'ANALYZE',requestId:'partial-spending',post:post(100)});port.send({type:'ANALYZE',requestId:'untouched-after-partial',post:post(101)});await until(()=>bg.apiCalls.length===1);
-  first.resolve({text:'The evidence received before the budget failure.',provider:'api',verificationStatus:'incomplete',verificationFailure:spendingFailure,usage:{total_tokens:8}});await until(()=>port.messages.some(value=>value.requestId==='partial-spending'&&value.type==='RESULT'));
-  const result=port.messages.find(value=>value.requestId==='partial-spending'&&value.type==='RESULT');assert.equal(result.result.verificationStatus,'incomplete');assert.deepEqual(result.result.verificationFailure,spendingFailure);assert.equal(result.result.usage.total_tokens,8);assert.equal(result.apiBudgetRecovered,undefined);assert.deepEqual(port.messages.find(value=>value.requestId==='untouched-after-partial'&&value.type==='ERROR').verificationFailure,spendingFailure);assert.equal(bg.apiCalls.length,1);
-});
-test('explicit Key replacement and relevant settings reset a spending pause without password or unlock state',async()=>{
-  for(const change of ['key','settings']){let count=0;const bg=createBackground({apiRun:()=>{if(count++===0)throw spendingError();return {text:'Configured account available.',provider:'api'};}});await bg.ready();const port=bg.connect();await analyze(bg,port,'before-reset');
-    if(change==='key')assert.equal((await bg.message({type:'SAVE_KEY',apiKey:'replacement-budget-key',remember:false})).ok,true);else{assert.equal((await bg.message({type:'SAVE_KEY',apiKey:''})).ok,true);await bg.message({type:'SAVE_KEY',apiKey:'session-secret',remember:false});}
-    const config=await bg.message({type:'GET_CONFIG'});assert.equal(config.ready,true);assert.equal(config.keyState,'ready');assert.doesNotMatch(JSON.stringify(config),/password|unlock|spending_limit/);const result=await analyze(bg,port,'after-reset',101);assert.equal(result.type,'RESULT',change+': '+JSON.stringify(result));assert.equal(bg.apiCalls.length,2);
-  }
-});
-test('an API spending pause never authorizes fallback and does not block an explicitly selected Build connection',async()=>{
-  const bg=createBackground({apiRun:()=>{throw spendingError();}});await bg.ready();const port=bg.connect();await analyze(bg,port,'api-spending');assert.equal(bg.buildCalls.length,0);assert.equal((await bg.configureBuild()).ok,true);assert.equal((await bg.message({type:'SAVE_SETTINGS',settings:{...bg.local.data.settings,provider:'build'}})).ok,true);await until(()=>bg.buildStatusCalls.length>0);await until(()=>port.messages.some(value=>value.type==='CONFIG'&&value.settings.provider==='build'&&value.ready));assert.equal((await analyze(bg,port,'explicit-build',101)).type,'RESULT');assert.equal(bg.buildCalls.length,1);assert.equal(bg.apiCalls.length,1);
-});
-test('a sanitized spending pause survives worker sleep without credentials, prose or usage in its record',async()=>{
-  const bg=createBackground({apiRun:()=>{throw spendingError({usage:{total_tokens:9},model:'grok-4.3'});}});await bg.ready();const port=bg.connect();await analyze(bg,port,'sleep-budget');await until(()=>bg.session.data.apiBudgetPause?.verificationFailure?.providerCode==='spending_limit');
-  assert.deepEqual(bg.session.data.apiBudgetPause,{version:1,reason:'api-budget',verificationFailure:spendingFailure});assert.doesNotMatch(JSON.stringify(bg.session.data.apiBudgetPause),/PRIVATE|session-secret|apiKey|total_tokens|model/);
-  const worker=createBackground({local:bg.local.data,session:bg.session.data});await worker.ready();const wake=worker.connect();await until(()=>wake.messages.some(value=>value.type==='CONFIG'));const initial=wake.messages.find(value=>value.type==='CONFIG');assert.equal(initial.apiBudgetPaused,true);assert.deepEqual(initial.apiBudgetFailure,spendingFailure);const held=await analyze(worker,wake,'wake-budget',101);assert.deepEqual(held.verificationFailure,spendingFailure);assert.equal(worker.apiCalls.length,0);assert.equal(worker.buildCalls.length,0);
-  const recovered=await analyze(worker,wake,'wake-user-probe',101,{force:true});assert.equal(recovered.apiBudgetRecovered,true);assert.equal(worker.session.data.apiBudgetPause,undefined);assert.equal(worker.apiCalls.length,1);
-  const restarted=createBackground({local:worker.local.data,session:worker.session.data});await restarted.ready();assert.equal((await analyze(restarted,restarted.connect(),'after-durable-recovery',102)).type,'RESULT');assert.equal(restarted.apiCalls.length,1);
-});
-test('Key/settings resets remove a stored spending pause while ordinary rate limits remain memory-only',async()=>{
-  for(const change of ['key','settings']){const bg=createBackground({apiRun:()=>{throw spendingError();}});await bg.ready();await analyze(bg,bg.connect(),'persist-before-reset');await until(()=>Boolean(bg.session.data.apiBudgetPause));
-    if(change==='key')await bg.message({type:'SAVE_KEY',apiKey:'new-key-after-budget',remember:false});else{await bg.message({type:'SAVE_KEY',apiKey:''});await bg.message({type:'SAVE_KEY',apiKey:'session-secret',remember:false});}
-    assert.equal(bg.session.data.apiBudgetPause,undefined);const fresh=createBackground({local:bg.local.data,session:bg.session.data});await fresh.ready();assert.equal((await analyze(fresh,fresh.connect(),'after-persist-reset',101)).type,'RESULT');
-  }
-  const limited=createBackground({apiRun:()=>{throw Object.assign(new Error('429'),{code:'RATE_LIMIT'});}});await limited.ready();await analyze(limited,limited.connect(),'rate-memory');await tick();assert.equal(limited.session.data.apiBudgetPause,undefined);const fresh=createBackground({local:limited.local.data,session:limited.session.data});await fresh.ready();assert.equal((await analyze(fresh,fresh.connect(),'rate-worker-wake',101)).type,'RESULT');
-});
-test('failed pause writes keep the current automatic gate closed and do not prevent explicit recovery',async()=>{
-  let rejectPause=true,count=0;const bg=createBackground({sessionSet:values=>{if(rejectPause&&values.apiBudgetPause)throw Error('PRIVATE_STORAGE_ERROR');},apiRun:()=>{if(count++===0)throw spendingError();return {text:'Complete explicit check.',provider:'api',verificationStatus:'completed'};}});await bg.ready();const port=bg.connect();await analyze(bg,port,'write-fails-budget');await tick();await tick();assert.equal(bg.session.data.apiBudgetPause,undefined);assert.deepEqual((await analyze(bg,port,'write-fails-auto-held',101)).verificationFailure,spendingFailure);assert.equal(bg.apiCalls.length,1);
-  rejectPause=false;assert.equal((await analyze(bg,port,'explicit-after-write-fault',101,{force:true})).apiBudgetRecovered,true);assert.equal((await analyze(bg,port,'auto-after-write-fault',102)).type,'RESULT');assert.doesNotMatch(JSON.stringify(port.messages),/PRIVATE_STORAGE/);
-});
-test('failed stored-pause removal cannot reopen automatic billing or claim recovery after a paid answer',async()=>{
-  let rejectRemoval=true,count=0;const bg=createBackground({sessionRemove:keys=>{if(rejectRemoval&&(typeof keys==='string'?[keys]:keys).includes('apiBudgetPause'))throw Error('PRIVATE_REMOVE_ERROR');},apiRun:()=>{if(count++===0)throw spendingError();return {text:'Actual complete answer.',provider:'api',verificationStatus:'completed',usage:{total_tokens:10}};}});await bg.ready();const port=bg.connect();await analyze(bg,port,'remove-fault-budget');await until(()=>Boolean(bg.session.data.apiBudgetPause));
-  const answer=await analyze(bg,port,'remove-fault-probe',101,{force:true});assert.equal(answer.type,'RESULT');assert.equal(answer.result.text,'Actual complete answer.');assert.equal(answer.result.usage.total_tokens,10);assert.equal(answer.apiBudgetRecovered,undefined);assert.equal(port.messages.some(value=>value.type==='API_BUDGET_RECOVERED'),false);assert.equal((await analyze(bg,port,'remove-fault-auto-held',102)).code,'API_ERROR');assert.equal(bg.apiCalls.length,2);
-  const fresh=createBackground({local:bg.local.data,session:bg.session.data});await fresh.ready();assert.equal((await analyze(fresh,fresh.connect(),'remove-fault-wake-held',102)).code,'API_ERROR');assert.equal(fresh.apiCalls.length,0);
-  rejectRemoval=false;assert.equal((await analyze(bg,port,'remove-repaired-probe',101,{force:true})).apiBudgetRecovered,true);assert.equal(bg.session.data.apiBudgetPause,undefined);assert.equal((await analyze(bg,port,'remove-repaired-auto',102)).type,'RESULT');assert.doesNotMatch(JSON.stringify(port.messages),/PRIVATE_REMOVE/);
-});
-test('durable successful budget recovery notifies every connected tab with a fixed credential-free event',async()=>{
-  let count=0;const bg=createBackground({apiRun:()=>{if(count++===0)throw spendingError();return {text:'Account accepted the explicit check.',provider:'api',verificationStatus:'completed'};}});await bg.ready();const first=bg.connect(),second=bg.connect({sender:{id:bg.chrome.runtime.id,frameId:0,url:'https://x.com/author',tab:{id:8}}});await analyze(bg,first,'cross-tab-budget');await until(()=>second.messages.some(value=>value.type==='CONFIG'&&value.apiBudgetPaused));
-  const paused=second.messages.findLast(value=>value.type==='CONFIG');assert.equal(paused.apiBudgetPaused,true);assert.deepEqual(paused.apiBudgetFailure,spendingFailure);assert.equal(bg.apiCalls.length,1);
-  assert.equal((await analyze(bg,first,'cross-tab-recovery',101,{force:true})).apiBudgetRecovered,true);await until(()=>second.messages.some(value=>value.type==='API_BUDGET_RECOVERED'));for(const port of [first,second])assert.deepEqual(port.messages.filter(value=>value.type==='API_BUDGET_RECOVERED'),[{type:'API_BUDGET_RECOVERED'}]);await until(()=>second.messages.some(value=>value.type==='CONFIG'&&value.apiBudgetPaused===false));assert.equal(bg.session.data.apiBudgetPause,undefined);assert.equal(bg.apiCalls.length,2);assert.equal((await analyze(bg,second,'fresh-after-recovery-event',102)).type,'RESULT');assert.equal(bg.apiCalls.length,3);
-});
-test('stored API budget pauses never mark Build or ordinary 429 configuration as budget-limited',async()=>{
-  const stored={version:1,reason:'api-budget',verificationFailure:spendingFailure};const bg=createBackground({settings:{provider:'build'},session:{apiBudgetPause:stored}});await bg.ready();assert.equal((await bg.message({type:'GET_CONFIG'})).apiBudgetPaused,false);assert.equal((await bg.message({type:'GET_CONFIG'})).apiBudgetFailure,undefined);assert.equal(bg.apiCalls.length,0);
-  const limited=createBackground({apiRun:()=>{throw Object.assign(new Error('429'),{code:'RATE_LIMIT'});}});await limited.ready();await analyze(limited,limited.connect(),'rate-config-only');assert.equal((await limited.message({type:'GET_CONFIG'})).apiBudgetPaused,false);assert.equal((await limited.message({type:'GET_CONFIG'})).apiBudgetFailure,undefined);
-});
-test('a newer sibling spending failure cannot allow two probes or let an older probe clear its newer pause',async()=>{
-  const gates=new Map([['100',deferred()],['101',deferred()],['102',deferred()]]);const bg=createBackground({settings:{apiConcurrency:2},apiRun:call=>gates.get(call.post.id)?.promise??{text:'Fresh probe accepted.',provider:'api',verificationStatus:'completed'}});await bg.ready();const port=bg.connect();for(const id of [100,101])port.send({type:'ANALYZE',requestId:'sibling-'+id,post:post(id)});await until(()=>bg.apiCalls.length===2);gates.get('100').reject(spendingError());await until(()=>port.messages.some(value=>value.requestId==='sibling-100'&&value.type==='ERROR'));
-  const older=analyze(bg,port,'older-budget-probe',102,{force:true});await until(()=>bg.apiCalls.length===3);gates.get('101').reject(spendingError());await until(()=>port.messages.some(value=>value.requestId==='sibling-101'&&value.type==='ERROR'));assert.equal((await analyze(bg,port,'must-not-start-second-probe',103,{force:true})).code,'API_ERROR');assert.equal(bg.apiCalls.length,3);
-  gates.get('102').resolve({text:'Earlier probe completed.',provider:'api',verificationStatus:'completed'});assert.equal((await older).apiBudgetRecovered,undefined);assert.equal((await analyze(bg,port,'still-held-after-newer-error',104)).code,'API_ERROR');assert.equal(port.messages.some(value=>value.type==='API_BUDGET_RECOVERED'),false);assert.equal((await analyze(bg,port,'fresh-probe-after-newer-error',103,{force:true})).apiBudgetRecovered,true);assert.equal(bg.apiCalls.length,4);
-});
-test('same-Key saves and ordinary model/language/concurrency changes preserve the account pause',async()=>{
-  const bg=createBackground({apiRun:()=>{throw spendingError();}});await bg.ready();const port=bg.connect();await analyze(bg,port,'strict-budget');await until(()=>Boolean(bg.session.data.apiBudgetPause));const saved=clone(bg.session.data.apiBudgetPause);
-  for(const key of ['session-secret',' \tsession-secret \t']){assert.equal((await bg.message({type:'SAVE_KEY',apiKey:key,remember:false})).ok,true);assert.equal((await analyze(bg,port,'same-key-remains-held-'+key.length,101)).code,'API_ERROR');assert.deepEqual(bg.session.data.apiBudgetPause,saved);}
-  for(const change of [{apiModel:'grok-4.5'},{language:'ja'},{apiConcurrency:8},{enabled:false},{enabled:true},{interfaceLanguage:'zh-CN'},{verifyPrompt:'Another user prompt'}]){await bg.message({type:'SAVE_SETTINGS',settings:{...bg.local.data.settings,...change}});assert.deepEqual(bg.session.data.apiBudgetPause,saved);assert.equal((await bg.message({type:'GET_CONFIG'})).apiBudgetPaused,true);}
-  assert.equal((await analyze(bg,port,'settings-remain-held',102)).code,'API_ERROR');assert.equal(bg.apiCalls.length,1);assert.equal(port.messages.some(value=>value.type==='API_BUDGET_RECOVERED'),false);
-});
-test('switching to Build leaves the API account pause stored and switching back still holds that Key',async()=>{
-  const bg=createBackground({apiRun:()=>{throw spendingError();},buildRun:()=>{throw Object.assign(new Error('Build limited'),{code:'RATE_LIMIT'});}});await bg.ready();const port=bg.connect();await analyze(bg,port,'api-pause-before-build');await until(()=>Boolean(bg.session.data.apiBudgetPause));const saved=clone(bg.session.data.apiBudgetPause);await bg.configureBuild();await bg.message({type:'SAVE_SETTINGS',settings:{...bg.local.data.settings,provider:'build'}});await until(()=>port.messages.some(value=>value.type==='CONFIG'&&value.settings.provider==='build'&&value.ready));assert.equal((await analyze(bg,port,'build-own-rate',101)).code,'RATE_LIMIT');assert.equal((await bg.message({type:'GET_CONFIG'})).apiBudgetPaused,false);assert.deepEqual(bg.session.data.apiBudgetPause,saved);
-  await bg.message({type:'SAVE_SETTINGS',settings:{...bg.local.data.settings,provider:'api'}});const config=await bg.message({type:'GET_CONFIG'});assert.equal(config.apiBudgetPaused,true);assert.deepEqual(config.apiBudgetFailure,spendingFailure);assert.equal((await analyze(bg,port,'api-still-held-after-build',102)).code,'API_ERROR');assert.equal(bg.apiCalls.length,1);assert.equal(bg.buildCalls.length,1);
-});
-test('a Key replacement received during worker startup clears the restored old-account pause only after committing',async()=>{
-  const started=deferred(),release=deferred();const record={version:1,reason:'api-budget',verificationFailure:spendingFailure};let gated=false;
-  const bg=createBackground({session:{apiBudgetPause:record},sessionGet:async keys=>{if(!gated&&Array.isArray(keys)&&keys.includes('apiBudgetPause')){gated=true;started.resolve();await release.promise;}}});await started.promise;const saved=bg.message({type:'SAVE_KEY',apiKey:'new-key-during-startup',remember:false});release.resolve();assert.equal((await saved).ok,true);await bg.ready();assert.equal(bg.session.data.apiBudgetPause,undefined);assert.equal((await bg.message({type:'GET_CONFIG'})).apiBudgetPaused,false);assert.equal((await analyze(bg,bg.connect(),'new-key-after-startup',101)).type,'RESULT');assert.equal(bg.apiCalls[0].key,'new-key-during-startup');
-});
-test('only valid successful manual comment drafts can recover a stored API budget pause',async()=>{
-  let valid=false;const bg=createBackground({apiRun:()=>{throw spendingError();},commentRun:()=>({comments:valid?['First.','Second.','Third.']:['Same.','Same.','Third.'],provider:'api'})});await bg.ready();const port=bg.connect();await analyze(bg,port,'comment-recovery-budget');const failed=await draftComments(bg,port,'invalid-comment-probe',101,{force:true});assert.equal(failed.code,'COMMENTS_INVALID_RESPONSE');assert.equal(failed.apiBudgetRecovered,undefined);assert.equal((await bg.message({type:'GET_CONFIG'})).apiBudgetPaused,true);assert.equal(port.messages.some(value=>value.type==='API_BUDGET_RECOVERED'),false);
-  valid=true;const result=await draftComments(bg,port,'valid-comment-probe',101,{force:true});assert.equal(result.type,'COMMENT_RESULT');assert.equal(result.apiBudgetRecovered,true);assert.equal(bg.session.data.apiBudgetPause,undefined);assert.deepEqual(port.messages.filter(value=>value.type==='API_BUDGET_RECOVERED'),[{type:'API_BUDGET_RECOVERED'}]);assert.equal(bg.apiCalls.length,1);assert.equal(bg.commentCalls.length,2);
-});
-test('a failed replacement credential transaction never deletes the stored old-account budget cause',async()=>{
-  let fail=false;const bg=createBackground({apiRun:()=>{throw spendingError();},localSet:values=>{if(fail&&values.apiKeyEncrypted)throw Error('Synthetic Key storage failure');}});await bg.ready();const port=bg.connect();await analyze(bg,port,'before-failed-key-replacement');await until(()=>Boolean(bg.session.data.apiBudgetPause));const cause=clone(bg.session.data.apiBudgetPause);fail=true;const saved=await bg.message({type:'SAVE_KEY',apiKey:'new-key-not-committed',remember:true});assert.equal(saved.ok,false);assert.deepEqual(bg.session.data.apiBudgetPause,cause);assert.equal((await bg.message({type:'GET_CONFIG'})).apiBudgetPaused,true);assert.equal(port.messages.some(value=>value.type==='API_BUDGET_RECOVERED'),false);assert.equal(bg.apiCalls.length,1);
-});
+const capacitySummary='The model is currently at capacity due to high demand.';
 
 test('visible posts use every configured Fact Check slot and issue one provider call each',async()=>{
   for(const limit of [1,2,4,8]){
@@ -1853,20 +1620,6 @@ test('cancelling or changing settings prevents an untouched queued Fact Check fr
   }
 });
 
-test('a Fact Check rate limit retains only its actual partial evidence and pauses untouched posts',async()=>{
-  const first=deferred(),second=deferred();
-  const bg=createBackground({settings:{apiConcurrency:2},apiRun:call=>(call.post.id==='100'?first:second).promise});
-  await bg.ready();const port=bg.connect();
-  for(let i=0;i<3;i++)port.send({type:'ANALYZE',requestId:'rate-only-'+i,post:post(100+i)});
-  await until(()=>bg.apiCalls.length===2);
-  first.reject(Object.assign(new Error('429'),{code:'RATE_LIMIT',partialResult:{text:'Some evidence, unfinished.',verificationStatus:'incomplete'}}));
-  await until(()=>port.messages.filter(m=>m.code==='RATE_LIMIT').length===2);
-  assert.equal(port.messages.find(m=>m.requestId==='rate-only-0'&&m.type==='ERROR').partialResult.text,'Some evidence, unfinished.');
-  second.resolve({text:'Already running check completed.',provider:'api'});
-  await until(()=>port.messages.some(m=>m.requestId==='rate-only-1'&&m.type==='RESULT'));
-  assert.equal(bg.apiCalls.length,2);assert.equal(Object.values(bg.session.data.cache||{}).some(v=>v.text==='Some evidence, unfinished.'),false);
-});
-
 test('parallel cache writes preserve all completed answers and clearing cache cannot be undone by an older write', async () => {
   for (const clear of [false, true]) {
     const write = deferred(), gates = new Map([['100', deferred()], ['101', deferred()]]); let writes = 0;
@@ -1887,22 +1640,11 @@ test('parallel cache writes preserve all completed answers and clearing cache ca
 });
 
 test('retired verification modes migrate to one Fact Check cache while incomplete results never cache',async()=>{
-  let complete=false;const bg=createBackground({apiRun:async call=>({text:'Evidence',provider:'api',apiVerification:call.settings.apiVerification,verificationStatus:complete?'completed':'incomplete'})});
+  let complete=false;const bg=createBackground({retryLimit:0,apiRun:async call=>({text:'Evidence',provider:'api',apiVerification:call.settings.apiVerification,verificationStatus:complete?'completed':'incomplete'})});
   await bg.ready();const port=bg.connect();assert.equal((await analyze(bg,port,'incomplete-only')).cached,false);assert.equal((await analyze(bg,port,'retry-only')).cached,false);
   complete=true;assert.equal((await analyze(bg,port,'complete-only')).cached,false);
   for(const legacy of ['off','inline','background']){await bg.message({type:'SAVE_SETTINGS',settings:{...core.DEFAULT_SETTINGS,apiVerification:legacy}});assert.equal(bg.local.data.settings.apiVerification,'only');assert.equal((await analyze(bg,port,'cached-'+legacy)).cached,true);}
   assert.equal(bg.apiCalls.length,3);
-});
-
-test('a Fact Check rate limit before output has no invented retained answer and starts no queued request',async()=>{
-  const gate=deferred(),bg=createBackground({settings:{apiConcurrency:1},apiRun:()=>gate.promise});
-  await bg.ready();const port=bg.connect();
-  port.send({type:'ANALYZE',requestId:'no-text-rate',post:post(100)});
-  port.send({type:'ANALYZE',requestId:'no-text-waiting',post:post(101)});
-  await until(()=>bg.apiCalls.length===1);gate.reject(Object.assign(new Error('429'),{code:'RATE_LIMIT',verificationFailure:{code:'RATE_LIMIT',stage:'verify',httpStatus:429}}));
-  await until(()=>port.messages.filter(m=>m.code==='RATE_LIMIT').length===2);
-  const error=port.messages.find(m=>m.requestId==='no-text-rate'&&m.type==='ERROR');assert.equal(error.partialResult,undefined);
-  assert.equal(error.verificationFailure.stage,'verify');assert.equal(bg.apiCalls.length,1);
 });
 
 test('completed API HTTP stages release slots and display results while optional cache persistence is pending', async () => {
@@ -2214,7 +1956,7 @@ test('manual drafts remain available when automatic analysis is paused and sanit
 });
 
 test('invalid comment results produce only COMMENT_ERROR and never enter the explanation or draft cache', async () => {
-  const bg=createBackground({commentRun:async()=>({comments:['Same.','Same.','Third.'],provider:'api'})});
+  const bg=createBackground({retryLimit:0,commentRun:async()=>({comments:['Same.','Same.','Third.'],provider:'api'})});
   await bg.ready();const port=bg.connect();
   for(const requestId of ['invalid-first','invalid-retry']) {
     const response=await draftComments(bg,port,requestId);
@@ -2222,26 +1964,6 @@ test('invalid comment results produce only COMMENT_ERROR and never enter the exp
   }
   assert.equal(bg.commentCalls.length,2);assert.equal(Object.keys(bg.session.data.cache||{}).length,0);
   assert.equal(port.messages.some(message=>['RESULT','COMMENT_RESULT','UPDATE'].includes(message.type)),false);
-});
-
-test('a comment rate limit pauses waiting drafts and analyses with task-specific errors until explicit retry', async () => {
-  const pending=deferred();
-  const bg=createBackground({settings:{apiConcurrency:1},commentRun:call=>call.post.id==='100'?pending.promise:{comments:['First.','Second.','Third.'],provider:'api'}});
-  await bg.ready();const port=bg.connect();
-  port.send({type:'GENERATE_COMMENTS',requestId:'limited-draft',post:post(100)});
-  await until(()=>bg.commentCalls.length===1);
-  port.send({type:'ANALYZE',requestId:'waiting-analysis',post:post(101)});
-  port.send({type:'GENERATE_COMMENTS',requestId:'waiting-draft',post:post(102)});
-  await tick();await tick();await tick();
-  pending.reject(Object.assign(new Error('Provider 429'),{code:'RATE_LIMIT'}));
-  await until(()=>port.messages.filter(message=>message.code==='RATE_LIMIT').length===3);
-  assert.equal(port.messages.find(message=>message.requestId==='waiting-analysis'&&message.code==='RATE_LIMIT').type,'ERROR');
-  for(const id of ['limited-draft','waiting-draft'])assert.equal(port.messages.find(message=>message.requestId===id&&message.code==='RATE_LIMIT').type,'COMMENT_ERROR');
-  assert.equal(bg.commentCalls.length,1);assert.equal(bg.apiCalls.length,0);
-  assert.equal((await draftComments(bg,port,'blocked-draft',103)).code,'RATE_LIMIT');
-  assert.equal(bg.commentCalls.length,1);
-  assert.equal((await draftComments(bg,port,'user-retries-draft',103,{force:true})).type,'COMMENT_RESULT');
-  assert.equal(bg.commentCalls.length,2);assert.equal(bg.session.data.quotas?.[7]||0,0);
 });
 
 test('cancelling a comment reports promptly but retains its slot until late drafts settle without being displayed or cached', async () => {
@@ -2442,7 +2164,7 @@ test('analysis billing metadata reaches streaming, completion and cache reads wi
 });
 
 test('analysis errors sanitize cumulative token metadata and retained partial results without a retry',async()=>{
-  const bg=createBackground({apiRun:async call=>{
+  const bg=createBackground({retryLimit:0,apiRun:async call=>{
     call.onUpdate({text:'Retained explanation.',phase:'explain',usage:{total_tokens:30},usageComplete:false,model:'grok-explain'});
     throw Object.assign(new Error('Rate limit'),{code:'RATE_LIMIT',usage:{total_tokens:40,secret:'must-not-leak'},usageComplete:false,model:'grok-verify',
       modelByStage:{explain:'grok-explain',verify:'grok-verify',secret:'must-not-leak'},usageByStage:{explain:{total_tokens:30},verify:{input_tokens:10,apiKey:'must-not-leak'}},
@@ -2474,7 +2196,7 @@ test('new and cached comment drafts retain their own usage and actual model whil
 test('failed or invalid comment drafts retain charged counters and model but never enter the draft cache',async()=>{
   for(const invalidResult of [false,true]){
     const metadata={usage:{total_tokens:42,apiKey:'must-not-leak'},model:'grok-comments',usageComplete:true};
-    const bg=createBackground({commentRun:async()=>{
+    const bg=createBackground({retryLimit:0,commentRun:async()=>{
       if(invalidResult)return {comments:['Same.','Same.','Third.'],provider:'api',...metadata};
       throw Object.assign(new Error('Invalid JSON'),{code:'COMMENTS_INVALID_RESPONSE',...metadata});
     }});
@@ -2600,7 +2322,7 @@ test('safe background failure causes survive updates, results and cache reload w
 test('failed checks preserve their sanitized cause without caching, retries or leaking provider errors',async()=>{
   const metadata={code:'RATE_LIMIT',stage:'verify',errorCode:'RATE_LIMIT',httpStatus:429};
   for(const terminalError of [false,true]){
-    const bg=createBackground({settings:{apiVerification:'background'},apiRun:async call=>{
+    const bg=createBackground({retryLimit:0,settings:{apiVerification:'background'},apiRun:async call=>{
       const result={text:'Explanation.',provider:'api',verificationStatus:'incomplete',verificationFailure:{...metadata,reason:'PRIVATE',message:'PRIVATE'},usage:{total_tokens:30},usageComplete:false};
       call.onUpdate({...result,phase:'verify'});
       if(!terminalError)return result;
@@ -2649,7 +2371,7 @@ test('queued visible posts retain FIFO order across single-stage Fact Checks',as
 });
 
 test('a Fact Check timeout retains streamed evidence while keeping its unfinished provider slot',async()=>{
-  const gate=deferred(),bg=createBackground({settings:{apiConcurrency:1},apiRun:async call=>{
+  const gate=deferred(),bg=createBackground({retryLimit:0,settings:{apiConcurrency:1},apiRun:async call=>{
     if(call.post.id!=='100')return{text:'Next completed check.',provider:'api'};
     call.onUpdate({text:'Partial evidence only.',phase:'verify',usage:{total_tokens:15},model:'grok-current'});
     await gate.promise;return{text:'Late answer',provider:'api'};
@@ -2666,7 +2388,7 @@ test('a Fact Check timeout retains streamed evidence while keeping its unfinishe
 });
 
 test('failed result statuses are never admitted to the cache',async()=>{
-  const bg=createBackground({apiRun:async()=>({text:'Retained explanation.',verificationStatus:'failed',provider:'api'})});await bg.ready();const port=bg.connect();
+  const bg=createBackground({retryLimit:0,apiRun:async()=>({text:'Retained explanation.',verificationStatus:'failed',provider:'api'})});await bg.ready();const port=bg.connect();
   assert.equal((await analyze(bg,port,'failed-result')).cached,false);assert.equal((await analyze(bg,port,'failed-result-again')).cached,false);
   assert.equal(bg.apiCalls.length,2);assert.equal(Object.keys(bg.session.data.cache||{}).length,0);
 });
@@ -2674,7 +2396,7 @@ test('failed result statuses are never admitted to the cache',async()=>{
 const toolOnlyReply='```json\n{"absolute_path":"x_thread_fetch","post_id":"2109569541072384120"}\n```\n\n```json\n{"absolute_path":"web_search","query":"bone density and fracture risk","num_results":10}\n```';
 
 test('tool-only final output is incomplete, billed, and never cached or saved as a history answer',async()=>{
-  const bg=createBackground({apiRun:async call=>{
+  const bg=createBackground({retryLimit:0,apiRun:async call=>{
     call.onUpdate({text:toolOnlyReply,phase:'verify',usage:{total_tokens:60},model:'grok-current'});
     return{text:toolOnlyReply,provider:'api',verificationStatus:'completed',usage:{total_tokens:75},model:'grok-current'};
   }});await bg.ready();const port=bg.connect();await visitHistory(bg,port,[100]);
@@ -2701,7 +2423,7 @@ test('only genuine reader output reaches the feed, cache, comment context and hi
 
 test('an authoritative empty or rejected final response revokes earlier text without reviving it as a partial',async()=>{
   for(const text of ['',toolOnlyReply,{absolute_path:'web_search',query:'not a reader string'}]){
-    const bg=createBackground({apiRun:async call=>{
+    const bg=createBackground({retryLimit:0,apiRun:async call=>{
       call.onUpdate({text:'An earlier fragment.',phase:'verify'});
       return{text,provider:'api',usage:{total_tokens:44},model:'grok-current'};
     }});await bg.ready();const port=bg.connect(),failure=await analyze(bg,port,'revoke-terminal');
@@ -2713,7 +2435,7 @@ test('an authoritative empty or rejected final response revokes earlier text wit
 
 test('progress updates preserve reader partials while explicit empty updates revoke timeout retention',async()=>{
   for(const clear of [false,true]){
-    const gate=deferred(),bg=createBackground({apiRun:async call=>{
+    const gate=deferred(),bg=createBackground({retryLimit:0,apiRun:async call=>{
       call.onUpdate({text:'Actual partial evidence.',phase:'verify',usage:{total_tokens:17},model:'grok-current'});
       call.onUpdate({...(clear?{text:''}:{}),phase:'verify',usage:{total_tokens:19},model:'grok-current'});
       await gate.promise;return{text:'Late evidence.',provider:'api'};
@@ -2729,7 +2451,7 @@ test('progress updates preserve reader partials while explicit empty updates rev
 
 test('tool-only error partials and hard timeouts do not retain command arguments',async()=>{
   for(const timeout of [false,true]){
-    const gate=deferred(),bg=createBackground({apiRun:async call=>{
+    const gate=deferred(),bg=createBackground({retryLimit:0,apiRun:async call=>{
       call.onUpdate({text:toolOnlyReply,phase:'verify',usage:{total_tokens:21},model:'grok-current'});
       if(timeout)await gate.promise;
       throw Object.assign(new Error('Interrupted'),{code:'API_STREAM_INTERRUPTED',usage:{total_tokens:25},partialResult:{text:toolOnlyReply,provider:'api',usage:{total_tokens:25}}});
@@ -3283,4 +3005,129 @@ test('remembered demotion and explicit Clear fail closed when durable key deleti
     assert.equal((await draftComments(bg,bg.connect(),'no-draft-after-failed-demotion')).code,'NEEDS_KEY');assert.equal(bg.commentCalls.length,0);
     fail=false;assert.equal((await bg.message({type:'SAVE_KEY',apiKey:nextKey,remember:false})).ok,true);assert.equal(bg.keyStoreState.key,null);assert.equal(bg.session.data.apiKey,nextKey||undefined);
   }
+});
+
+test('automatic retries wait a full three seconds and keep the same logical request identity',async()=>{
+  const started=[];const bg=createBackground({manualRetryTimers:true,apiRun:(call,harness)=>{started.push(harness.now());if(started.length===1)throw capacityError();return{text:'Recovered evidence.',provider:'api',verificationStatus:'completed'};}});await bg.ready();const port=bg.connect();
+  port.send({type:'ANALYZE',requestId:'same-logical-request',post:post(100)});await until(()=>port.messages.some(m=>m.type==='RETRY_WAIT'));
+  const wait=port.messages.find(m=>m.type==='RETRY_WAIT');assert.equal(wait.retryAttempt,1);assert.equal(wait.maxRetries,5);assert.equal(wait.retryDelayMs,3000);assert.equal(wait.requestId,'same-logical-request');assert.doesNotMatch(JSON.stringify(wait),/PRIVATE_CAPACITY_BODY/);
+  bg.advanceRetryTimers(2999);await tick();assert.equal(bg.apiCalls.length,1);bg.advanceRetryTimers(1);await until(()=>port.messages.some(m=>m.type==='RESULT'));
+  assert.deepEqual(started,[started[0],started[0]+3000]);assert.deepEqual(port.messages.filter(m=>m.type==='START').map(m=>m.retryAttempt),[0,1]);assert.equal(port.messages.find(m=>m.type==='RESULT').retryAttempts,1);assert.equal(port.messages.some(m=>m.type==='ERROR'),false);
+});
+
+test('five additional attempts are the hard limit and cumulative billing counts each terminal snapshot once',async()=>{
+  const bg=createBackground({manualRetryTimers:true,apiRun:call=>{const n=bg.apiCalls.length;call.onUpdate({text:'Partial source evidence.',phase:'verify',usage:{total_tokens:n},model:'grok-4.3'});call.onUpdate({phase:'verify',usage:{total_tokens:n},model:'grok-4.3'});throw capacityError({usage:{total_tokens:n},usageComplete:true,model:'grok-4.3'});}});await bg.ready();const port=bg.connect();port.send({type:'ANALYZE',requestId:'bounded-retries',post:post(100)});
+  for(let attempt=1;attempt<=5;attempt++){await until(()=>port.messages.filter(m=>m.type==='RETRY_WAIT').length===attempt);assert.equal(bg.apiCalls.length,attempt);bg.advanceRetryTimers(3000);}
+  await until(()=>port.messages.some(m=>m.type==='ERROR'));const terminal=port.messages.find(m=>m.type==='ERROR');assert.equal(terminal.retryAttempts,5);assert.equal(bg.apiCalls.length,6);assert.equal(terminal.usage.total_tokens,21);assert.equal(terminal.partialResult.usage.total_tokens,21);assert.equal(terminal.partialResult.text,'Partial source evidence.');assert.equal(terminal.model,'grok-4.3');assert.equal(Object.keys(bg.session.data.cache||{}).length,0);
+  bg.advanceRetryTimers(60000);await tick();assert.equal(bg.apiCalls.length,6);assert.equal(port.messages.filter(m=>m.type==='ERROR').length,1);
+});
+
+test('account, credential and unsupported-request failures stay local and do not automatically retry or freeze other posts',async()=>{
+  for(const failure of [spendingError(),...['400','401','403','404','422'].map(code=>Object.assign(new Error('PRIVATE_REJECTED_REQUEST'),{code:'API_ERROR',failureDetails:{httpStatus:Number(code)}}))]){
+    const bg=createBackground({manualRetryTimers:true,settings:{apiConcurrency:1},apiRun:call=>{if(call.post.id==='100')throw failure;return{text:'Independent check.',provider:'api'};}});await bg.ready();const port=bg.connect();
+    port.send({type:'ANALYZE',requestId:'permanent-failure',post:post(100)});port.send({type:'ANALYZE',requestId:'independent-post',post:post(101)});await until(()=>port.messages.some(m=>m.requestId==='independent-post'&&m.type==='RESULT'));
+    assert.equal(bg.apiCalls.length,2);assert.equal(port.messages.find(m=>m.requestId==='permanent-failure'&&m.type==='ERROR').retryAttempts,0);assert.equal(port.messages.some(m=>m.type==='RETRY_WAIT'),false);const config=await bg.message({type:'GET_CONFIG'});assert.equal(config.apiBudgetPaused,false);assert.equal(config.apiCapacityPaused,false);assert.equal(config.ready,true);assert.equal(bg.session.data.apiBudgetPause,undefined);assert.equal(bg.session.data.apiCapacityPause,undefined);
+  }
+});
+
+test('capacity and rate failures release their slots during retry waits while other tabs and comment jobs keep advancing',async()=>{
+  for(const code of ['API_CAPACITY','RATE_LIMIT']){
+    let first=true;const bg=createBackground({manualRetryTimers:true,settings:{apiConcurrency:1},apiRun:call=>{if(call.post.id==='100'&&first){first=false;throw Object.assign(new Error('PRIVATE_TRANSIENT'),{code});}return{text:'Checked '+call.post.id,provider:'api'};}});await bg.ready();const a=bg.connect(),b=bg.connect({sender:{id:bg.chrome.runtime.id,frameId:0,url:'https://x.com/home',tab:{id:8}}});
+    a.send({type:'ANALYZE',requestId:'transient',post:post(100)});await until(()=>a.messages.some(m=>m.type==='RETRY_WAIT'));
+    const other=await analyze(bg,b,'other-tab',101),comment=await draftComments(bg,b,'independent-comments',102);assert.equal(other.type,'RESULT');assert.equal(comment.type,'COMMENT_RESULT');assert.equal(bg.apiCalls.length,2);assert.equal(bg.commentCalls.length,1);bg.advanceRetryTimers(3000);await until(()=>a.messages.some(m=>m.type==='RESULT'));assert.equal(bg.apiCalls.length,3);assert.equal((await bg.message({type:'GET_CONFIG'})).apiCapacityPaused,false);
+  }
+});
+
+test('automatic retry candidates rejoin the shared FIFO and never exceed the configured three live provider calls',async()=>{
+  const gates=[],counts=new Map();let active=0,maximum=0;const bg=createBackground({manualRetryTimers:true,apiRun:async call=>{active++;maximum=Math.max(active,maximum);const n=(counts.get(call.post.id)||0)+1;counts.set(call.post.id,n);const gate=deferred();gates.push({id:call.post.id,n,gate});try{return await gate.promise;}finally{active--;}}});await bg.ready();const port=bg.connect();for(let i=0;i<7;i++)port.send({type:'ANALYZE',requestId:'global-'+i,post:post(100+i)});
+  await until(()=>gates.length===3);gates[0].gate.reject(capacityError());await until(()=>port.messages.some(m=>m.type==='RETRY_WAIT')&&gates.length===4);assert.equal(gates[3].id,'103');assert.equal(active,3);
+  bg.advanceRetryTimers(3000);await tick();assert.equal(gates.length,4);assert.ok(port.messages.some(m=>m.type==='QUEUED'&&m.requestId==='global-0'&&m.retryAttempt===1&&m.maxRetries===5),'An elapsed retry delay becomes queued while provider slots stay full');assert.equal(port.messages.some(m=>m.type==='START'&&m.requestId==='global-0'&&m.retryAttempt===1),false);gates[1].gate.resolve({text:'Second done.',provider:'api'});await until(()=>gates.length===5);assert.equal(gates[4].id,'104');
+  for(let index=2;index<8;index++){await until(()=>gates.length>index);gates[index].gate.resolve({text:'Evidence '+gates[index].id,provider:'api'});}
+  await until(()=>port.messages.filter(m=>m.type==='RESULT').length===7);assert.deepEqual(gates.map(v=>v.id),['100','101','102','103','104','105','106','100']);assert.equal(maximum,3);assert.equal(active,0);assert.equal(bg.apiCalls.length,8);
+});
+
+test('cancel, navigation, disconnect, tab close, rail collapse, language changes and Key replacement dispose pending retry timers',async()=>{
+  for(const action of ['cancel','cancelQueued','all','disconnect','tab','collapse','language','key']){
+    const bg=createBackground({manualRetryTimers:true,apiRun:()=>{throw capacityError();}});await bg.ready();const port=bg.connect();port.send({type:'ANALYZE',requestId:'cancel-wait',post:post(100)});await until(()=>port.messages.some(m=>m.type==='RETRY_WAIT'));
+    if(action==='cancel')port.send({type:'CANCEL',requestId:'cancel-wait'});
+    if(action==='cancelQueued')port.send({type:'CANCEL_IF_QUEUED',requestId:'cancel-wait'});
+    if(action==='all')port.send({type:'CANCEL_ALL'});
+    if(action==='disconnect')port.disconnect();
+    if(action==='tab')bg.chrome.tabs.onRemoved.emit(7);
+    if(action==='collapse')port.send({type:'SET_RAIL_COLLAPSED',collapsed:true});
+    if(action==='language')await bg.message({type:'SAVE_SETTINGS',settings:{...bg.local.data.settings,language:'ja'}});
+    if(action==='key')await bg.message({type:'SAVE_KEY',apiKey:'replacement-credential',remember:false});
+    await tick();await tick();bg.advanceRetryTimers(9000);await tick();assert.equal(bg.apiCalls.length,1,action+' cannot replay old work');assert.equal(port.messages.filter(m=>m.type==='START').length,1);assert.equal(bg.deadlines.some(timer=>timer.delay===3000&&!timer.cancelled),false);
+  }
+});
+
+test('timeout retries wait for actual transport cleanup before releasing the slot or beginning the three-second delay',async()=>{
+  const cleanup=deferred();let first=true;const bg=createBackground({manualRetryTimers:true,settings:{apiConcurrency:1},apiRun:async call=>{
+    if(call.post.id==='100'&&first){first=false;call.onUpdate({text:'Retained before timeout.',phase:'verify',usage:{total_tokens:15},model:'grok-4.3'});await cleanup.promise;return{text:'Late answer must be discarded.',usage:{total_tokens:17},model:'grok-4.3',provider:'api'};}
+    return{text:'Completed '+call.post.id,provider:'api',usage:{total_tokens:5},model:'grok-4.3'};
+  }});await bg.ready();const port=bg.connect();port.send({type:'ANALYZE',requestId:'cleanup-lease',post:post(100)});port.send({type:'ANALYZE',requestId:'next-after-cleanup',post:post(101)});await until(()=>port.messages.some(m=>m.type==='UPDATE'));bg.expireDeadline(150000);await tick();await tick();assert.equal(bg.apiCalls[0].signal.aborted,true);assert.equal(bg.apiCalls.length,1);assert.equal(port.messages.some(m=>m.type==='RETRY_WAIT'),false);
+  bg.advanceRetryTimers(9000);await tick();assert.equal(bg.apiCalls.length,1);cleanup.resolve();await until(()=>port.messages.some(m=>m.type==='RETRY_WAIT')&&bg.apiCalls.length===2);const wait=port.messages.find(m=>m.type==='RETRY_WAIT');assert.equal(wait.partialResult.text,'Retained before timeout.');assert.equal(wait.usage.total_tokens,17);assert.equal(wait.partialResult.usage.total_tokens,17);
+  bg.advanceRetryTimers(2999);await tick();assert.equal(bg.apiCalls.length,2);bg.advanceRetryTimers(1);await until(()=>port.messages.some(m=>m.requestId==='cleanup-lease'&&m.type==='RESULT'));const done=port.messages.find(m=>m.requestId==='cleanup-lease'&&m.type==='RESULT');assert.equal(done.result.usage.total_tokens,22);assert.equal(done.result.text,'Completed 100');assert.equal(port.messages.some(m=>m.text==='Late answer must be discarded.'),false);
+});
+
+test('retained partial answers survive initial empty retry progress and completed results include all known attempt charges',async()=>{
+  let calls=0;const bg=createBackground({manualRetryTimers:true,apiRun:call=>{calls++;if(calls===1)return{text:'Partial source finding.',sources:[{url:'https://example.com/source',title:'Source'}],provider:'api',verificationStatus:'incomplete',verificationFailure:{stage:'verify',code:'CONNECTION'},usage:{input_tokens:2,output_tokens:3,total_tokens:5},usageComplete:true,model:'grok-4.3'};
+    call.onUpdate({text:'',sources:[],phase:'verify'});call.onUpdate({phase:'verify',usage:{total_tokens:7},model:'grok-4.3'});return{text:'Final checked finding.',provider:'api',verificationStatus:'completed',usage:{input_tokens:4,output_tokens:3,total_tokens:7},usageComplete:true,model:'grok-4.3'};}});await bg.ready();const port=bg.connect();port.send({type:'ANALYZE',requestId:'partial-retry',post:post(100)});await until(()=>port.messages.some(m=>m.type==='RETRY_WAIT'));assert.equal(port.messages.find(m=>m.type==='RETRY_WAIT').partialResult.text,'Partial source finding.');bg.advanceRetryTimers(3000);await until(()=>port.messages.some(m=>m.type==='RESULT'));
+  const secondStart=port.messages.findLastIndex(m=>m.type==='START');assert.equal(port.messages.slice(secondStart).filter(m=>m.type==='UPDATE').every(m=>m.text!==''),true);const result=port.messages.find(m=>m.type==='RESULT').result;assert.equal(result.text,'Final checked finding.');assert.equal(result.usage.total_tokens,12);assert.equal(result.usage.input_tokens,6);assert.equal(result.usageComplete,true);assert.equal(result.usageByStage.verify.total_tokens,12);assert.equal(Object.values(bg.session.data.cache)[0].usage.total_tokens,12);
+});
+
+test('output limit failures retain the partial answer without paying for five identical truncated retries',async()=>{
+  const bg=createBackground({manualRetryTimers:true,apiRun:()=>({text:'Useful but truncated.',provider:'api',verificationStatus:'incomplete',verificationFailure:{stage:'verify',code:'OUTPUT_LIMIT',reason:'max_output_tokens'},usage:{total_tokens:10}})});await bg.ready();const port=bg.connect();const result=await analyze(bg,port,'limit-stops-here');assert.equal(result.type,'RESULT');assert.equal(result.result.verificationStatus,'incomplete');assert.equal(result.retryAttempts,0);assert.equal(bg.apiCalls.length,1);assert.equal(port.messages.some(m=>m.type==='RETRY_WAIT'),false);
+});
+
+test('comment retries share the same delay, five-attempt limit, aggregate accounting and global scheduler',async()=>{
+  const bg=createBackground({manualRetryTimers:true,settings:{apiConcurrency:1},commentRun:()=>{throw Object.assign(new Error('PRIVATE_COMMENT_TRANSIENT'),{code:'API_STREAM_INTERRUPTED',usage:{total_tokens:2},model:'grok-4.3'});}});await bg.ready();const port=bg.connect();port.send({type:'GENERATE_COMMENTS',requestId:'comments-retry',post:post(100)});
+  for(let attempt=1;attempt<=5;attempt++){await until(()=>port.messages.filter(m=>m.type==='COMMENT_RETRY_WAIT').length===attempt);assert.equal(bg.commentCalls.length,attempt);if(attempt===1)assert.equal((await analyze(bg,port,'check-during-comment-wait',101)).type,'RESULT');bg.advanceRetryTimers(3000);}
+  await until(()=>port.messages.some(m=>m.type==='COMMENT_ERROR'));const error=port.messages.find(m=>m.type==='COMMENT_ERROR');assert.equal(error.retryAttempts,5);assert.equal(error.usage.total_tokens,12);assert.equal(bg.commentCalls.length,6);assert.deepEqual(port.messages.filter(m=>m.type==='COMMENT_START').map(m=>m.retryAttempt),[0,1,2,3,4,5]);assert.equal(port.messages.some(m=>m.type==='ERROR'),false);
+});
+
+test('confirmed Build disconnects retry once after cleanup while unconfirmed cancellation never restarts local work',async()=>{
+  for(const code of ['BUILD_DISCONNECTED','BUILD_CANCEL_UNCONFIRMED']){
+    let count=0;const bg=createBackground({manualRetryTimers:true,settings:{provider:'build'},buildRun:()=>{if(count++===0)throw Object.assign(new Error('PRIVATE_BUILD_FAILURE'),{code,usage:{total_tokens:8},model:'grok-4.3'});return{text:'Local connection recovered.',provider:'build',verificationStatus:'completed',usage:{total_tokens:3},model:'grok-4.3'};}});await bg.ready();await bg.configureBuild();const port=bg.connect();port.send({type:'ANALYZE',requestId:'build-retry',post:post(100)});
+    if(code==='BUILD_DISCONNECTED'){await until(()=>port.messages.some(m=>m.type==='RETRY_WAIT'));bg.advanceRetryTimers(3000);await until(()=>port.messages.some(m=>m.type==='RESULT'));assert.equal(bg.buildCalls.length,2);assert.equal(port.messages.find(m=>m.type==='RESULT').result.usage.total_tokens,11);}
+    else {await until(()=>port.messages.some(m=>m.type==='ERROR'));bg.advanceRetryTimers(9000);await tick();assert.equal(bg.buildCalls.length,1);assert.equal(port.messages.some(m=>m.type==='RETRY_WAIT'),false);assert.equal((await bg.message({type:'GET_CONFIG'})).ready,false);}
+    assert.equal(bg.apiCalls.length,0);
+  }
+});
+
+test('retired pause markers never revive on worker restart and failed optional cleanup cannot block independent work',async()=>{
+  for(const failCleanup of [false,true]){
+    const local={settings:{...core.DEFAULT_SETTINGS}};const session={apiKey:'session-secret',apiBudgetPause:{version:1,reason:'api-budget',verificationFailure:spendingFailure},apiCapacityPause:{version:1,reason:'api-capacity',model:'grok-4.3'}};
+    const bg=createBackground({local,session,sessionRemove:keys=>{if(failCleanup&&Array.isArray(keys)&&keys.includes('apiBudgetPause'))throw Error('PRIVATE_OPTIONAL_CLEANUP');}});await bg.ready();const port=bg.connect();const result=await analyze(bg,port,'old-markers');assert.equal(result.type,'RESULT');const config=await bg.message({type:'GET_CONFIG'});assert.equal(config.apiBudgetPaused,false);assert.equal(config.apiCapacityPaused,false);assert.equal(config.apiBudgetFailure,undefined);assert.equal(bg.apiCalls.length,1);
+    if(!failCleanup){assert.equal(bg.session.data.apiBudgetPause,undefined);assert.equal(bg.session.data.apiCapacityPause,undefined);}
+  }
+});
+
+test('a retry with an empty or tool-only final retains earlier valid evidence while cumulative usage never rolls back',async()=>{
+  for(const finalText of ['',toolOnlyReply]){
+    let count=0;const bg=createBackground({manualRetryTimers:true,apiRun:call=>{count++;if(count===1)throw capacityError({partialResult:{text:'Earlier genuine evidence.',sources:[{url:'https://example.com/original',title:'Original source'}]},usage:{total_tokens:10},usageComplete:true,model:'grok-4.3'});
+      call.onUpdate({text:'An intermediate statement from the new try.',phase:'verify',usage:{total_tokens:2}});return{text:finalText,provider:'api',usage:{total_tokens:4},usageComplete:true,model:'grok-4.3'};}});await bg.ready();const port=bg.connect();port.send({type:'ANALYZE',requestId:'preserve-earlier',post:post(100)});await until(()=>port.messages.filter(m=>m.type==='RETRY_WAIT').length===1);bg.advanceRetryTimers(3000);await until(()=>port.messages.filter(m=>m.type==='RETRY_WAIT').length===2);
+    const wait=port.messages.filter(m=>m.type==='RETRY_WAIT')[1];assert.equal(wait.partialResult.text,'Earlier genuine evidence.');assert.equal(wait.partialResult.sources[0].url,'https://example.com/original');assert.equal(wait.usage.total_tokens,14);assert.equal(wait.partialResult.usage.total_tokens,14);
+    const updates=port.messages.filter(m=>m.type==='UPDATE');assert.equal(updates.at(-1).text,'Earlier genuine evidence.');assert.equal(updates.at(-1).usage.total_tokens,14);assert.equal(updates.some(m=>m.text?.includes('absolute_path')),false);assert.deepEqual(updates.map(m=>m.usage?.total_tokens),[12,14]);port.send({type:'CANCEL_ALL'});await tick();
+  }
+});
+
+test('Build cancellation that remains unconfirmed after a deadline is terminal and cannot become a TIMEOUT retry',async()=>{
+  const pending=deferred();const bg=createBackground({manualRetryTimers:true,settings:{provider:'build'},buildRun:async call=>{call.onUpdate({text:'Local partial before deadline.',phase:'verify',usage:{total_tokens:8},model:'grok-4.3'});await pending.promise;}});await bg.ready();await bg.configureBuild();const port=bg.connect();port.send({type:'ANALYZE',requestId:'unsafe-timeout',post:post(100)});await until(()=>bg.buildCalls.length===1);bg.expireDeadline(150000);assert.equal(bg.buildCalls[0].signal.aborted,true);pending.reject(Object.assign(new Error('PRIVATE_UNCONFIRMED'),{code:'BUILD_CANCEL_UNCONFIRMED',usage:{total_tokens:11},model:'grok-4.3'}));await until(()=>port.messages.some(m=>m.type==='ERROR'));
+  const failure=port.messages.find(m=>m.type==='ERROR');assert.equal(failure.code,'BUILD_CANCEL_UNCONFIRMED');assert.equal(failure.retryAttempts,0);assert.equal(failure.usage.total_tokens,11);assert.equal(port.messages.some(m=>m.type==='RETRY_WAIT'),false);assert.equal((await bg.message({type:'GET_CONFIG'})).ready,false);bg.advanceRetryTimers(9000);await tick();assert.equal(bg.buildCalls.length,1);assert.equal(bg.apiCalls.length,0);
+});
+
+test('a sixth timeout reports cumulative charges in the terminal error, retained partial and persisted browsing history',async()=>{
+  const bg=createBackground({manualRetryTimers:true,apiRun:call=>new Promise((resolve,reject)=>{
+    const count=bg.apiCalls.length*10;call.onUpdate({text:'Source evidence before timeout.',phase:'verify',usage:{total_tokens:count},model:'grok-4.3'});
+    call.signal.addEventListener('abort',()=>reject(Object.assign(new Error('Transport cleanup confirmed.'),{code:'CANCELED',usage:{total_tokens:count},model:'grok-4.3'})),{once:true});
+  })});await bg.ready();const port=bg.connect();await visitHistory(bg,port,[100]);port.send({type:'ANALYZE',requestId:'six-timeouts',post:post(100)});
+  for(let index=0;index<6;index++){
+    await until(()=>bg.apiCalls.length===index+1&&port.messages.filter(m=>m.type==='UPDATE').length>=index+1);bg.expireDeadline(150000);
+    if(index<5){await until(()=>port.messages.filter(m=>m.type==='RETRY_WAIT').length===index+1);bg.advanceRetryTimers(3000);}
+    else await until(()=>port.messages.some(m=>m.type==='ERROR'));
+  }
+  const last=port.messages.find(m=>m.type==='ERROR');assert.equal(last.code,'TIMEOUT');assert.equal(last.retryAttempts,5);assert.equal(last.usage.total_tokens,210);assert.equal(last.partialResult.usage.total_tokens,210);assert.equal(last.partialResult.verificationFailure.code,'TIMEOUT');assert.equal(last.partialResult.text,'Source evidence before timeout.');assert.equal(bg.apiCalls.length,6);
+  let saved;await until(()=>bg.local.data.superxHistory?.[0]?.analysis?.usage?.total_tokens===210);
+  saved=await bg.message({type:'GET_HISTORY'});assert.equal(saved.entries[0].analysis.usage.total_tokens,210);assert.equal(saved.entries[0].analysis.text,'Source evidence before timeout.');assert.equal(Object.keys(bg.session.data.cache||{}).length,0);
 });

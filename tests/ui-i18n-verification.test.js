@@ -10,7 +10,7 @@ test('API failure statuses explain recovery in every interface language without 
   for(const language of ui.SUPPORTED_LANGUAGES)for(const suffix of keys){const key='error.'+suffix,value=ui.catalog[language][key];assert.ok(value?.trim(),`${language}: ${key}`);if(language!=='en')assert.notEqual(value,ui.catalog.en[key]);assert.ok(Array.from(value).length<180);assert.doesNotMatch(value,/\{(?:error|message|body)\}/);}
   assert.match(ui.t('error.apiUsage','en'),/budget or usage/);assert.match(ui.t('error.apiServer','zh-CN'),/xAI 服务/);
   for(const language of ui.SUPPORTED_LANGUAGES){assert.ok(ui.catalog[language]['note.accountLimit']?.trim());if(language!=='en')assert.notEqual(ui.t('note.accountLimit',language),ui.t('note.accountLimit','en'));}
-  assert.match(ui.t('note.accountLimit','en'),/paused.*manually/);assert.match(ui.t('note.accountLimit','zh-CN'),/暂停.*预算.*手动/);
+  assert.match(ui.t('note.accountLimit','en'),/This request.*usage or budget limit/);assert.match(ui.t('note.accountLimit','zh-CN'),/这条请求.*用量或预算限制/);
 });
 test('local diagnostics controls are translated and explain bounded session-only retention',()=>{
   const keys=['diagnosticsTitle','diagnosticsHelp','diagnosticsRefresh','diagnosticsCopy','diagnosticsClear','diagnosticsEmpty','diagnosticsUnavailable','diagnosticsCopied'];
@@ -19,15 +19,58 @@ test('local diagnostics controls are translated and explain bounded session-only
   assert.doesNotMatch(ui.t('verification.unknown','en'),/service did not return/i);
 });
 
-test('model capacity pauses have a distinct localized retry instruction without account or Key advice',()=>{
+test('model capacity errors describe the request without pausing other posts or giving account advice',()=>{
   for(const language of ui.SUPPORTED_LANGUAGES){
     const value=ui.catalog[language]['error.apiCapacity'];assert.ok(value?.trim(),language);
     if(language!=='en')assert.notEqual(value,ui.catalog.en['error.apiCapacity']);
     assert.ok(Array.from(value).length<180,language);assert.doesNotMatch(value,/API Key|quota|budget|balance|UNKNOWN|余额|额度|预算|密钥/i);
     assert.notEqual(value,ui.t('error.apiUsage',language));assert.notEqual(value,ui.t('error.apiKeyRejected',language));
   }
-  assert.match(ui.t('error.apiCapacity','en'),/temporarily busy.*paused.*manually later/);
-  assert.match(ui.t('error.apiCapacity','zh-CN'),/模型暂时繁忙.*暂停.*稍后手动重试/);
+  assert.equal(ui.t('error.apiCapacity','en'),'The Grok model is temporarily busy.');
+  assert.equal(ui.t('error.apiCapacity','zh-CN'),'Grok 模型暂时繁忙。');
+});
+
+test('automatic retry progress and exhaustion are localized with dynamic attempt and delay values',()=>{
+  const placeholders={waiting:['attempt','max','seconds'],running:['attempt','max'],exhausted:['max']};
+  for(const language of ui.SUPPORTED_LANGUAGES)for(const [suffix,expected] of Object.entries(placeholders)){
+    const key='retry.'+suffix,value=ui.catalog[language][key];
+    assert.ok(value?.trim(),`${language}: ${key}`);
+    if(language!=='en')assert.notEqual(value,ui.catalog.en[key],`${language}: ${key}`);
+    assert.deepEqual([...value.matchAll(/\{(\w+)\}/g)].map(match=>match[1]).sort(),expected,`${language}: ${key} placeholders`);
+    const rendered=ui.t(key,language,{seconds:7,attempt:1,max:2});
+    assert.doesNotMatch(rendered,/\{\w+\}/,`${language}: ${key}`);
+    assert.match(rendered,/2/,`${language}: ${key} uses supplied maximum`);
+    if(suffix!=='exhausted')assert.match(rendered,/1\/2/,`${language}: ${key} shows current attempt`);
+    if(suffix==='waiting')assert.match(rendered,/7/,`${language}: ${key} shows delay`);
+    assert.ok(Array.from(value).length<180,`${language}: ${key}`);
+  }
+  assert.equal(ui.t('retry.waiting','en',{seconds:7,attempt:1,max:2}),'Retrying in 7s (1/2)');
+  assert.equal(ui.t('retry.running','en',{attempt:1,max:2}),'Automatic retry 1/2');
+  assert.match(ui.t('retry.exhausted','zh-CN',{max:2}),/自动重试 2 次.*手动重试/);
+});
+
+test('individual request errors do not claim to pause or resume the shared analysis queue',()=>{
+  const keys=['error.apiCapacity','note.accountLimit','note.rateLimited','error.apiServer','error.apiConnection','error.apiTimeout','error.apiIncomplete','error.apiFailed','error.outputLanguageMismatch'];
+  const globalPause=/\bpaused?\b|\bresume\b|暂停|暫停|停止しました|停止しています|일시 중지|pausad|suspendu|pausiert|إيقاف|أوقف|приостанов|रुके|रुका|रुकी/i;
+  for(const language of ui.SUPPORTED_LANGUAGES)for(const key of keys){
+    assert.doesNotMatch(ui.t(key,language),globalPause,`${language}: ${key}`);
+  }
+  assert.equal(ui.t('note.rateLimited','en'),"This request reached the provider's rate limit.");
+  assert.match(ui.t('note.rateLimited','zh-CN'),/这条请求.*频率限制/);
+  assert.equal(ui.t('common.paused','en'),'Automatic fact-checking paused');
+  assert.equal(ui.t('status.disabled','en'),'Auto analysis paused');
+});
+
+test('language mismatch summaries leave retry policy to the separate progress message',()=>{
+  for(const language of ui.SUPPORTED_LANGUAGES){
+    const value=ui.t('error.outputLanguageMismatch',language);
+    assert.ok(value?.trim(),language);
+    if(language!=='en')assert.notEqual(value,ui.catalog.en['error.outputLanguageMismatch']);
+    assert.ok(Array.from(value).length<90,language);
+    assert.doesNotMatch(value,/retry|Reanalyze|重试|追加请求|再試行|追加リクエスト|재시도|reintentar|réessayer|Wiederholung|tentar|إضافي|повтор|दोबारा/i,language);
+  }
+  assert.equal(ui.t('error.outputLanguageMismatch','en'),'The answer did not follow the requested language.');
+  assert.equal(ui.t('error.outputLanguageMismatch','zh-CN'),'回答未遵循要求的语言。');
 });
 
 test('English UI consistently names the feature fact check while internal localization keys stay compatible', () => {
