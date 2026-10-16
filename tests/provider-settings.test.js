@@ -14,12 +14,32 @@ test('API remains the default; retired page automation is not Grok Build',()=>{
   assert.equal(Core.normalizeSettings({provider:'api'}).provider,'api');
 });
 
-test('Build model, effort and transport have independent defaults',()=>{
+test('API and Build share Grok 4.3 without reasoning as defaults and retain independent settings',()=>{
   const settings=Core.normalizeSettings({});
-  assert.equal(settings.buildTransport,'acp');assert.equal(settings.buildModel,'grok-4.7');assert.equal(settings.buildReasoningEffort,'low');
+  assert.equal(settings.buildTransport,'acp');assert.equal(settings.buildModel,'grok-4.3');assert.equal(settings.buildReasoningEffort,'none');assert.equal(settings.buildDefaultsVersion,1);
   assert.equal(settings.apiModel,'grok-4.3');assert.equal(settings.apiReasoningEffort,'none');
   assert.equal(Core.normalizeSettings({buildTransport:'cli'}).buildTransport,'acp');
   for(const buildTransport of ['',null,'shell','CLI'])assert.equal(Core.normalizeSettings({buildTransport}).buildTransport,'acp');
+});
+
+test('only the unversioned former Build default pair migrates once without changing API or timing choices',()=>{
+  for(const provider of ['api','build'])for(const buildDefaultsVersion of [undefined,0]){
+    const original={provider,buildDefaultsVersion,buildModel:'grok-4.7',buildReasoningEffort:'low',apiModel:'grok-4.6',apiReasoningEffort:'high',analysisDefaultsVersion:1,dwellMs:0,apiConcurrency:4,language:'ja',interfaceLanguage:'zh-CN',verifyPrompt:'Keep this custom fact-check prompt.'};
+    const settings=Core.normalizeSettings(original);
+    assert.equal(settings.buildModel,'grok-4.3');assert.equal(settings.buildReasoningEffort,'none');assert.equal(settings.buildDefaultsVersion,1);
+    for(const field of ['provider','apiModel','apiReasoningEffort','analysisDefaultsVersion','dwellMs','apiConcurrency','language','interfaceLanguage','verifyPrompt'])assert.equal(settings[field],original[field],field);
+    assert.deepEqual(Core.normalizeSettings(settings),settings);
+    assert.equal(original.buildModel,'grok-4.7');assert.equal(original.buildReasoningEffort,'low');
+  }
+});
+
+test('Build migration preserves other combinations and later explicit selections of the former default',()=>{
+  for(const [buildModel,buildReasoningEffort]of [['grok-4.7','high'],['grok-4.6','low'],['grok-4.3','minimal'],['custom-build-model','medium']]){
+    const settings=Core.normalizeSettings({buildModel,buildReasoningEffort});
+    assert.equal(settings.buildModel,buildModel);assert.equal(settings.buildReasoningEffort,buildReasoningEffort);assert.equal(settings.buildDefaultsVersion,1);
+  }
+  const settings=Core.normalizeSettings({buildDefaultsVersion:1,buildModel:'grok-4.7',buildReasoningEffort:'low'});
+  assert.equal(settings.buildModel,'grok-4.7');assert.equal(settings.buildReasoningEffort,'low');assert.deepEqual(Core.normalizeSettings(settings),settings);
 });
 
 test('switching providers preserves each provider model and effort without copying credentials',()=>{
@@ -38,13 +58,13 @@ test('Build preserves valid custom and API-only model IDs for explicit runtime n
     assert.equal(settings.buildModel,buildModel);
     assert.equal(settings.buildReasoningEffort,Core.buildReasoningEffort(buildModel,'high'));
   }
-  for(const buildModel of ['',null,'bad model','grok;touch','../grok','x'.repeat(81)])assert.equal(Core.normalizeSettings({buildModel}).buildModel,'grok-4.7');
+  for(const buildModel of ['',null,'bad model','grok;touch','../grok','x'.repeat(81)])assert.equal(Core.normalizeSettings({buildModel}).buildModel,'grok-4.3');
   assert.equal(Core.normalizeSettings({buildModel:'grok-4.3',buildReasoningEffort:'xhigh'}).buildReasoningEffort,'xhigh');
-  assert.equal(Core.normalizeSettings({buildModel:'grok-4.7',buildReasoningEffort:'none'}).buildReasoningEffort,'low');
+  assert.equal(Core.normalizeSettings({buildModel:'grok-4.7',buildReasoningEffort:'none'}).buildReasoningEffort,'none');
   assert.equal(Core.buildReasoningEffort('grok-4.3','minimal'),'minimal');
   assert.equal(Core.reasoningEffort('grok-4.7-build-fast','high'),'auto');
   assert.equal(Core.buildReasoningEffort('grok-4.7-build-fast','high'),'high');
-  assert.equal(Core.normalizeSettings({buildModel:'grok-4.7-build-fast',buildReasoningEffort:'none'}).buildReasoningEffort,'low');
+  assert.equal(Core.normalizeSettings({buildModel:'grok-4.7-build-fast',buildReasoningEffort:'none'}).buildReasoningEffort,'none');
   assert.equal(Core.normalizeSettings({buildModel:'grok-4.7-build-fast'}).buildReasoningEffort,'low');
 });
 

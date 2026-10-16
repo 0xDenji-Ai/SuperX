@@ -55,7 +55,9 @@
     const catalog = buildStatus?.modelCatalog;
     const selected = $("build-model").value;
     const unavailable = Array.isArray(catalog) && !catalog.some(item => (typeof item === "string" ? item : item.id) === selected && item.available !== false);
-    $("build-model-status").textContent = unavailable ? ui.t("options.buildModelUnavailable",uiLanguage,{model:selected}) : "";
+    const efforts=catalog?.find(item=>item&&typeof item==='object'&&item.id===selected)?.efforts;
+    const effortUnavailable=Array.isArray(efforts)&&!efforts.includes($("build-reasoning-effort").value);
+    $("build-model-status").textContent = unavailable ? ui.t("options.buildModelUnavailable",uiLanguage,{model:selected}) : effortUnavailable ? ui.t("options.reasoningInvalid",uiLanguage) : "";
     $("build-fast-help").textContent = ui.t("options.buildFastHelp",uiLanguage);
     $("build-fast-help").hidden = !/fast/i.test(selected);
   }
@@ -284,16 +286,23 @@
     }
     select.value = model;
   }
-  function populateBuildReasoning(model,effort) {
+  function populateBuildReasoning(model,effort,modelChanged=false) {
     const select = $("build-reasoning-effort");select.replaceChildren();
     const entry = buildStatus?.modelCatalog?.find(item => typeof item === "object" && item.id === model);
     // Grok Build negotiates ACP levels independently of API model profiles.
-    const supported = ["minimal","low","medium","high","xhigh"];
+    const supported = ["none","minimal","low","medium","high","xhigh"];
     const efforts = Array.isArray(entry?.efforts) ? supported.filter(value => entry.efforts.includes(value)) : supported;
     for (const value of efforts) {
       const option=document.createElement("option");option.value=value;option.textContent=ui.t("options.reasoning."+value,uiLanguage);select.append(option);
     }
-    select.value=efforts.includes(effort) ? effort : efforts.includes("low") ? "low" : efforts[0] || "";
+    const preferred=core.buildReasoningEffort(model);
+    const selected=efforts.includes(effort) ? effort : !modelChanged&&supported.includes(effort) ? effort : efforts.includes(preferred) ? preferred : efforts[0] || "";
+    // A connection refresh must not silently turn 'none' into a reasoning
+    // level. Keep an unavailable saved choice visible until explicitly edited.
+    if(selected&&!efforts.includes(selected)){
+      const option=document.createElement("option");option.value=selected;option.textContent=ui.t("options.reasoning."+selected,uiLanguage);option.disabled=true;select.append(option);
+    }
+    select.value=selected;
   }
   function renderLanguage() {
     const interfaceLanguage = $("interface-language").value || currentSettings.interfaceLanguage;
@@ -362,7 +371,8 @@
   }
   $("explanation-mode").addEventListener("change",() => { showExplanationMode();markDraft(); });
   $("provider").addEventListener("change",() => { renderProvider();markDraft(); });
-  $("build-model").addEventListener("change",() => { populateBuildReasoning($("build-model").value,$("build-reasoning-effort").value);renderBuildStatus();markDraft(); });
+  $("build-model").addEventListener("change",() => { populateBuildReasoning($("build-model").value,$("build-reasoning-effort").value,true);renderBuildStatus();markDraft(); });
+  $("build-reasoning-effort").addEventListener("change",() => { renderBuildStatus();markDraft(); });
   $("check-build").addEventListener("click",async () => {
     if (busy || buildChecking || !isBuild()) return;
     const revision=++buildCheckRevision;
@@ -509,7 +519,9 @@
       || Array.isArray(buildStatus?.modelCatalog) && !buildStatus.modelCatalog.some(item => (typeof item === "string" ? item : item.id) === settings.buildModel && item.available !== false))) {
       setStatus("options.buildModelUnavailable","error",{model:settings.buildModel});$("build-model").focus();return;
     }
-    if (isBuild() && (!$("build-reasoning-effort").value || $("build-reasoning-effort").value !== settings.buildReasoningEffort)) {
+    const buildEfforts=buildStatus?.modelCatalog?.find(item=>item&&typeof item==='object'&&item.id===settings.buildModel)?.efforts;
+    if (isBuild() && (!$("build-reasoning-effort").value || $("build-reasoning-effort").value !== settings.buildReasoningEffort
+      || Array.isArray(buildEfforts)&&!buildEfforts.includes(settings.buildReasoningEffort))) {
       setStatus("options.reasoningInvalid","error");$("build-reasoning-effort").focus();return;
     }
     if (!settings.webSearch && !settings.xSearch) {

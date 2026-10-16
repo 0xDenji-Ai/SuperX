@@ -275,5 +275,5 @@ test('Build model help explains independent settings and connection-time choices
   assert.match(ui.t('options.buildModelHelp','en'),/After connecting, confirm the available models and reasoning levels/);
   assert.equal(ui.t('options.buildModelHelp','zh-CN'),'此模式的模型设置与 API 模式独立保存；连接后确认可用模型和推理档位。');
   assert.equal(core.DEFAULT_SETTINGS.apiModel,'grok-4.3');assert.equal(core.DEFAULT_SETTINGS.apiReasoningEffort,'none');
-  assert.equal(core.DEFAULT_SETTINGS.buildModel,'grok-4.7');assert.equal(core.DEFAULT_SETTINGS.buildReasoningEffort,'low');
+  assert.equal(core.DEFAULT_SETTINGS.buildModel,'grok-4.3');assert.equal(core.DEFAULT_SETTINGS.buildReasoningEffort,'none');
 });

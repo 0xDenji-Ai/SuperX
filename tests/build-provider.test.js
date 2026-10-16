@@ -23,6 +23,38 @@ test('one official socket is reused while posts retain independent sessions and 
   const f=fixture();try{await f.provider.run(post,settings);await f.provider.run({...post,id:'124',url:'https://x.com/author/status/124'},settings);assert.equal(f.urls.length,1);assert.equal(prompts(f).length,2);assert.notEqual(prompts(f)[0].params.sessionId,prompts(f)[1].params.sessionId);assert.equal(f.messages.filter(message=>message.method==='session/close').length,2);}finally{await f.provider.close();}
 });
 
+test('default local checks explicitly request Grok 4.3 and none without silently choosing another reasoning level',async()=>{
+  const f=fixture();try{const output=await f.provider.run(post,settings);
+    assert.equal(settings.buildModel,'grok-4.3');assert.equal(settings.buildReasoningEffort,'none');assert.equal(output.model,'grok-4.3');
+    assert.equal(f.messages.find(message=>message.params?.configId==='model').params.value,'grok-4.3');assert.equal(f.messages.find(message=>message.params?.configId==='reasoning_effort').params.value,'none');assert.equal(prompts(f).length,1);
+  }finally{await f.provider.close();}
+});
+
+test('local status preserves none and minimal as distinct advertised reasoning choices',async()=>{
+  const f=fixture({efforts:['none','minimal','low','high']});try{const output=await f.provider.status();
+    assert.equal(output.available,true);assert.deepEqual(output.modelCatalog.find(model=>model.id==='grok-4.3').efforts,['none','minimal','low','high']);assert.equal(prompts(f).length,0);
+  }finally{await f.provider.close();}
+});
+
+test('the explicit current none value survives a CLI fallback menu that omits none',async()=>{
+  const behavior={currentEffort:'none',efforts:['minimal','low','high']},f=fixture(behavior);try{
+    const output=await f.provider.run(post,settings);assert.equal(output.model,'grok-4.3');assert.equal(prompts(f).length,1);
+    assert.equal(f.messages.some(message=>message.params?.configId==='reasoning_effort'),false);
+  }finally{await f.provider.close();}
+  const g=fixture(behavior);try{const status=await g.provider.status(),efforts=status.modelCatalog.find(model=>model.id==='grok-4.3').efforts;
+    assert.equal(status.available,true);assert.ok(efforts.includes('none'));assert.ok(efforts.includes('minimal'));assert.equal(prompts(g).length,0);
+  }finally{await g.provider.close();}
+});
+
+test('an unadvertised none default fails without a cloud prompt while explicit minimal remains independent',async()=>{
+  for(const efforts of [['low','medium','high'],['minimal','low','high']]){const f=fixture({efforts});try{
+    await assert.rejects(f.provider.run(post,settings),{code:'BUILD_EFFORT_UNSUPPORTED'});assert.equal(prompts(f).length,0);assert.equal(f.messages.some(message=>message.params?.configId==='reasoning_effort'),false);
+  }finally{await f.provider.close();}}
+  const f=fixture({efforts:['minimal','low','high']});try{await f.provider.run(post,{...settings,buildReasoningEffort:'minimal'});
+    assert.equal(f.messages.find(message=>message.params?.configId==='reasoning_effort').params.value,'minimal');assert.equal(prompts(f).length,1);
+  }finally{await f.provider.close();}
+});
+
 test('hosted source URLs and provider counts are sanitized without inferring retrieval from answer links',async()=>{
   const f=fixture({sources:[{url:'javascript:alert(1)',title:'bad'},{url:'https://user:pass@example.com/a'},{url:'https://example.com/a?token=SECRET&ok=1',title:'Primary'},{url:'https://example.com/a?ok=1',title:'Duplicate'}],usage:{inputTokens:20,outputTokens:10,totalTokens:30,costUsd:123},text:'See https://example.com/evidence.'});
   try{const output=await f.provider.run(post,settings);assert.equal(output.searched,true);assert.deepEqual(output.sources,[{url:'https://example.com/a?ok=1',title:'Primary'}]);assert.equal(Object.hasOwn(output.usage,'costUsd'),false);assert.equal(JSON.stringify(output).includes('SECRET'),false);}finally{await f.provider.close();}
@@ -83,7 +115,7 @@ test('missing local connection and unavailable service have actionable non-API e
 });
 
 test('unsupported models, effort and runtime policy fail before any cloud prompt',async()=>{
-  for(const [behavior,change,code]of [[{},{buildModel:'grok-4.3'},'BUILD_MODEL_UNSUPPORTED'],[{efforts:['high']},{},'BUILD_EFFORT_UNSUPPORTED'],[{version:'1.0.99'},{},'BUILD_VERSION_UNSUPPORTED'],[{localCount:1},{},'BUILD_TOOL_POLICY']]){const f=fixture(behavior);try{await assert.rejects(f.provider.run(post,{...settings,...change}),{code});assert.equal(prompts(f).length,0);}finally{await f.provider.close();}}
+  for(const [behavior,change,code]of [[{models:['grok-4.7']},{buildModel:'grok-4.3'},'BUILD_MODEL_UNSUPPORTED'],[{efforts:['high']},{},'BUILD_EFFORT_UNSUPPORTED'],[{version:'1.0.99'},{},'BUILD_VERSION_UNSUPPORTED'],[{localCount:1},{},'BUILD_TOOL_POLICY']]){const f=fixture(behavior);try{await assert.rejects(f.provider.run(post,{...settings,...change}),{code});assert.equal(prompts(f).length,0);}finally{await f.provider.close();}}
   const f=fixture();try{await f.provider.run(post,{...settings,buildModel:'grok-4.7-build-fast',buildReasoningEffort:'medium'});assert.equal(f.messages.find(message=>message.params?.configId==='model').params.value,'grok-4.7-build-fast');assert.equal(f.messages.find(message=>message.params?.configId==='reasoning_effort').params.value,'medium');}finally{await f.provider.close();}
 });
 

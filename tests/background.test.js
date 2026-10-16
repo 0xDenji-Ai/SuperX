@@ -187,6 +187,32 @@ test('fresh installations persist the versioned three-request and one-second def
 test('old default-four and zero-delay records migrate once and the normalized settings remain stable after worker restart',async()=>{
   let writes=0;const legacy={provider:'api',enabled:true,apiConcurrency:4,dwellMs:0,apiModel:'grok-4.7',apiReasoningEffort:'high',language:'ja',verifyPrompt:'Preserve this user prompt.'};const bg=createBackground({local:{settings:legacy},localSet:values=>{if(values.settings)writes++;}});await bg.ready();assert.equal(writes,1);assert.equal(bg.local.data.settings.analysisDefaultsVersion,1);assert.equal(bg.local.data.settings.dwellMs,1000);assert.equal(bg.local.data.settings.apiConcurrency,3);for(const field of ['apiModel','apiReasoningEffort','language','verifyPrompt'])assert.equal(bg.local.data.settings[field],legacy[field]);const saved=clone(bg.local.data.settings);let rewrites=0;const restarted=createBackground({local:bg.local.data,session:bg.session.data,localSet:values=>{if(values.settings)rewrites++;}});await restarted.ready();assert.equal(rewrites,0);assert.deepEqual(restarted.local.data.settings,saved);assert.equal(restarted.apiCalls.length,0);
 });
+test('the former Build default migrates once while saved Key, custom API choices and explicit timing survive restart',async()=>{
+  const seed=createBackground();await seed.ready();
+  assert.equal((await seed.message({type:'SAVE_KEY',apiKey:'remembered-build-default-fixture-key',remember:true})).ok,true);
+  const encrypted=clone(seed.local.data.apiKeyEncrypted);
+  seed.local.data.settings={...seed.local.data.settings,buildModel:'grok-4.7',buildReasoningEffort:'low',apiModel:'grok-4.6',apiReasoningEffort:'high',analysisDefaultsVersion:1,dwellMs:0,apiConcurrency:4};
+  delete seed.local.data.settings.buildDefaultsVersion;
+  let writes=0;const bg=createBackground({local:seed.local.data,session:seed.session.data,localSet:values=>{if(values.settings)writes++;}});await bg.ready();
+  assert.equal(writes,1);assert.equal(bg.local.data.settings.buildDefaultsVersion,1);assert.equal(bg.local.data.settings.buildModel,'grok-4.3');assert.equal(bg.local.data.settings.buildReasoningEffort,'none');
+  assert.equal(bg.local.data.settings.apiModel,'grok-4.6');assert.equal(bg.local.data.settings.apiReasoningEffort,'high');assert.equal(bg.local.data.settings.analysisDefaultsVersion,1);assert.equal(bg.local.data.settings.dwellMs,0);assert.equal(bg.local.data.settings.apiConcurrency,4);
+  assert.deepEqual(bg.local.data.apiKeyEncrypted,encrypted);assert.equal(bg.session.data.apiKey,'remembered-build-default-fixture-key');assert.deepEqual(bg.keyStoreCalls,['open']);
+  let rewrites=0;const restarted=createBackground({local:bg.local.data,session:bg.session.data,localSet:values=>{if(values.settings)rewrites++;}});await restarted.ready();
+  assert.equal(rewrites,0);assert.deepEqual(restarted.local.data.settings,bg.local.data.settings);assert.deepEqual(restarted.local.data.apiKeyEncrypted,encrypted);assert.equal(restarted.session.data.apiKey,'remembered-build-default-fixture-key');
+  for(const worker of [bg,restarted]){assert.equal(worker.apiCalls.length,0);assert.equal(worker.commentCalls.length,0);assert.equal(worker.buildCalls.length,0);assert.equal(worker.buildCommentCalls.length,0);}
+});
+test('settings and Build connection saves preserve explicit versioned model choices rather than rerunning default migration',async()=>{
+  const bg=createBackground();await bg.ready();
+  const explicit={...bg.local.data.settings,buildDefaultsVersion:1,buildModel:'grok-4.7',buildReasoningEffort:'low',apiModel:'grok-4.5',apiReasoningEffort:'medium'};
+  assert.equal((await bg.message({type:'SAVE_SETTINGS',settings:explicit})).ok,true);
+  assert.equal(bg.local.data.settings.buildModel,'grok-4.7');assert.equal(bg.local.data.settings.buildReasoningEffort,'low');
+  assert.equal((await bg.message({type:'SAVE_BUILD_CONNECTION',secret:BUILD_SECRET,port:2419,settings:{...explicit,provider:'build'}})).ok,true);
+  assert.equal(bg.local.data.settings.buildModel,'grok-4.7');assert.equal(bg.local.data.settings.buildReasoningEffort,'low');assert.equal(bg.local.data.settings.buildDefaultsVersion,1);
+  const restarted=createBackground({local:bg.local.data,session:bg.session.data});await restarted.ready();
+  assert.equal(restarted.local.data.settings.provider,'build');assert.equal(restarted.local.data.settings.buildModel,'grok-4.7');assert.equal(restarted.local.data.settings.buildReasoningEffort,'low');assert.equal(restarted.local.data.settings.apiModel,'grok-4.5');assert.equal(restarted.local.data.settings.apiReasoningEffort,'medium');
+  assert.equal(restarted.session.data.apiKey,'session-secret');assert.equal((await restarted.message({type:'GET_BUILD_CONNECTION'})).configured,true);
+  for(const worker of [bg,restarted]){assert.equal(worker.apiCalls.length,0);assert.equal(worker.buildCalls.length,0);}
+});
 test('legacy custom request limits and positive dwell settings survive the one-time default migration',async()=>{
   for(const limit of [1,2,3,5,6,7,8]){const bg=createBackground({local:{settings:{provider:'api',apiConcurrency:limit,dwellMs:1750}}});await bg.ready();assert.equal(bg.local.data.settings.apiConcurrency,limit);assert.equal(bg.local.data.settings.dwellMs,1750);assert.equal(bg.local.data.settings.analysisDefaultsVersion,1);}
 });

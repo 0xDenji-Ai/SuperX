@@ -2,9 +2,9 @@
 const connection={port:2419,secret:'s'.repeat(64)};
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 function wsFixture(behavior={}){
-  const sockets=[],messages=[],urls=[],sessionProfiles=new Map(),pending=new Map();let sid=0,model=behavior.currentModel||'grok-4.7',effort='high';
-  const models=behavior.models||['grok-4.7','grok-4.6','grok-4.5','grok-4.7-build-fast'];
-  const configs=()=>[{id:'model',currentValue:model,options:models.map(value=>({value,name:value}))},{id:'reasoning_effort',currentValue:effort,options:(behavior.efforts||['low','medium','high','xhigh']).map(value=>({value}))}];
+  const sockets=[],messages=[],urls=[],sessionProfiles=new Map(),pending=new Map();let sid=0,model=behavior.currentModel||'grok-4.3',effort=behavior.currentEffort??'high';
+  const models=behavior.models||['grok-4.3','grok-4.7','grok-4.6','grok-4.5','grok-4.7-build-fast'];
+  const configs=()=>[{id:'model',currentValue:model,options:models.map(value=>({value,name:value}))},{id:'reasoning_effort',currentValue:effort,options:(behavior.efforts||(model==='grok-4.3'?['none','low','medium','high']:['low','medium','high','xhigh'])).map(value=>({value}))}];
   const result=()=>({stopReason:behavior.stopReason||'end_turn',_meta:{modelId:behavior.actualModel||model,usage:behavior.usage||{inputTokens:20,outputTokens:10,totalTokens:30},...(Object.hasOwn(behavior,'structured')?{structuredOutput:behavior.structured}:{})}});
   const respond=(socket,message,value)=>socket.emit({jsonrpc:'2.0',id:message.id,result:value});
   const update=(socket,sessionId,value)=>socket.emit({jsonrpc:'2.0',method:'session/update',params:{sessionId,update:value}});

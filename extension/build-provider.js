@@ -167,7 +167,7 @@
       const id=API.sanitizedModel(typeof entry==='string'?entry:entry?.id||entry?.value||entry?.model);
       if(!id)return [];
       if(typeof entry==='string')return [{id}];
-      const efforts=Array.isArray(entry.efforts)?entry.efforts.filter(effort=>['minimal','low','medium','high','xhigh'].includes(effort)):undefined;
+      const efforts=Array.isArray(entry.efforts)?entry.efforts.filter(effort=>['none','minimal','low','medium','high','xhigh'].includes(effort)):undefined;
       return [{id,...(typeof entry.available==='boolean'?{available:entry.available}:{}),...(efforts?{efforts:[...new Set(efforts)]}:{})}];
     });
   }

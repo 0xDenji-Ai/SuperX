@@ -40,8 +40,10 @@
   }
   function buildReasoningEffort(model,value) {
     // ACP negotiates concrete runtime levels independently of the API model
-    // catalog. Never translate its minimum setting into API 'none'.
-    return ['minimal','low','medium','high','xhigh'].includes(value)?value:'low';
+    // catalog. Keep 'none', 'minimal' and 'low' distinct; the live catalog
+    // must advertise the chosen level before a request can run.
+    return ['none','minimal','low','medium','high','xhigh'].includes(value)?value:
+      ['grok-4.3','grok-4.3-latest'].includes(model)?'none':'low';
   }
   const API_FAILURE_PROVIDER_CODES=new Set(['invalid_request_error','invalid_request','bad_request','invalid_api_key','authentication_error','unauthenticated','permission_error','permission_denied','forbidden','insufficient_quota','insufficient_credits','spending_limit','usage_limit_exceeded','rate_limit_exceeded','rate_limit_error','too_many_requests','resource_exhausted','model_not_found','model_not_supported','unsupported_model','unsupported_parameter','invalid_parameter','invalid_argument','context_length_exceeded','server_error','internal_server_error','internal_error','service_unavailable','service_unavailable_error','overloaded_error','timeout','request_timeout','gateway_timeout','tool_error','tool_unavailable','search_error','search_unavailable','content_filter']);
   function apiFailureProviderCode(value){
@@ -187,10 +189,11 @@
     interfaceLanguage: 'auto',
     apiModel: 'grok-4.3',
     apiReasoningEffort: 'none',
+    buildDefaultsVersion: 1,
     buildTransport: 'acp',
     buildPort: 2419,
-    buildModel: 'grok-4.7',
-    buildReasoningEffort: 'low',
+    buildModel: 'grok-4.3',
+    buildReasoningEffort: 'none',
     apiConcurrency: 3,
     apiVerification: 'only',
     webSearch: true,
@@ -264,7 +267,11 @@
     const model = typeof value.apiModel === 'string' ? value.apiModel.trim() : '';
     const normalizedModel = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(model) ? model : DEFAULT_SETTINGS.apiModel;
     const buildModel = typeof value.buildModel === 'string' ? value.buildModel.trim() : '';
-    const normalizedBuildModel = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(buildModel) ? buildModel : DEFAULT_SETTINGS.buildModel;
+    // Former records did not track whether 4.7/low was manually selected.
+    // Migrate only that exact former default once. The marker preserves a
+    // later explicit selection of the same pair and all other combinations.
+    const migrateBuildDefaults=value.buildDefaultsVersion!==DEFAULT_SETTINGS.buildDefaultsVersion&&buildModel==='grok-4.7'&&value.buildReasoningEffort==='low';
+    const normalizedBuildModel = migrateBuildDefaults ? DEFAULT_SETTINGS.buildModel : /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(buildModel) ? buildModel : DEFAULT_SETTINGS.buildModel;
     const currentDefaults=value.analysisDefaultsVersion===DEFAULT_SETTINGS.analysisDefaultsVersion;
     const dwell=boundedNumber(value.dwellMs,DEFAULT_SETTINGS.dwellMs,0,30000);
     const concurrency=boundedNumber(value.apiConcurrency,DEFAULT_SETTINGS.apiConcurrency,1,8);
@@ -283,10 +290,11 @@
       interfaceLanguage: LANGUAGES.find(item => item.value.toLowerCase() === interfaceLanguage)?.value || DEFAULT_SETTINGS.interfaceLanguage,
       apiModel: normalizedModel,
       apiReasoningEffort: reasoningEffort(normalizedModel,value.apiReasoningEffort),
+      buildDefaultsVersion: DEFAULT_SETTINGS.buildDefaultsVersion,
       buildTransport: DEFAULT_SETTINGS.buildTransport,
       buildPort: boundedNumber(value.buildPort, DEFAULT_SETTINGS.buildPort, 1024, 65535),
       buildModel: normalizedBuildModel,
-      buildReasoningEffort: buildReasoningEffort(normalizedBuildModel,value.buildReasoningEffort),
+      buildReasoningEffort: buildReasoningEffort(normalizedBuildModel,migrateBuildDefaults?DEFAULT_SETTINGS.buildReasoningEffort:value.buildReasoningEffort),
       apiConcurrency: !currentDefaults&&concurrency===4?DEFAULT_SETTINGS.apiConcurrency:concurrency,
       // Legacy explanation/combined/off choices all become one fact-check task.
       apiVerification: 'only',

@@ -739,7 +739,7 @@ function uiPageFixture(file, settings=core.DEFAULT_SETTINGS, storage={}, environ
         if(message.type==='CLEAR_API_DIAGNOSTICS')return {ok:true};
         if(message.type==='SET_HISTORY_ENABLED') {local.superxHistoryEnabled=message.enabled;return {ok:true,enabled:message.enabled};}
         if(message.type==='OPEN_HISTORY') {openedHistory.push(true);return {ok:true};}
-        if(message.type==='GET_BUILD_STATUS')return {ok:true,modelCatalog:[{id:'grok-4.7',efforts:['minimal','low','medium','high','xhigh']}],...environment.buildStatus || {installed:false,available:false,ready:false}};
+        if(message.type==='GET_BUILD_STATUS')return {ok:true,modelCatalog:[{id:'grok-4.3',efforts:['none','minimal','low','medium','high','xhigh']},{id:'grok-4.7',efforts:['minimal','low','medium','high','xhigh']}],...environment.buildStatus || {installed:false,available:false,ready:false}};
         if(message.type==='GET_BUILD_CONNECTION')return {ok:true,configured:buildConfigured,port:local.settings.buildPort};
         if(message.type==='GET_BUILD_LAUNCH')return {ok:true,command:`grok local fixture ${message.platform} ${message.port}`,secret:'local-connection-fixture-code',port:message.port};
         if(message.type==='SAVE_BUILD_CONNECTION'){buildConfigured=true;if(message.settings)local.settings=core.normalizeSettings(message.settings);return {ok:true};}
@@ -1849,7 +1849,7 @@ test('provider switching preserves credential drafts and Build saves without sen
   assert.equal(ids.get('api-fields').hidden,true);assert.equal(ids.get('build-fields').hidden,false);
   assert.equal(ids.get('source-description').hidden,false);assert.equal(ids.get('source-description').textContent,ui.t('options.buildDescription','en'));
   for(const id of ['api-key','remember-key','clear-key'])assert.equal(ids.get(id).disabled,true,id);
-  assert.equal(ids.get('build-model').value,'grok-4.7');assert.equal(ids.get('build-reasoning-effort').value,'low');
+  assert.equal(ids.get('build-model').value,'grok-4.3');assert.equal(ids.get('build-reasoning-effort').value,'none');
   ids.get('build-port').value='2420';ids.get('build-port').listeners.input();
   ids.get('build-model').value='grok-4.5';ids.get('build-model').listeners.change();ids.get('build-reasoning-effort').value='high';
   await form.listeners.submit({preventDefault(){},currentTarget:form});
@@ -1898,7 +1898,7 @@ test('Build checks and official guides are explicit local actions without genera
 
 test('Build catalogs constrain choices without changing API model or reasoning drafts',async()=>{
   const buildStatus={ready:true,installed:true,available:true,authenticated:true,modelCatalog:[{id:'grok-4.7',available:true,efforts:['low','high']},{id:'grok-4.5',available:false}]};
-  const fixture=uiPageFixture('options',core.normalizeSettings({provider:'build',apiModel:'grok-4.6',apiReasoningEffort:'xhigh'}),{}, {buildStatus});
+  const fixture=uiPageFixture('options',core.normalizeSettings({provider:'build',buildDefaultsVersion:1,buildModel:'grok-4.7',buildReasoningEffort:'low',apiModel:'grok-4.6',apiReasoningEffort:'xhigh'}),{}, {buildStatus});
   await settleUI();await settleUI();await fixture.ids.get('check-build').listeners.click();
   assert.equal(fixture.ids.get('api-model').value,'grok-4.6');assert.equal(fixture.ids.get('api-reasoning-effort').value,'xhigh');
   assert.deepEqual(fixture.ids.get('build-reasoning-effort').children.map(option=>option.value),['low','high']);
@@ -1968,7 +1968,7 @@ test('changing local connection code resets catalog restrictions and ignores an 
   const oldCheck=fixture.ids.get('check-build').listeners.click();await settleUI();const oldResolve=resolveCheck;
   fixture.ids.get('build-secret').value='different-local-code';fixture.ids.get('build-secret').listeners.input();
   assert.equal(fixture.ids.get('build-model').children.find(option=>option.value==='grok-4.3').disabled,false);
-  assert.deepEqual(fixture.ids.get('build-reasoning-effort').children.map(option=>option.value),['minimal','low','medium','high','xhigh']);
+  assert.deepEqual(fixture.ids.get('build-reasoning-effort').children.map(option=>option.value),['none','minimal','low','medium','high','xhigh']);
   oldResolve({ok:true,...status});await oldCheck;
   assert.equal(fixture.ids.get('build-status').textContent,ui.t('build.unknown','en'));
   assert.equal(fixture.ids.get('build-model').children.find(option=>option.value==='grok-4.3').disabled,false);
@@ -1983,13 +1983,13 @@ test('popup applies a fresh Build readiness broadcast without reading API creden
 });
 
 test('Build offers only advertised extra IDs, retains defaults and saves a selected Fast variant explicitly',async()=>{
-  const buildStatus={installed:true,available:true,authenticated:true,ready:true,modelCatalog:[{id:'grok-4.7',available:true,efforts:['low','high']},{id:'grok-preview-fast',available:true,efforts:['low','high']},{id:'grok-preview-custom',available:true,efforts:['medium','high']},{id:'invalid model id',available:true}]};
+  const buildStatus={installed:true,available:true,authenticated:true,ready:true,modelCatalog:[{id:'grok-4.3',available:true,efforts:['none','low','high']},{id:'grok-4.7',available:true,efforts:['low','high']},{id:'grok-preview-fast',available:true,efforts:['low','high']},{id:'grok-preview-custom',available:true,efforts:['medium','high']},{id:'invalid model id',available:true}]};
   const fixture=uiPageFixture('options',core.normalizeSettings({provider:'build'}),{}, {buildStatus});await settleUI();await settleUI();
   const select=fixture.ids.get('build-model');
   assert.deepEqual(select.children.map(option=>option.value),core.API_MODELS.map(model=>model.value));
-  assert.equal(select.value,'grok-4.7');assert.equal(fixture.ids.get('build-fast-help').hidden,true);
+  assert.equal(select.value,'grok-4.3');assert.equal(fixture.ids.get('build-fast-help').hidden,true);
   assert.equal(fixture.permissionRequests.length,0);await fixture.ids.get('check-build').listeners.click();
-  assert.equal(select.value,'grok-4.7');assert.equal(fixture.ids.get('build-reasoning-effort').value,'low');
+  assert.equal(select.value,'grok-4.3');assert.equal(fixture.ids.get('build-reasoning-effort').value,'none');
   assert.deepEqual(select.children.filter(option=>!core.API_MODELS.some(model=>model.value===option.value)).map(option=>option.value),['grok-preview-fast','grok-preview-custom']);
   assert.equal(select.children.find(option=>option.value==='grok-preview-fast').textContent,'grok-preview-fast');
   select.value='grok-preview-fast';select.listeners.change();fixture.ids.get('build-reasoning-effort').value='high';
@@ -2073,13 +2073,15 @@ test('another setup tab refreshes only untouched local connection details and pr
   assert.equal(fixture.ids.get('build-secret').value,'keep-private-draft');assert.equal(Number(fixture.ids.get('build-port').value),2420);assert.equal(fixture.messages.filter(message=>message.type==='GET_BUILD_CONNECTION').length,prior);
 });
 
-test('guided setup exposes supported choices before Save when the saved default model is unavailable',async()=>{
+test('guided setup retains an unavailable saved model until the user explicitly selects a supported choice',async()=>{
   const modelCatalog=[{id:'grok-4.6',efforts:['minimal','low','high']},{id:'grok-4.5',available:false},{id:'invalid model id'}];
   const fixture=uiPageFixture('setup',core.normalizeSettings({buildModel:'grok-4.7',buildReasoningEffort:'high'}),{}, {buildStatus:{ready:true,modelCatalog}});await settleUI();await settleUI();
   assert.equal(fixture.ids.get('model-choices').hidden,true);assert.equal(fixture.ids.get('save').disabled,true);
-  await fixture.ids.get('check').listeners.click();assert.equal(fixture.ids.get('model-choices').hidden,false);assert.equal(fixture.ids.get('model').value,'grok-4.6');assert.deepEqual(fixture.ids.get('model').children.map(option=>option.value),['grok-4.6']);
-  assert.deepEqual(fixture.ids.get('reasoning').children.map(option=>option.value),['minimal','low','high']);assert.equal(fixture.ids.get('reasoning').value,'high');
-  assert.equal(fixture.messages.some(message=>message.type==='SAVE_BUILD_CONNECTION'),false);fixture.ids.get('reasoning').value='minimal';fixture.ids.get('reasoning').listeners.change();
+  await fixture.ids.get('check').listeners.click();assert.equal(fixture.ids.get('model-choices').hidden,false);assert.equal(fixture.ids.get('model').value,'grok-4.7');assert.deepEqual(fixture.ids.get('model').children.map(option=>option.value),['grok-4.6','grok-4.7']);
+  assert.equal(fixture.ids.get('model').children.find(option=>option.value==='grok-4.7').disabled,true);assert.equal(fixture.ids.get('reasoning').value,'high');assert.equal(fixture.ids.get('reasoning').children.find(option=>option.value==='high').disabled,true);assert.equal(fixture.ids.get('save').disabled,true);
+  await fixture.ids.get('save').listeners.click();assert.equal(fixture.messages.some(message=>message.type==='SAVE_BUILD_CONNECTION'),false);
+  fixture.ids.get('model').value='grok-4.6';fixture.ids.get('model').listeners.change();assert.deepEqual(fixture.ids.get('reasoning').children.map(option=>option.value),['minimal','low','high']);assert.equal(fixture.ids.get('reasoning').value,'high');
+  fixture.ids.get('reasoning').value='minimal';fixture.ids.get('reasoning').listeners.change();
   await fixture.ids.get('save').listeners.click();const saved=fixture.messages.find(message=>message.type==='SAVE_BUILD_CONNECTION');assert.equal(saved.settings.buildModel,'grok-4.6');assert.equal(saved.settings.buildReasoningEffort,'minimal');assert.equal(saved.settings.apiModel,'grok-4.3');assert.equal(saved.settings.apiReasoningEffort,'none');
 });
 
@@ -2091,9 +2093,55 @@ test('guided setup preserves an available saved model and reasoning and never sa
   const noModels=uiPageFixture('setup',core.DEFAULT_SETTINGS,{}, {buildStatus:{ready:true,modelCatalog:[]}});await settleUI();await settleUI();await noModels.ids.get('check').listeners.click();assert.equal(noModels.ids.get('save').disabled,true);await noModels.ids.get('save').listeners.click();assert.equal(noModels.messages.some(message=>message.type==='SAVE_BUILD_CONNECTION'),false);
 });
 
+test('fresh Settings and guided setup retain Grok 4.3 without reasoning through check, save and reopen without an API Key',async()=>{
+  for(const file of ['options','setup']){
+    const environment={buildStatus:{ready:true,installed:true,available:true,authenticated:true}},fixture=uiPageFixture(file,core.DEFAULT_SETTINGS,{session:{apiKey:undefined}},environment);await settleUI();await settleUI();
+    const modelId=file==='options'?'build-model':'model',effortId=file==='options'?'build-reasoning-effort':'reasoning',checkId=file==='options'?'check-build':'check';
+    if(file==='options'){
+      fixture.ids.get('provider').value='build';fixture.ids.get('provider').listeners.change();
+      assert.equal(fixture.ids.get('api-model').value,'grok-4.3');assert.equal(fixture.ids.get('api-reasoning-effort').value,'none');
+    }
+    await fixture.ids.get(checkId).listeners.click();
+    assert.equal(fixture.ids.get(modelId).value,'grok-4.3');assert.equal(fixture.ids.get(effortId).value,'none');assert.notEqual(fixture.ids.get(effortId).children.find(option=>option.value==='none').disabled,true);
+    if(file==='options'){const form=fixture.ids.get('settings-form');await form.listeners.submit({preventDefault(){},currentTarget:form});}else await fixture.ids.get('save').listeners.click();
+    const saved=fixture.messages.find(message=>message.type==='SAVE_BUILD_CONNECTION');assert.ok(saved,file);assert.equal(saved.settings.buildModel,'grok-4.3');assert.equal(saved.settings.buildReasoningEffort,'none');assert.equal(saved.settings.buildDefaultsVersion,1);assert.equal(saved.settings.apiModel,'grok-4.3');assert.equal(saved.settings.apiReasoningEffort,'none');assert.equal(fixture.session.apiKey,undefined);assert.equal(fixture.messages.some(message=>message.type==='SAVE_KEY'),false);
+    const reopened=uiPageFixture(file,fixture.local.settings,{session:{apiKey:undefined}},environment);await settleUI();await settleUI();await reopened.ids.get(checkId).listeners.click();
+    assert.equal(reopened.ids.get(modelId).value,'grok-4.3');assert.equal(reopened.ids.get(effortId).value,'none');assert.equal(reopened.local.settings.buildDefaultsVersion,1);assert.equal(reopened.messages.some(message=>['SAVE_KEY','SAVE_SETTINGS','SAVE_BUILD_CONNECTION'].includes(message.type)),false);
+  }
+});
+
+test('Settings never substitutes a missing Grok 4.3 or unsupported no-reasoning choice without a user model change',async()=>{
+  for(const missing of ['model','effort']){
+    const modelCatalog=[...(missing==='effort'?[{id:'grok-4.3',efforts:['minimal','low','high']}]:[]),{id:'grok-4.7',efforts:['low','high']}];
+    const fixture=uiPageFixture('options',core.normalizeSettings({provider:'build',apiModel:'grok-4.6',apiReasoningEffort:'xhigh'}),{}, {buildStatus:{ready:true,modelCatalog}});await settleUI();await settleUI();
+    const {ids}=fixture,form=ids.get('settings-form');ids.get('api-key').value='unsupported-model-key-draft';ids.get('api-key').listeners.input();await ids.get('check-build').listeners.click();
+    assert.equal(ids.get('build-model').value,'grok-4.3');assert.equal(ids.get('build-reasoning-effort').value,'none');
+    const blocked=missing==='model'?ids.get('build-model').children.find(option=>option.value==='grok-4.3'):ids.get('build-reasoning-effort').children.find(option=>option.value==='none');assert.equal(blocked.disabled,true,missing);
+    assert.equal(ids.get('build-model-status').textContent,ui.t(missing==='model'?'options.buildModelUnavailable':'options.reasoningInvalid','en',{model:'grok-4.3'}));
+    await form.listeners.submit({preventDefault(){},currentTarget:form});assert.equal(fixture.messages.some(message=>message.type==='SAVE_BUILD_CONNECTION'),false);assert.equal(ids.get(missing==='model'?'build-model':'build-reasoning-effort').focused,true);
+    fixture.runtimeListeners.forEach(listener=>listener({type:'UI_LANGUAGE_CHANGED',language:'zh-CN'}));ids.get('provider').value='api';ids.get('provider').listeners.change();ids.get('provider').value='build';ids.get('provider').listeners.change();
+    assert.equal(ids.get('build-model').value,'grok-4.3');assert.equal(ids.get('build-reasoning-effort').value,'none');assert.equal(ids.get('api-key').value,'unsupported-model-key-draft');
+    ids.get('build-model').value='grok-4.7';ids.get('build-model').listeners.change();assert.equal(ids.get('build-reasoning-effort').value,'low');
+    await form.listeners.submit({preventDefault(){},currentTarget:form});const saved=fixture.messages.find(message=>message.type==='SAVE_BUILD_CONNECTION');assert.ok(saved);assert.equal(saved.settings.buildModel,'grok-4.7');assert.equal(saved.settings.buildReasoningEffort,'low');assert.equal(saved.settings.buildDefaultsVersion,1);assert.equal(saved.settings.apiModel,'grok-4.6');assert.equal(saved.settings.apiReasoningEffort,'xhigh');assert.equal(ids.get('api-key').value,'unsupported-model-key-draft');assert.equal(fixture.messages.some(message=>message.type==='SAVE_KEY'),false);
+  }
+});
+
+test('guided setup preserves unavailable defaults and blocks Save until an explicit supported model or reasoning choice',async()=>{
+  for(const missing of ['model','effort']){
+    const modelCatalog=[...(missing==='effort'?[{id:'grok-4.3',efforts:['minimal','low','high']}]:[]),{id:'grok-4.7',efforts:['low','high']}];
+    const fixture=uiPageFixture('setup',core.DEFAULT_SETTINGS,{session:{apiKey:undefined}}, {buildStatus:{ready:true,modelCatalog}});await settleUI();await settleUI();await fixture.ids.get('check').listeners.click();
+    const {ids}=fixture;assert.equal(ids.get('model').value,'grok-4.3');assert.equal(ids.get('reasoning').value,'none');assert.equal(ids.get('save').disabled,true);
+    assert.equal(ids.get('status').textContent,ui.t(missing==='model'?'options.buildModelUnavailable':'options.reasoningInvalid','en',{model:'grok-4.3'}));
+    const blocked=missing==='model'?ids.get('model').children.find(option=>option.value==='grok-4.3'):ids.get('reasoning').children.find(option=>option.value==='none');assert.equal(blocked.disabled,true);
+    await ids.get('save').listeners.click();assert.equal(fixture.messages.some(message=>message.type==='SAVE_BUILD_CONNECTION'),false);
+    ids.get('model').value='grok-4.7';ids.get('model').listeners.change();assert.equal(ids.get('reasoning').value,'low');assert.equal(ids.get('save').disabled,false);
+    await ids.get('save').listeners.click();const saved=fixture.messages.find(message=>message.type==='SAVE_BUILD_CONNECTION');assert.ok(saved);assert.equal(saved.settings.buildModel,'grok-4.7');assert.equal(saved.settings.buildReasoningEffort,'low');assert.equal(saved.settings.buildDefaultsVersion,1);assert.equal(saved.settings.apiModel,'grok-4.3');assert.equal(saved.settings.apiReasoningEffort,'none');assert.equal(fixture.session.apiKey,undefined);assert.equal(fixture.messages.some(message=>message.type==='SAVE_KEY'),false);
+  }
+});
+
 test('Build reasoning choices use concrete ACP levels independently of API model profiles',async()=>{
   const fixture=uiPageFixture('options',core.normalizeSettings({provider:'build',buildModel:'grok-4.3'}));await settleUI();await settleUI();
-  assert.deepEqual(fixture.ids.get('build-reasoning-effort').children.map(option=>option.value),['minimal','low','medium','high','xhigh']);assert.equal(fixture.ids.get('build-reasoning-effort').value,'low');assert.equal(fixture.ids.get('api-reasoning-effort').value,'none');
+  assert.deepEqual(fixture.ids.get('build-reasoning-effort').children.map(option=>option.value),['none','minimal','low','medium','high','xhigh']);assert.equal(fixture.ids.get('build-reasoning-effort').value,'none');assert.equal(fixture.ids.get('api-reasoning-effort').value,'none');
   for(const language of ui.SUPPORTED_LANGUAGES){assert.ok(ui.catalog[language]['options.reasoning.minimal']);assert.ok(ui.catalog[language]['build.chooseModel']);}
   const html=fs.readFileSync(path.join(__dirname,'../extension/setup.html'),'utf8');for(const id of ['model','reasoning'])assert.match(html,new RegExp('<select id="'+id+'" required'));
 });

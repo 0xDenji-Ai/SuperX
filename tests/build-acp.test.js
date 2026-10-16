@@ -2,12 +2,13 @@
 const test=require('node:test');
 const assert=require('node:assert/strict');
 const ACP=require('../extension/build-acp.js');
+const Core=require('../extension/feed-core.js');
 const request=(overrides={})=>({requestId:'job-1',task:'verify',model:'grok-4.7',effort:'low',xSearch:true,webSearch:false,prompt:'Check the linked post.',...overrides});
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 function fixture(behavior={}){
-  const messages=[],notifications=[],responses=[],cleanups=[],listeners=new Set();let sid=0,model=behavior.currentModel??'grok-4.7',effort='high',activeSession,resolvePrompt;
-  const models=behavior.models??['grok-4.7','grok-4.6'];
-  function configs(){return [{id:'model',currentValue:model,options:models.map(value=>({value,name:value}))},{id:'reasoning_effort',currentValue:effort,options:(behavior.efforts??['low','medium','high']).map(value=>({value}))}];}
+  const messages=[],notifications=[],responses=[],cleanups=[],listeners=new Set();let sid=0,model=behavior.currentModel??'grok-4.3',effort=behavior.currentEffort??'high',activeSession,resolvePrompt;
+  const models=behavior.models??['grok-4.3','grok-4.7','grok-4.6'];
+  function configs(){return [{id:'model',currentValue:model,options:models.map(value=>({value,name:value}))},{id:'reasoning_effort',currentValue:effort,options:(behavior.efforts??(model==='grok-4.3'?['none','low','medium','high']:['low','medium','high'])).map(value=>({value}))}];}
   const emit=value=>{for(const listener of listeners)listener(value);};
   const update=value=>emit({jsonrpc:'2.0',method:'session/update',params:{sessionId:activeSession,update:value}});
   const reply=()=>({stopReason:behavior.stopReason??'end_turn',_meta:{modelId:behavior.actualModel??model,usage:behavior.usage??{inputTokens:40,outputTokens:10,totalTokens:50},...(behavior.structured?{structuredOutput:behavior.structured}:{})}});
@@ -59,9 +60,36 @@ test('explicit incompatible protocol and reported version fail before creating a
   for(const behavior of [{protocolVersion:2},{version:'1.0.99'}]){const f=fixture(behavior),status=await f.client.status();assert.equal(status.available,false);assert.equal(f.messages.some(message=>message.method==='session/new'),false);}
 });
 test('session model and reasoning effort must be advertised and reconfirmed before inference',async()=>{
-  for(const [behavior,change,code] of [[{}, {model:'grok-4.3'},'BUILD_MODEL_UNSUPPORTED'],[{wrongModel:true},{model:'grok-4.6'},'BUILD_MODEL_UNSUPPORTED'],[{wrongEffort:true},{},'BUILD_EFFORT_UNSUPPORTED'],[{efforts:['high']},{},'BUILD_EFFORT_UNSUPPORTED']]){
+  for(const [behavior,change,code] of [[{models:['grok-4.7','grok-4.6']}, {model:'grok-4.3'},'BUILD_MODEL_UNSUPPORTED'],[{wrongModel:true},{model:'grok-4.6'},'BUILD_MODEL_UNSUPPORTED'],[{wrongEffort:true},{},'BUILD_EFFORT_UNSUPPORTED'],[{efforts:['high']},{},'BUILD_EFFORT_UNSUPPORTED']]){
     const f=fixture(behavior);await assert.rejects(f.client.run(request(change)),{code});assert.equal(f.messages.some(message=>message.method==='session/prompt'),false);assert.equal(f.cleanups.length,1);
   }
+});
+test('the shared defaults explicitly select Grok 4.3 and none only when the live ACP catalog supports them',async()=>{
+  const f=fixture(),defaults=Core.DEFAULT_SETTINGS;
+  assert.equal(defaults.buildModel,'grok-4.3');assert.equal(defaults.buildReasoningEffort,'none');
+  const result=await f.client.run(request({model:defaults.buildModel,effort:defaults.buildReasoningEffort}));
+  assert.equal(result.model,'grok-4.3');assert.equal(f.messages.find(message=>message.params?.configId==='model').params.value,'grok-4.3');
+  assert.equal(f.messages.find(message=>message.params?.configId==='reasoning_effort').params.value,'none');assert.equal(f.messages.filter(message=>message.method==='session/prompt').length,1);
+});
+test('none is not translated to low or minimal when the official ACP catalog does not advertise none',async()=>{
+  for(const efforts of [['low','medium','high'],['minimal','low','high']]){
+    const f=fixture({efforts});await assert.rejects(f.client.run(request({model:'grok-4.3',effort:'none'})),{code:'BUILD_EFFORT_UNSUPPORTED'});
+    assert.equal(f.messages.some(message=>message.method==='session/prompt'),false);assert.equal(f.messages.some(message=>message.params?.configId==='reasoning_effort'),false);
+  }
+  const minimal=fixture({efforts:['minimal','low','high']});await minimal.client.run(request({model:'grok-4.3',effort:'minimal'}));
+  assert.equal(minimal.messages.find(message=>message.params?.configId==='reasoning_effort').params.value,'minimal');
+});
+test('zero-prompt status preserves an advertised none level independently from minimal',async()=>{
+  const f=fixture({efforts:['none','minimal','low','high']}),status=await f.client.status();
+  assert.deepEqual(status.modelCatalog.find(model=>model.id==='grok-4.3').efforts,['none','minimal','low','high']);assert.equal(status.available,true);
+  assert.equal(f.messages.some(message=>message.method==='session/prompt'),false);
+});
+test('an explicit current none value remains usable when the CLI fallback menu omits none',async()=>{
+  const behavior={currentEffort:'none',efforts:['minimal','low','high']},f=fixture(behavior);
+  const result=await f.client.run(request({model:'grok-4.3',effort:'none'}));assert.equal(result.model,'grok-4.3');
+  assert.equal(f.messages.some(message=>message.params?.configId==='reasoning_effort'),false);assert.equal(f.messages.filter(message=>message.method==='session/prompt').length,1);
+  const g=fixture(behavior),status=await g.client.status(),efforts=status.modelCatalog.find(model=>model.id==='grok-4.3').efforts;
+  assert.equal(status.available,true);assert.ok(efforts.includes('none'));assert.ok(efforts.includes('minimal'));assert.equal(g.messages.some(message=>message.method==='session/prompt'),false);
 });
 test('reported tool count and profile/model identity are runtime safety gates',async()=>{
   for(const behavior of [{localCount:1},{agentName:'grok-build'},{infoModel:'grok-4.6'}]){const f=fixture(behavior);await assert.rejects(f.client.run(request()),{code:'BUILD_TOOL_POLICY'});assert.equal(f.messages.some(message=>message.method==='session/prompt'),false);assert.equal(f.cleanups[0].cancel,true);}
