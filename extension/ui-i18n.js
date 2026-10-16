@@ -434,6 +434,138 @@
     }
     return locale;
   }
+  section([
+    'options.providerIntro','options.providerChoice','options.providerKey','options.providerBuild',
+    'options.apiSetup','options.apiStep1','options.apiStep2','options.apiStep3','options.keyStorageHelp','options.apiDirectHint',
+    'options.usageRules','options.dashboardUsage','options.buildSetup','options.buildStep1','options.buildStep2','options.buildStep3',
+    'options.connectorGuide','options.officialBuild','options.buildTransport','options.transportACP','options.transportCLI','options.transportHelp',
+    'options.buildModelHelp','options.buildModelUnavailable','options.checkBuild','options.connectionHelp','options.buildDescription',
+    'build.checking','build.unknown','build.ready','build.missing','build.login','build.unsupported','build.unavailable',
+    'popup.buildLabel','popup.buildHint','popup.setupBuild','popup.apiHint'
+  ], {
+    en: [
+      'Choose an answer source. Enabled visible posts queue for fact-checking immediately.','Connect with','API Key','Grok Build · Official login',
+      'Connect your API Key','Open Grok Dashboard → API Keys.','Choose Grok Inference as the Key type (the default Cursor type will not work). Allow Chat and, if needed, Models for your chosen model.','Create the Key, paste it below and save. Existing xAI Console Keys also work.','Remember Key encrypts it on this device automatically; uncheck it for session-only storage.','API requests go directly from this browser to xAI.',
+      'Usage depends on your account and provider rules. View usage in Grok Dashboard.','View Grok Dashboard usage','Connect Grok Build','Install the SuperX connector for Windows or macOS.','Install official Grok Build and sign in with your account.','Check the connection below, then save settings.',
+      'Install connector · Windows / macOS','Official Grok Build setup','Connection mode','ACP · Recommended','CLI · Compatibility','ACP reuses a local process; CLI runs a separate command for each task. Both use the same official account.',
+      'Model and reasoning availability depends on your Grok Build version and account. The connector checks support when connecting.','{model} was not reported as available by Grok Build. Choose a supported model or check your installation.','Check connection','Checks the local connector and login state. No fact-check request is sent.','Uses your official Grok Build login through a local connector. Queued checks run one at a time.',
+      'Checking local connection…','Connection not confirmed. Check connection in Settings.','Connector and login ready','Install the SuperX connector','Sign in to official Grok Build, then check again.','Update Grok Build or choose a supported connection mode.','Connection unavailable or login state could not be confirmed.',
+      'Grok Build · {transport}','Visible posts queue immediately; your local Grok Build connection handles one task at a time.','Set up Grok Build','Visible posts are fact-checked immediately. Usage depends on your account and provider rules.'
+    ],
+    'zh-CN': [
+      '选择回答来源。开启后，进入可视区域的帖子立即排队等待事实核查。','连接方式','API Key','Grok Build · 官方账号登录',
+      '连接 API Key','打开 Grok Dashboard → API Keys。','Key 类型选择 Grok Inference（默认 Cursor 类型不适用）。为所选模型授权 Chat，必要时也授权 Models。','创建 Key，粘贴到下方并保存。已有的 xAI Console Key 也可使用。','勾选后自动在此设备上加密保存；取消勾选则仅在当前浏览器会话中保存。','API 请求由此浏览器直接发送至 xAI。',
+      '用量取决于账号和提供方规则，可在 Grok Dashboard 查看。','查看 Grok Dashboard 用量','连接 Grok Build','安装适用于 Windows 或 macOS 的 SuperX 连接器。','安装官方 Grok Build，并使用你的账号登录。','点击下方检查连接，然后保存设置。',
+      '安装连接器 · Windows / macOS','官方 Grok Build 安装指南','连接模式','ACP · 推荐','CLI · 兼容模式','ACP 复用本地进程；CLI 为每次任务运行独立命令。两者使用同一官方账号。',
+      '可用模型和推理等级取决于 Grok Build 版本及账号，连接器会在连接时检查支持情况。','Grok Build 未报告 {model} 可用。请选择支持的模型或检查安装。','检查连接','仅检查本地连接器及登录状态，不发送事实核查请求。','通过本地连接器使用官方 Grok Build 登录，排队的核查任务逐项执行。',
+      '正在检查本地连接…','尚未确认连接，请在设置中检查连接。','连接器和登录已就绪','请安装 SuperX 连接器','请登录官方 Grok Build 后重新检查。','请更新 Grok Build 或选择支持的连接模式。','连接不可用或无法确认登录状态。',
+      'Grok Build · {transport}','可视帖子立即排队，本地 Grok Build 连接逐项执行任务。','设置 Grok Build','可视帖子立即开始事实核查，用量取决于账号和提供方规则。'
+    ],
+    'zh-TW': [
+      '選擇回答來源。開啟後，可見貼文立即排隊等待事實查核。','連線方式','API Key','Grok Build · 官方帳號登入',
+      '連接 API Key','開啟 Grok Dashboard → API Keys。','Key 類型選擇 Grok Inference（預設 Cursor 類型不適用）。為所選模型授權 Chat，必要時也授權 Models。','建立 Key，貼到下方並儲存。現有的 xAI Console Key 也可使用。','勾選後自動在此裝置加密儲存；取消勾選則僅在目前瀏覽器工作階段儲存。','API 請求由此瀏覽器直接傳送至 xAI。',
+      '用量取決於帳號及提供者規則，可在 Grok Dashboard 查看。','查看 Grok Dashboard 用量','連接 Grok Build','安裝適用於 Windows 或 macOS 的 SuperX 連接器。','安裝官方 Grok Build，並使用你的帳號登入。','點擊下方檢查連線，再儲存設定。',
+      '安裝連接器 · Windows / macOS','官方 Grok Build 安裝指南','連線模式','ACP · 建議','CLI · 相容模式','ACP 重複使用本機程序；CLI 為每次任務執行獨立命令。兩者使用同一官方帳號。',
+      '可用模型和推理等級取決於 Grok Build 版本及帳號，連接器會在連線時檢查支援情況。','Grok Build 未回報 {model} 可用。請選擇支援的模型或檢查安裝。','檢查連線','僅檢查本機連接器及登入狀態，不傳送事實查核請求。','透過本機連接器使用官方 Grok Build 登入，排隊的查核任務逐項執行。',
+      '正在檢查本機連線…','尚未確認連線，請在設定中檢查連線。','連接器和登入已就緒','請安裝 SuperX 連接器','請登入官方 Grok Build 後重新檢查。','請更新 Grok Build 或選擇支援的連線模式。','連線無法使用或無法確認登入狀態。',
+      'Grok Build · {transport}','可見貼文立即排隊，本機 Grok Build 連線逐項執行任務。','設定 Grok Build','可見貼文立即開始事實查核，用量取決於帳號及提供者規則。'
+    ],
+    ja: [
+      '回答元を選択してください。有効にすると、表示中の投稿はすぐに事実確認の待ち行列に入ります。','接続方法','API Key','Grok Build · 公式ログイン',
+      'API Key を接続','Grok Dashboard → API Keys を開きます。','Key の種類は Grok Inference を選びます（初期設定の Cursor は使えません）。選択モデルの Chat と、必要に応じて Models を許可します。','Key を作成し、下に貼り付けて保存します。既存の xAI Console Key も使えます。','Key を記憶すると、この端末で自動的に暗号化して保存します。解除すると現在のセッションだけで保持します。','API リクエストはこのブラウザーから xAI に直接送信されます。',
+      '利用量はアカウントと提供元の規則によります。Grok Dashboard で確認できます。','Grok Dashboard で利用量を確認','Grok Build を接続','Windows または macOS 用の SuperX コネクターをインストールします。','公式 Grok Build をインストールし、自分のアカウントでログインします。','下で接続を確認し、設定を保存します。',
+      'コネクターを導入 · Windows / macOS','公式 Grok Build 導入ガイド','接続モード','ACP · 推奨','CLI · 互換モード','ACP はローカルプロセスを再利用し、CLI はタスクごとに個別のコマンドを実行します。どちらも同じ公式アカウントを使います。',
+      '利用できるモデルと推論レベルは Grok Build のバージョンとアカウントによります。接続時に対応状況を確認します。','Grok Build は {model} を利用可能と報告していません。対応モデルを選ぶかインストールを確認してください。','接続を確認','ローカルコネクターとログイン状態を確認します。事実確認のリクエストは送りません。','ローカルコネクター経由で公式 Grok Build のログインを使い、待機中の確認を一件ずつ実行します。',
+      'ローカル接続を確認中…','接続は未確認です。設定で接続を確認してください。','コネクターとログインの準備完了','SuperX コネクターをインストールしてください','公式 Grok Build にログインして再確認してください。','Grok Build を更新するか、対応する接続モードを選んでください。','接続できないか、ログイン状態を確認できません。',
+      'Grok Build · {transport}','表示中の投稿はすぐに待ち行列に入り、ローカルの Grok Build 接続で一件ずつ処理されます。','Grok Build を設定','表示中の投稿を直ちに事実確認します。利用量はアカウントと提供元の規則によります。'
+    ],
+    ko: [
+      '답변 소스를 선택하세요. 활성화하면 보이는 게시물이 즉시 사실 확인 대기열에 추가됩니다.','연결 방식','API Key','Grok Build · 공식 로그인',
+      'API Key 연결','Grok Dashboard → API Keys를 여세요.','Key 유형으로 Grok Inference를 선택하세요(기본 Cursor 유형은 사용할 수 없음). 선택한 모델에 Chat과 필요한 경우 Models 권한을 허용하세요.','Key를 만들고 아래에 붙여넣어 저장하세요. 기존 xAI Console Key도 사용할 수 있습니다.','Key 기억을 선택하면 이 기기에 자동으로 암호화해 저장합니다. 해제하면 현재 세션에만 보관합니다.','API 요청은 이 브라우저에서 xAI로 직접 전송됩니다.',
+      '사용량은 계정과 제공업체 규칙에 따라 다릅니다. Grok Dashboard에서 확인하세요.','Grok Dashboard 사용량 보기','Grok Build 연결','Windows 또는 macOS용 SuperX 커넥터를 설치하세요.','공식 Grok Build를 설치하고 본인 계정으로 로그인하세요.','아래에서 연결을 확인한 다음 설정을 저장하세요.',
+      '커넥터 설치 · Windows / macOS','공식 Grok Build 설치 안내','연결 모드','ACP · 권장','CLI · 호환 모드','ACP는 로컬 프로세스를 재사용하고 CLI는 작업마다 별도 명령을 실행합니다. 둘 다 같은 공식 계정을 사용합니다.',
+      '사용 가능한 모델과 추론 수준은 Grok Build 버전과 계정에 따라 다릅니다. 연결 시 지원 여부를 확인합니다.','Grok Build에서 {model}을 사용할 수 있다고 보고하지 않았습니다. 지원 모델을 선택하거나 설치를 확인하세요.','연결 확인','로컬 커넥터와 로그인 상태만 확인합니다. 사실 확인 요청은 전송하지 않습니다.','로컬 커넥터를 통해 공식 Grok Build 로그인을 사용하며 대기 중인 확인 작업을 하나씩 실행합니다.',
+      '로컬 연결 확인 중…','연결이 확인되지 않았습니다. 설정에서 연결을 확인하세요.','커넥터 및 로그인 준비 완료','SuperX 커넥터를 설치하세요','공식 Grok Build에 로그인한 후 다시 확인하세요.','Grok Build를 업데이트하거나 지원되는 연결 모드를 선택하세요.','연결할 수 없거나 로그인 상태를 확인할 수 없습니다.',
+      'Grok Build · {transport}','보이는 게시물이 즉시 대기열에 추가되고 로컬 Grok Build 연결이 한 번에 하나씩 처리합니다.','Grok Build 설정','보이는 게시물을 즉시 사실 확인합니다. 사용량은 계정과 제공업체 규칙에 따라 다릅니다.'
+    ],
+    es: [
+      'Elige el origen de las respuestas. Al activarlo, las publicaciones visibles entran inmediatamente en la cola de verificación.','Conectar mediante','API Key','Grok Build · Inicio de sesión oficial',
+      'Conecta tu API Key','Abre Grok Dashboard → API Keys.','Elige Grok Inference como tipo de Key (el tipo Cursor predeterminado no funciona). Autoriza Chat y, si hace falta, Models para el modelo elegido.','Crea la Key, pégala abajo y guarda. También sirven las Keys existentes de xAI Console.','Recordar Key la cifra automáticamente en este dispositivo; desmárcalo para conservarla solo durante la sesión.','Las solicitudes API van directamente de este navegador a xAI.',
+      'El uso depende de tu cuenta y de las reglas del proveedor. Consúltalo en Grok Dashboard.','Ver uso en Grok Dashboard','Conecta Grok Build','Instala el conector SuperX para Windows o macOS.','Instala el Grok Build oficial e inicia sesión con tu cuenta.','Comprueba la conexión abajo y guarda los ajustes.',
+      'Instalar conector · Windows / macOS','Instalación oficial de Grok Build','Modo de conexión','ACP · Recomendado','CLI · Compatibilidad','ACP reutiliza un proceso local; CLI ejecuta un comando independiente para cada tarea. Ambos usan la misma cuenta oficial.',
+      'Los modelos y niveles de razonamiento disponibles dependen de tu versión de Grok Build y tu cuenta. Se comprueban al conectar.','Grok Build no ha indicado que {model} esté disponible. Elige un modelo compatible o comprueba la instalación.','Comprobar conexión','Comprueba el conector local y la sesión. No envía solicitudes de verificación.','Usa tu sesión oficial de Grok Build mediante un conector local. Las verificaciones en cola se ejecutan de una en una.',
+      'Comprobando conexión local…','Conexión sin confirmar. Compruébala en Ajustes.','Conector y sesión listos','Instala el conector SuperX','Inicia sesión en el Grok Build oficial y vuelve a comprobar.','Actualiza Grok Build o elige un modo de conexión compatible.','Conexión no disponible o sesión sin confirmar.',
+      'Grok Build · {transport}','Las publicaciones visibles entran inmediatamente en cola; tu conexión local de Grok Build procesa una tarea a la vez.','Configurar Grok Build','Las publicaciones visibles se verifican inmediatamente. El uso depende de tu cuenta y de las reglas del proveedor.'
+    ],
+    fr: [
+      'Choisissez la source des réponses. Une fois activées, les publications visibles rejoignent immédiatement la file de vérification.','Connexion avec','API Key','Grok Build · Connexion officielle',
+      'Connecter votre API Key','Ouvrez Grok Dashboard → API Keys.','Choisissez le type Grok Inference (le type Cursor par défaut ne fonctionne pas). Autorisez Chat et, si nécessaire, Models pour le modèle choisi.','Créez la Key, collez-la ci-dessous et enregistrez. Les Keys xAI Console existantes fonctionnent aussi.','Mémoriser la Key la chiffre automatiquement sur cet appareil ; décochez pour la conserver uniquement durant la session.','Les requêtes API vont directement de ce navigateur à xAI.',
+      'L’utilisation dépend de votre compte et des règles du fournisseur. Consultez-la dans Grok Dashboard.','Voir l’utilisation dans Grok Dashboard','Connecter Grok Build','Installez le connecteur SuperX pour Windows ou macOS.','Installez le Grok Build officiel et connectez-vous à votre compte.','Vérifiez la connexion ci-dessous, puis enregistrez les paramètres.',
+      'Installer le connecteur · Windows / macOS','Installation officielle de Grok Build','Mode de connexion','ACP · Recommandé','CLI · Compatibilité','ACP réutilise un processus local ; CLI lance une commande distincte pour chaque tâche. Les deux utilisent le même compte officiel.',
+      'Les modèles et niveaux de raisonnement disponibles dépendent de votre version de Grok Build et de votre compte. Ils sont vérifiés à la connexion.','Grok Build n’a pas indiqué que {model} était disponible. Choisissez un modèle compatible ou vérifiez l’installation.','Vérifier la connexion','Vérifie le connecteur local et la connexion au compte. Aucune requête de vérification des faits n’est envoyée.','Utilise votre connexion officielle à Grok Build via un connecteur local. Les vérifications en attente sont exécutées une par une.',
+      'Vérification de la connexion locale…','Connexion non confirmée. Vérifiez-la dans les paramètres.','Connecteur et compte prêts','Installez le connecteur SuperX','Connectez-vous au Grok Build officiel puis vérifiez à nouveau.','Mettez Grok Build à jour ou choisissez un mode de connexion compatible.','Connexion indisponible ou état du compte non confirmé.',
+      'Grok Build · {transport}','Les publications visibles rejoignent immédiatement la file ; votre connexion locale à Grok Build traite une tâche à la fois.','Configurer Grok Build','Les publications visibles sont vérifiées immédiatement. L’utilisation dépend de votre compte et des règles du fournisseur.'
+    ],
+    de: [
+      'Wähle die Antwortquelle. Aktivierte sichtbare Beiträge werden sofort zur Faktenprüfung eingereiht.','Verbinden mit','API Key','Grok Build · Offizielle Anmeldung',
+      'API Key verbinden','Öffne Grok Dashboard → API Keys.','Wähle Grok Inference als Key-Typ (der Standardtyp Cursor funktioniert nicht). Erlaube Chat und bei Bedarf Models für das gewählte Modell.','Erstelle den Key, füge ihn unten ein und speichere. Vorhandene xAI Console Keys funktionieren ebenfalls.','Key merken verschlüsselt ihn automatisch auf diesem Gerät; ohne Häkchen bleibt er nur für die Sitzung erhalten.','API-Anfragen gehen direkt von diesem Browser an xAI.',
+      'Die Nutzung hängt von deinem Konto und den Anbieterregeln ab. Sieh sie im Grok Dashboard ein.','Nutzung im Grok Dashboard ansehen','Grok Build verbinden','Installiere den SuperX-Connector für Windows oder macOS.','Installiere das offizielle Grok Build und melde dich mit deinem Konto an.','Prüfe unten die Verbindung und speichere die Einstellungen.',
+      'Connector installieren · Windows / macOS','Offizielle Grok Build-Einrichtung','Verbindungsmodus','ACP · Empfohlen','CLI · Kompatibilität','ACP verwendet einen lokalen Prozess erneut; CLI führt für jede Aufgabe einen eigenen Befehl aus. Beide nutzen dasselbe offizielle Konto.',
+      'Verfügbare Modelle und Denkstufen hängen von deiner Grok Build-Version und deinem Konto ab. Die Unterstützung wird beim Verbinden geprüft.','Grok Build hat {model} nicht als verfügbar gemeldet. Wähle ein unterstütztes Modell oder prüfe die Installation.','Verbindung prüfen','Prüft den lokalen Connector und den Anmeldestatus. Es wird keine Faktenprüfung angefordert.','Nutzt deine offizielle Grok Build-Anmeldung über einen lokalen Connector. Prüfungen aus der Warteschlange laufen einzeln.',
+      'Lokale Verbindung wird geprüft…','Verbindung nicht bestätigt. Prüfe sie in den Einstellungen.','Connector und Anmeldung bereit','Installiere den SuperX-Connector','Melde dich beim offiziellen Grok Build an und prüfe erneut.','Aktualisiere Grok Build oder wähle einen unterstützten Verbindungsmodus.','Verbindung nicht verfügbar oder Anmeldung konnte nicht bestätigt werden.',
+      'Grok Build · {transport}','Sichtbare Beiträge werden sofort eingereiht; deine lokale Grok Build-Verbindung bearbeitet eine Aufgabe nach der anderen.','Grok Build einrichten','Sichtbare Beiträge werden sofort geprüft. Die Nutzung hängt von deinem Konto und den Anbieterregeln ab.'
+    ],
+    pt: [
+      'Escolha a origem das respostas. Quando ativado, publicações visíveis entram imediatamente na fila de verificação.','Conectar com','API Key','Grok Build · Login oficial',
+      'Conecte sua API Key','Abra Grok Dashboard → API Keys.','Escolha Grok Inference como tipo de Key (o tipo Cursor padrão não funciona). Autorize Chat e, se necessário, Models para o modelo escolhido.','Crie a Key, cole abaixo e salve. Keys existentes do xAI Console também funcionam.','Lembrar Key a criptografa automaticamente neste dispositivo; desmarque para mantê-la apenas durante a sessão.','As solicitações API vão diretamente deste navegador para a xAI.',
+      'O uso depende da sua conta e das regras do provedor. Consulte no Grok Dashboard.','Ver uso no Grok Dashboard','Conecte o Grok Build','Instale o conector SuperX para Windows ou macOS.','Instale o Grok Build oficial e entre com sua conta.','Verifique a conexão abaixo e salve as configurações.',
+      'Instalar conector · Windows / macOS','Instalação oficial do Grok Build','Modo de conexão','ACP · Recomendado','CLI · Compatibilidade','ACP reutiliza um processo local; CLI executa um comando separado para cada tarefa. Ambos usam a mesma conta oficial.',
+      'Os modelos e níveis de raciocínio disponíveis dependem da versão do Grok Build e da sua conta. O suporte é verificado ao conectar.','O Grok Build não informou que {model} está disponível. Escolha um modelo compatível ou verifique a instalação.','Verificar conexão','Verifica o conector local e o login. Nenhuma solicitação de verificação de fatos é enviada.','Usa seu login oficial do Grok Build por um conector local. As verificações na fila são executadas uma por vez.',
+      'Verificando conexão local…','Conexão não confirmada. Verifique nas configurações.','Conector e login prontos','Instale o conector SuperX','Entre no Grok Build oficial e verifique novamente.','Atualize o Grok Build ou escolha um modo de conexão compatível.','Conexão indisponível ou login não confirmado.',
+      'Grok Build · {transport}','Publicações visíveis entram imediatamente na fila; sua conexão local do Grok Build executa uma tarefa por vez.','Configurar Grok Build','Publicações visíveis são verificadas imediatamente. O uso depende da sua conta e das regras do provedor.'
+    ],
+    ar: [
+      'اختر مصدر الإجابات. عند التفعيل، تدخل المنشورات المرئية قائمة التحقق فورًا.','الاتصال عبر','API Key','Grok Build · تسجيل الدخول الرسمي',
+      'ربط API Key','افتح Grok Dashboard ← API Keys.','اختر Grok Inference لنوع Key (نوع Cursor الافتراضي لا يعمل). اسمح بـ Chat وModels عند الحاجة للنموذج المحدد.','أنشئ Key والصقها أدناه ثم احفظ. مفاتيح xAI Console الحالية تعمل أيضًا.','يؤدي تذكّر Key إلى تشفيرها تلقائيًا على هذا الجهاز؛ ألغِ الخيار للاحتفاظ بها خلال الجلسة فقط.','تُرسل طلبات API مباشرة من هذا المتصفح إلى xAI.',
+      'يعتمد الاستخدام على حسابك وقواعد المزوّد. اعرضه في Grok Dashboard.','عرض الاستخدام في Grok Dashboard','ربط Grok Build','ثبّت موصّل SuperX لنظام Windows أو macOS.','ثبّت Grok Build الرسمي وسجّل الدخول بحسابك.','تحقق من الاتصال أدناه ثم احفظ الإعدادات.',
+      'تثبيت الموصّل · Windows / macOS','إعداد Grok Build الرسمي','وضع الاتصال','ACP · موصى به','CLI · التوافق','يعيد ACP استخدام عملية محلية، ويشغّل CLI أمرًا مستقلًا لكل مهمة. كلاهما يستخدم الحساب الرسمي نفسه.',
+      'تعتمد النماذج ومستويات الاستدلال المتاحة على إصدار Grok Build وحسابك. يُفحص الدعم عند الاتصال.','لم يُبلّغ Grok Build أن {model} متاح. اختر نموذجًا مدعومًا أو تحقق من التثبيت.','التحقق من الاتصال','يفحص الموصّل المحلي وحالة تسجيل الدخول. لا يُرسل طلب للتحقق من الحقائق.','يستخدم تسجيل دخول Grok Build الرسمي عبر موصّل محلي، وينفّذ عمليات التحقق في القائمة واحدة تلو الأخرى.',
+      'جارٍ فحص الاتصال المحلي…','لم يُؤكد الاتصال. تحقّق منه في الإعدادات.','الموصّل وتسجيل الدخول جاهزان','ثبّت موصّل SuperX','سجّل الدخول إلى Grok Build الرسمي ثم أعد الفحص.','حدّث Grok Build أو اختر وضع اتصال مدعومًا.','الاتصال غير متاح أو تعذّر تأكيد تسجيل الدخول.',
+      'Grok Build · {transport}','تدخل المنشورات المرئية القائمة فورًا، ويعالج اتصال Grok Build المحلي مهمة واحدة في كل مرة.','إعداد Grok Build','يُتحقق من المنشورات المرئية فورًا. يعتمد الاستخدام على حسابك وقواعد المزوّد.'
+    ],
+    ru: [
+      'Выберите источник ответов. При включении видимые публикации сразу попадают в очередь проверки.','Способ подключения','API Key','Grok Build · Официальный вход',
+      'Подключите API Key','Откройте Grok Dashboard → API Keys.','Выберите тип Grok Inference (тип Cursor по умолчанию не подходит). Разрешите Chat и при необходимости Models для выбранной модели.','Создайте Key, вставьте ниже и сохраните. Существующие Keys из xAI Console тоже подходят.','Запоминание Key автоматически шифрует её на этом устройстве; снимите флажок для хранения только в текущем сеансе.','Запросы API отправляются из этого браузера напрямую в xAI.',
+      'Использование зависит от аккаунта и правил провайдера. Смотрите его в Grok Dashboard.','Использование в Grok Dashboard','Подключите Grok Build','Установите коннектор SuperX для Windows или macOS.','Установите официальный Grok Build и войдите в свой аккаунт.','Проверьте подключение ниже и сохраните настройки.',
+      'Установить коннектор · Windows / macOS','Официальная установка Grok Build','Режим подключения','ACP · Рекомендуется','CLI · Совместимость','ACP повторно использует локальный процесс; CLI запускает отдельную команду для каждой задачи. Оба используют один официальный аккаунт.',
+      'Доступные модели и уровни рассуждения зависят от версии Grok Build и аккаунта. Поддержка проверяется при подключении.','Grok Build не сообщил о доступности {model}. Выберите поддерживаемую модель или проверьте установку.','Проверить подключение','Проверяет локальный коннектор и вход в аккаунт. Запрос проверки фактов не отправляется.','Использует официальный вход в Grok Build через локальный коннектор. Проверки из очереди выполняются по одной.',
+      'Проверка локального подключения…','Подключение не подтверждено. Проверьте его в настройках.','Коннектор и вход готовы','Установите коннектор SuperX','Войдите в официальный Grok Build и проверьте снова.','Обновите Grok Build или выберите поддерживаемый режим подключения.','Подключение недоступно или вход не удалось подтвердить.',
+      'Grok Build · {transport}','Видимые публикации сразу попадают в очередь; локальное подключение Grok Build выполняет задачи по одной.','Настроить Grok Build','Видимые публикации сразу проверяются. Использование зависит от аккаунта и правил провайдера.'
+    ],
+    hi: [
+      'जवाब का स्रोत चुनें। सक्षम होने पर दिखाई देने वाली पोस्ट तुरंत तथ्य-जाँच की कतार में जुड़ती हैं।','कनेक्ट करने का तरीका','API Key','Grok Build · आधिकारिक लॉगिन',
+      'अपनी API Key जोड़ें','Grok Dashboard → API Keys खोलें।','Key के प्रकार में Grok Inference चुनें (डिफ़ॉल्ट Cursor प्रकार काम नहीं करेगा)। चुने गए मॉडल के लिए Chat और ज़रूरत होने पर Models की अनुमति दें।','Key बनाएं, नीचे पेस्ट करें और सहेजें। मौजूदा xAI Console Keys भी काम करती हैं।','Key याद रखें चुनने पर यह डिवाइस पर अपने आप एन्क्रिप्ट होती है; केवल वर्तमान सत्र में रखने के लिए इसे हटाएं।','API अनुरोध इस ब्राउज़र से सीधे xAI को भेजे जाते हैं।',
+      'उपयोग आपके खाते और प्रदाता के नियमों पर निर्भर करता है। Grok Dashboard में उपयोग देखें।','Grok Dashboard में उपयोग देखें','Grok Build जोड़ें','Windows या macOS के लिए SuperX कनेक्टर इंस्टॉल करें।','आधिकारिक Grok Build इंस्टॉल करें और अपने खाते से लॉगिन करें।','नीचे कनेक्शन जाँचें, फिर सेटिंग सहेजें।',
+      'कनेक्टर इंस्टॉल करें · Windows / macOS','आधिकारिक Grok Build सेटअप','कनेक्शन मोड','ACP · अनुशंसित','CLI · अनुकूलता','ACP स्थानीय प्रक्रिया का दोबारा उपयोग करता है; CLI हर कार्य के लिए अलग कमांड चलाता है। दोनों एक ही आधिकारिक खाते का उपयोग करते हैं।',
+      'मॉडल और तर्क स्तर की उपलब्धता आपके Grok Build संस्करण और खाते पर निर्भर है। कनेक्टर जुड़ते समय समर्थन जाँचता है।','Grok Build ने {model} को उपलब्ध नहीं बताया। समर्थित मॉडल चुनें या इंस्टॉलेशन जाँचें।','कनेक्शन जाँचें','स्थानीय कनेक्टर और लॉगिन स्थिति जाँचता है। कोई तथ्य-जाँच अनुरोध नहीं भेजता।','स्थानीय कनेक्टर से आपके आधिकारिक Grok Build लॉगिन का उपयोग करता है। कतार में लगी जाँच एक-एक करके चलती हैं।',
+      'स्थानीय कनेक्शन जाँचा जा रहा है…','कनेक्शन की पुष्टि नहीं हुई। सेटिंग में कनेक्शन जाँचें।','कनेक्टर और लॉगिन तैयार हैं','SuperX कनेक्टर इंस्टॉल करें','आधिकारिक Grok Build में लॉगिन करें, फिर दोबारा जाँचें।','Grok Build अपडेट करें या समर्थित कनेक्शन मोड चुनें।','कनेक्शन उपलब्ध नहीं है या लॉगिन की पुष्टि नहीं हो सकी।',
+      'Grok Build · {transport}','दिखाई देने वाली पोस्ट तुरंत कतार में जुड़ती हैं; आपका स्थानीय Grok Build कनेक्शन एक बार में एक कार्य चलाता है।','Grok Build सेट करें','दिखाई देने वाली पोस्ट की तुरंत तथ्य-जाँच होती है। उपयोग आपके खाते और प्रदाता के नियमों पर निर्भर है।'
+    ]
+  });
+  section(['options.buildFastHelp','build.permission'], {
+    en:['Fast options may use more of your account allowance. Availability and limits follow the provider’s rules.','Allow the Grok Build connection permission. Click Check connection to grant access.'],
+    'zh-CN':['Fast 选项可能消耗更多账号额度，可用性和限制以提供方规则为准。','请允许 Grok Build 连接权限。点击“检查连接”授权。'],
+    'zh-TW':['Fast 選項可能消耗更多帳號額度，可用性和限制依提供者規則為準。','請允許 Grok Build 連線權限。點擊「檢查連線」授權。'],
+    ja:['Fast オプションはアカウントの利用枠をより多く消費する場合があります。利用条件と上限は提供元の規則によります。','Grok Build の接続権限を許可してください。「接続を確認」でアクセスを許可できます。'],
+    ko:['Fast 옵션은 계정 사용 한도를 더 많이 소모할 수 있습니다. 사용 가능 여부와 한도는 제공업체 규칙에 따릅니다.','Grok Build 연결 권한을 허용하세요. 연결 확인을 눌러 접근을 승인하세요.'],
+    es:['Las opciones Fast pueden consumir más de la cuota de tu cuenta. La disponibilidad y los límites dependen del proveedor.','Permite la conexión con Grok Build. Pulsa Comprobar conexión para autorizar el acceso.'],
+    fr:['Les options Fast peuvent consommer davantage de votre quota. Leur disponibilité et leurs limites dépendent du fournisseur.','Autorisez la connexion à Grok Build. Cliquez sur Vérifier la connexion pour accorder l’accès.'],
+    de:['Fast-Optionen können mehr von deinem Kontokontingent verbrauchen. Verfügbarkeit und Grenzen richten sich nach dem Anbieter.','Erlaube die Verbindung mit Grok Build. Klicke auf Verbindung prüfen, um den Zugriff zu gewähren.'],
+    pt:['As opções Fast podem consumir mais da cota da sua conta. A disponibilidade e os limites seguem as regras do provedor.','Permita a conexão com Grok Build. Clique em Verificar conexão para autorizar o acesso.'],
+    ar:['قد تستهلك خيارات Fast قدرًا أكبر من حصة حسابك. يخضع التوفر والحدود لقواعد المزوّد.','اسمح باتصال Grok Build. اضغط التحقق من الاتصال لمنح الوصول.'],
+    ru:['Варианты Fast могут расходовать больше квоты аккаунта. Доступность и ограничения определяются правилами провайдера.','Разрешите подключение к Grok Build. Нажмите «Проверить подключение», чтобы предоставить доступ.'],
+    hi:['Fast विकल्प आपके खाते की अधिक उपयोग सीमा खर्च कर सकते हैं। उपलब्धता और सीमाएँ प्रदाता के नियमों पर निर्भर हैं।','Grok Build कनेक्शन की अनुमति दें। पहुँच देने के लिए कनेक्शन जाँचें पर क्लिक करें।']
+  });
   const aliases = {'common.auto':'lang.auto','common.failed':'status.failed','tooltip.collapse':'common.collapse','tooltip.expand':'common.expand'};
   for (const language of SUPPORTED_LANGUAGES) {
     for (const [key, source] of Object.entries(aliases)) catalog[language][key] = catalog[language][source];

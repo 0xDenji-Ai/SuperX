@@ -96,7 +96,7 @@ try {
 
 let scripts = [];
 try {
-  scripts = (await Promise.all(['extension', 'tests', 'tools'].map(directory => filesIn(resolve(root, directory)))))
+  scripts = (await Promise.all(['extension', 'tests', 'tools', 'connector'].map(directory => filesIn(resolve(root, directory)))))
     .flat().filter(path => /\.(?:js|cjs|mjs)$/.test(path)).sort();
   let invalid = false;
   for (const script of scripts) {
@@ -121,8 +121,9 @@ if (!testFiles.length) {
   if (result.error || result.status !== 0) {
     fail(`Tests failed\n${result.error?.message || `${result.stdout || ''}${result.stderr || ''}`}`);
   } else {
-    const count = result.stdout.match(/^# tests (\d+)$/m)?.[1] || '?';
-    console.log(`✓ Tests: ${count} passed`);
+    const count = result.stdout.match(/^# pass (\d+)$/m)?.[1] || '?';
+    const skipped = result.stdout.match(/^# skipped (\d+)$/m)?.[1] || '0';
+    console.log(`✓ Tests: ${count} passed${skipped!=='0'?`, ${skipped} skipped`:''}`);
   }
 }
 

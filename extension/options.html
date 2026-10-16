@@ -33,22 +33,37 @@
           <p id="status" role="status" aria-live="polite"></p>
         </header>
         <div class="page-intro">
-          <p class="subtitle" data-i18n="options.subtitle">With your API Key ready, enabled visible posts enter analysis with no session limit.</p>
+          <p class="subtitle" data-i18n="options.providerIntro">Choose an answer source. Enabled visible posts queue for fact-checking immediately.</p>
           <p class="help" data-i18n="options.uiHint">Interface labels follow X. Answer language is configured separately.</p>
         </div>
       <form id="settings-form" autocomplete="off">
         <section class="settings-section" aria-labelledby="source-heading">
           <div class="section-heading">
             <h2 id="source-heading" data-i18n="options.source">Answer source</h2>
-            <p class="section-description" data-i18n="options.providerAPI">xAI API · Parallel fact checks</p>
+            <p id="source-description" class="section-description"></p>
+          </div>
+          <div class="field provider-field">
+            <label for="provider" data-i18n="options.providerChoice">Connect with</label>
+            <select id="provider" required aria-describedby="source-description">
+              <option value="api" data-i18n="options.providerKey">API Key</option>
+              <option value="build" data-i18n="options.providerBuild">Grok Build · Official login</option>
+            </select>
           </div>
           <label class="switch-label"><span data-i18n="options.enable">Enable</span><input id="enabled" type="checkbox" role="switch"><span class="switch-track" aria-hidden="true"></span></label>
           <div id="api-fields">
+            <div class="onboarding" aria-labelledby="api-setup-heading">
+              <h3 id="api-setup-heading" data-i18n="options.apiSetup">Connect your API Key</h3>
+              <ol>
+                <li><a href="https://grok.com/dashboard/api-keys" target="_blank" rel="noopener noreferrer" data-i18n="options.apiStep1">Open Grok Dashboard → API Keys.</a></li>
+                <li data-i18n="options.apiStep2">Choose Grok Inference as the Key type (the default Cursor type will not work). Allow Chat and, if needed, Models for your chosen model.</li>
+                <li data-i18n="options.apiStep3">Create the Key, paste it below and save. Existing xAI Console Keys also work.</li>
+              </ol>
+            </div>
             <div class="field api-key-field">
               <label for="api-key">xAI API Key</label>
               <input id="api-key" type="password" maxlength="500" data-i18n-placeholder="options.keyPlaceholder" placeholder="Enter your xAI API Key" autocomplete="off" spellcheck="false" dir="ltr" aria-describedby="key-help key-security-state">
-              <p id="key-help" class="help" data-i18n="options.keyHelp">Create a Key in the xAI console. Remember Key encrypts it on this device automatically; uncheck it for session-only storage.</p>
-              <p class="help" data-i18n="options.directClientHint">Your own xAI API Key sends requests directly from this browser to xAI. API usage is billed to your xAI account.</p>
+              <p id="key-help" class="help" data-i18n="options.keyStorageHelp">Remember Key encrypts it on this device automatically; uncheck it for session-only storage.</p>
+              <p class="help" data-i18n="options.apiDirectHint">API requests go directly from this browser to xAI.</p>
               <a class="help" href="https://console.x.ai/" target="_blank" rel="noopener noreferrer" data-i18n="options.console">xAI console</a>
             </div>
             <label class="checkbox-label"><input id="remember-key" type="checkbox" checked><span data-i18n="options.remember">Remember Key on this device</span></label>
@@ -74,13 +89,54 @@
                 <input id="api-concurrency" type="number" min="1" max="8" step="1" required>
               </div>
             </div>
+            <p class="help" data-i18n="options.usageRules">Usage depends on your account and provider rules. View usage in Grok Dashboard.</p>
+            <a class="help" href="https://grok.com/dashboard/usage" target="_blank" rel="noopener noreferrer" data-i18n="options.dashboardUsage">View Grok Dashboard usage</a>
+            <button id="clear-key" class="text-button" type="button" data-i18n="common.clearKey">Clear saved Key</button>
+          </div>
+          <div id="build-fields" hidden>
+            <div class="onboarding" aria-labelledby="build-setup-heading">
+              <h3 id="build-setup-heading" data-i18n="options.buildSetup">Connect Grok Build</h3>
+              <ol>
+                <li data-i18n="options.buildStep1">Install the SuperX connector for Windows or macOS.</li>
+                <li data-i18n="options.buildStep2">Install official Grok Build and sign in with your account.</li>
+                <li data-i18n="options.buildStep3">Check the connection below, then save settings.</li>
+              </ol>
+              <div class="onboarding-actions">
+                <button id="connector-guide" class="secondary-button" type="button" data-i18n="options.connectorGuide">Install connector · Windows / macOS</button>
+                <a href="https://x.ai/cli" target="_blank" rel="noopener noreferrer" data-i18n="options.officialBuild">Official Grok Build setup</a>
+              </div>
+            </div>
+            <div class="field">
+              <label for="build-transport" data-i18n="options.buildTransport">Connection mode</label>
+              <select id="build-transport" required aria-describedby="build-transport-help">
+                <option value="acp" data-i18n="options.transportACP">ACP · Recommended</option>
+                <option value="cli" data-i18n="options.transportCLI">CLI · Compatibility</option>
+              </select>
+              <p id="build-transport-help" class="help" data-i18n="options.transportHelp">ACP reuses a local process; CLI runs a separate command for each task. Both use the same official account.</p>
+            </div>
+            <div class="field">
+              <label for="build-model" data-i18n="options.model">Model</label>
+              <select id="build-model" required aria-describedby="build-model-help build-fast-help"></select>
+              <p id="build-model-help" class="help" data-i18n="options.buildModelHelp">Model and reasoning availability depends on your Grok Build version and account. The connector checks support when connecting.</p>
+              <p id="build-fast-help" class="help" hidden></p>
+              <p id="build-model-status" class="help" role="status" aria-live="polite"></p>
+            </div>
+            <div class="field">
+              <label for="build-reasoning-effort" data-i18n="options.reasoning">Reasoning effort</label>
+              <select id="build-reasoning-effort" required></select>
+            </div>
+            <div class="connection-check">
+              <button id="check-build" class="secondary-button" type="button" data-i18n="options.checkBuild">Check connection</button>
+              <p id="build-status" class="key-state" role="status" aria-live="polite"></p>
+              <p class="help" data-i18n="options.connectionHelp">Checks the local connector and login state. No fact-check request is sent.</p>
+            </div>
+          </div>
+          <div class="shared-search">
             <p class="help" data-i18n="options.verificationHelp">Fact checks read the full linked post. Search tool calls may add cost.</p>
             <div class="checkbox-row">
               <label class="checkbox-label"><input id="web-search" type="checkbox"><span data-i18n="options.webSearch">Search web sources</span></label>
               <label class="checkbox-label"><input id="x-search" type="checkbox"><span data-i18n="options.xSearch">Search X posts</span></label>
             </div>
-            <p class="help" data-i18n="options.billing">API usage is billed separately. X Premium does not include API credits.</p>
-            <button id="clear-key" class="text-button" type="button" data-i18n="common.clearKey">Clear saved Key</button>
           </div>
         </section>
 

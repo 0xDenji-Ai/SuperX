@@ -36,6 +36,9 @@ async function fixture(t) {
   for (const directory of PUBLIC_SOURCE_DIRECTORIES) await mkdir(join(root, directory), { recursive: true });
   await put(root, 'LICENSE', license);
   await put(root, 'package.json', JSON.stringify({ version: '1.2.3', license: 'MIT' }));
+  const {CONNECTOR_FILES}=await import('../connector/install.mjs');
+  for(const name of CONNECTOR_FILES)await put(root,`connector/${name}`,await readFile(join(sourceRoot,'connector',name)));
+  for(const name of ['config.json','auth.json','runtime/private.cjs','private-review.md'])await put(root,`connector/${name}`,'PRIVATE_CONNECTOR_DO_NOT_EXPORT');
   for (const name of PRODUCTION_FILES) {
     await put(root, `extension/${name}`, name === 'LICENSE.txt' ? license : await readFile(join(sourceRoot, 'extension', name)));
   }
@@ -102,6 +105,8 @@ test('public source keeps both README PNGs unchanged and excludes private output
   }
   assert.ok(names.includes('SuperX-1.2.3/docs/RELEASE_CHANNELS.md'));
   assert.ok(names.includes('SuperX-1.2.3/tools/package-release.mjs'));
+  assert.ok(names.includes('SuperX-1.2.3/connector/host.cjs'));assert.ok(names.includes('SuperX-1.2.3/connector/install-macos.command'));
+  assert.equal(archive.includes(Buffer.from('PRIVATE_CONNECTOR_DO_NOT_EXPORT')),false);
   assert.equal(names.some(name => /\/(?:website|chrome-web-store)\//.test(name)),false);
   assert.equal(names.some(name => /docs\/SuperX-private-review|tools\/(?:check-privacy-site|render-store-assets)\.mjs/.test(name)),false);
   assert.equal(names.some(name => /(?:\.git\/|\.codex\/|artifacts\/|output\/|tmp\/|private\.py|superx-preview\.(?:png|jpg)|private\.jpg)/.test(name)), false);

@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SuperX · Grok Build setup</title><link rel="icon" href="assets/icon-32.png"><link rel="stylesheet" href="setup.css">
+</head>
+<body>
+  <main>
+    <header><img src="assets/superx-logo.svg" alt="SuperX"><button id="settings" type="button"></button></header>
+    <h1 id="title"></h1><p id="intro" class="muted"></p>
+    <section><h2 id="download-title"></h2><p id="download-text"></p>
+      <a id="download" href="https://github.com/bwjoke/SuperX/releases" target="_blank" rel="noopener noreferrer"></a>
+      <p id="candidate" class="muted"></p>
+      <label id="id-label" for="extension-id"></label><div class="copy-row"><input id="extension-id" readonly spellcheck="false"><button id="copy-id" type="button"></button></div>
+    </section>
+    <section><h2 id="install-title"></h2><div class="tabs" role="group" aria-label="Operating system"><button id="windows" type="button">Windows</button><button id="macos" type="button">macOS</button></div>
+      <p id="install-text"></p><div class="command"><code id="install-command"></code><button id="copy-command" type="button"></button></div>
+      <p id="install-note" class="muted"></p>
+    </section>
+    <section><h2 id="login-title"></h2><p id="login-text"></p><div class="command"><code id="login-command"></code><button id="copy-login" type="button"></button></div><p id="login-note" class="muted"></p></section>
+    <section><h2 id="connect-title"></h2><p id="connect-text"></p><button id="check" type="button" class="primary"></button><p id="status" role="status" aria-live="polite" class="muted"></p></section>
+    <section><h2 id="notes-title"></h2><ul><li id="note-data"></li><li id="note-usage"></li><li id="note-model"></li><li id="note-error"></li></ul>
+      <p><a id="docs" href="https://github.com/bwjoke/SuperX/blob/main/docs/CONNECTIONS.md" target="_blank" rel="noopener noreferrer"></a> · <a id="official" href="https://github.com/xai-org/grok-build" target="_blank" rel="noopener noreferrer"></a></p>
+    </section>
+  </main><script src="ui-i18n.js"></script><script src="setup.js"></script>
+</body></html>

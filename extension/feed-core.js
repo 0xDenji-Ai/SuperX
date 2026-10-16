@@ -38,6 +38,12 @@
     // receiving a parameter whose compatibility has not been established.
     return profile?(profile.efforts.includes(value)?value:profile.defaultEffort):'auto';
   }
+  function buildReasoningEffort(model,value) {
+    if(modelProfile(model))return reasoningEffort(model,value);
+    // Build advertises additional model IDs at runtime. Keep the selected
+    // concrete effort for that negotiation; the host must confirm support.
+    return ['low','medium','high','xhigh'].includes(value)?value:'low';
+  }
 
   const MAX_PROMPT_LENGTH = 12000;
   const DEFAULT_PROMPTS = Object.freeze({
@@ -142,6 +148,9 @@
     interfaceLanguage: 'auto',
     apiModel: 'grok-4.3',
     apiReasoningEffort: 'none',
+    buildTransport: 'acp',
+    buildModel: 'grok-4.7',
+    buildReasoningEffort: 'low',
     apiConcurrency: 4,
     apiVerification: 'only',
     webSearch: true,
@@ -214,9 +223,11 @@
     const interfaceLanguage = typeof value.interfaceLanguage === 'string' ? value.interfaceLanguage.trim().toLowerCase() : '';
     const model = typeof value.apiModel === 'string' ? value.apiModel.trim() : '';
     const normalizedModel = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(model) ? model : DEFAULT_SETTINGS.apiModel;
+    const buildModel = typeof value.buildModel === 'string' ? value.buildModel.trim() : '';
+    const normalizedBuildModel = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(buildModel) ? buildModel : DEFAULT_SETTINGS.buildModel;
     return {
-      // Legacy native/no-key selections migrate to the supported API provider.
-      provider: 'api',
+      // The retired page automation provider is unrelated to Grok Build.
+      provider: value.provider === 'build' ? 'build' : 'api',
       enabled: typeof value.enabled === 'boolean' ? value.enabled : DEFAULT_SETTINGS.enabled,
       // Kept for backward compatibility only: visible posts have no dwell,
       // artificial startup delay or per-session analysis limit.
@@ -227,6 +238,9 @@
       interfaceLanguage: LANGUAGES.find(item => item.value.toLowerCase() === interfaceLanguage)?.value || DEFAULT_SETTINGS.interfaceLanguage,
       apiModel: normalizedModel,
       apiReasoningEffort: reasoningEffort(normalizedModel,value.apiReasoningEffort),
+      buildTransport: value.buildTransport === 'cli' ? 'cli' : DEFAULT_SETTINGS.buildTransport,
+      buildModel: normalizedBuildModel,
+      buildReasoningEffort: buildReasoningEffort(normalizedBuildModel,value.buildReasoningEffort),
       apiConcurrency: boundedNumber(value.apiConcurrency, DEFAULT_SETTINGS.apiConcurrency, 1, 8),
       // Legacy explanation/combined/off choices all become one fact-check task.
       apiVerification: 'only',
@@ -506,5 +520,5 @@
     clear() { this.items.clear(); }
   }
 
-  return Object.freeze({ LANGUAGES, API_MODELS, modelProfile, reasoningEffort, DEFAULT_SETTINGS, DEFAULT_PROMPTS, MAX_PROMPT_LENGTH, normalizePrompt, readerOutput, explanationMode, normalizeSettings, resolvePostLanguage, canonicalPostUrl, extractPost, postFingerprint, nativePostIdentity, apiPostIdentity, visibilityEligibility, BoundedPostQueue });
+  return Object.freeze({ LANGUAGES, API_MODELS, modelProfile, reasoningEffort, buildReasoningEffort, DEFAULT_SETTINGS, DEFAULT_PROMPTS, MAX_PROMPT_LENGTH, normalizePrompt, readerOutput, explanationMode, normalizeSettings, resolvePostLanguage, canonicalPostUrl, extractPost, postFingerprint, nativePostIdentity, apiPostIdentity, visibilityEligibility, BoundedPostQueue });
 });

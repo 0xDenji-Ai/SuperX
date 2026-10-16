@@ -23,6 +23,42 @@
   let optionsFocusPending = false;
   let lastOptionsFocusNonce;
   let historyReady=false, historyBusy=false,historyStatusKey=null;
+  let buildStatus = null, buildChecking = false, buildCheckRevision = 0;
+  const advertisedBuildModels = new Set();
+  const apiControlIds = ["api-key","remember-key","api-model","api-reasoning-effort","fast-preset","api-concurrency","clear-key"];
+  const buildControlIds = ["build-transport","build-model","build-reasoning-effort","check-build","connector-guide"];
+  const isBuild = () => $("provider").value === "build";
+  function buildStateKey() {
+    if (buildChecking) return "build.checking";
+    if (!buildStatus) return "build.unknown";
+    if (buildStatus.permission === "denied" || buildStatus.errorCode === "BUILD_PERMISSION_REQUIRED") return "build.permission";
+    if (buildStatus.ready === true) return "build.ready";
+    if (buildStatus.installed === false && buildStatus.connected === true) return "options.buildStep2";
+    if (buildStatus.installed === false || ["BUILD_HOST_MISSING","BUILD_NATIVE_MISSING"].includes(buildStatus.errorCode)) return "build.missing";
+    if (buildStatus.authenticated === false || ["BUILD_AUTH_REQUIRED","BUILD_LOGIN_REQUIRED"].includes(buildStatus.errorCode)) return "build.login";
+    if (["BUILD_VERSION_UNSUPPORTED","BUILD_UNSUPPORTED_VERSION","BUILD_PROTOCOL_UNSUPPORTED"].includes(buildStatus.errorCode)) return "build.unsupported";
+    return "build.unavailable";
+  }
+  function renderBuildStatus() {
+    $("build-status").textContent = ui.t(buildStateKey(),uiLanguage);
+    $("build-status").dataset.state = buildStatus?.ready === true ? "ready" : "unknown";
+    $("check-build").disabled = busy || buildChecking || !isBuild();
+    const catalog = buildStatus?.modelCatalog;
+    const selected = $("build-model").value;
+    const unavailable = Array.isArray(catalog) && !catalog.some(item => (typeof item === "string" ? item : item.id) === selected && item.available !== false);
+    $("build-model-status").textContent = unavailable ? ui.t("options.buildModelUnavailable",uiLanguage,{model:selected}) : "";
+    $("build-fast-help").textContent = ui.t("options.buildFastHelp",uiLanguage);
+    $("build-fast-help").hidden = !/fast/i.test(selected);
+  }
+  function renderProvider() {
+    const build = isBuild();
+    $("api-fields").hidden = build;$("build-fields").hidden = !build;
+    for (const id of apiControlIds) $(id).disabled = busy || build;
+    for (const id of buildControlIds) $(id).disabled = busy || !build;
+    $("source-description").textContent = ui.t(build ? "options.buildDescription" : "options.providerAPI",uiLanguage);
+    $("save").disabled = busy || (!build && !securityLoaded);
+    renderBuildStatus();
+  }
 
   function setHistoryStatus(key) {historyStatusKey=key;$("history-status").textContent=key?ui.t(key,uiLanguage):"";}
 
@@ -36,6 +72,7 @@
     for (const control of $("settings-form").elements) control.disabled = value;
     $("history-enabled").disabled=value||!historyReady||historyBusy;
     renderSecurity();
+    renderProvider();
     if (!value && optionsFocusPending) void consumeOptionsFocus();
   }
   function keyInputClear() {
@@ -47,7 +84,7 @@
     $("key-security-state").textContent = ui.t(stateKeys[security.keyState] || stateKeys.missing,uiLanguage);
     $("key-security-state").dataset.state = security.keyState;
     $("clear-key").hidden = !securityLoaded || security.keyState !== "ready" && !security.hasSavedKey;
-    $("save").disabled = busy || !securityLoaded;
+    $("save").disabled = busy || (!isBuild() && !securityLoaded);
   }
   async function refreshSecurity(fillKey = false, preserveDraft = false) {
     const result = await send({type:"GET_SECURITY_STATUS"});
@@ -70,8 +107,12 @@
     renderSecurity();return result;
   }
   function markDraft() {
-    if (busy || !securityLoaded) return;
+    if (busy || (!isBuild() && !securityLoaded)) return;
     const changed = keyChanged || rememberChanged
+      || $("provider").value !== currentSettings.provider
+      || $("build-transport").value !== currentSettings.buildTransport
+      || $("build-model").value !== currentSettings.buildModel
+      || $("build-reasoning-effort").value !== currentSettings.buildReasoningEffort
       || $("enabled").checked !== currentSettings.enabled
       || $("explanation-mode").value !== currentSettings.explanationMode
       || $("api-model").value !== currentSettings.apiModel
@@ -89,18 +130,18 @@
   }
   async function consumeOptionsFocus() {
     optionsFocusPending = true;
-    if (busy || !securityLoaded) return;
+    if (busy || (!isBuild() && !securityLoaded)) return;
     optionsFocusPending = false;
     try {
       const stored = await chrome.storage.session.get("superxOptionsFocus");
       const request = stored.superxOptionsFocus;
-      if (!request || !["api-key","unlock-passphrase"].includes(request.id)
+      if (!request || !["api-key","unlock-passphrase","build"].includes(request.id)
         || !["string","number"].includes(typeof request.nonce) || request.nonce === lastOptionsFocusNonce) return;
       if (busy) { optionsFocusPending = true;return; }
       lastOptionsFocusNonce = request.nonce;
-      // All Settings entry points start at the credential field. A previous
-      // extension version may still leave an unlock-password focus marker.
-      const id = "api-key";
+      // Keep Build navigation on its visible setup controls. Legacy password
+      // focus requests still lead to the API Key field in API mode.
+      const id = request.id === "build" || isBuild() ? isBuild() ? "check-build" : "provider" : "api-key";
       await chrome.storage.session.remove("superxOptionsFocus");
       $(id).scrollIntoView?.({block:"center",behavior:"instant"});
       $(id).focus({preventScroll:true});
@@ -172,6 +213,36 @@
     }
     select.value = core.reasoningEffort(model,effort);
   }
+  function buildModelChoices() {
+    const models=[...core.API_MODELS];
+    for(const entry of buildStatus?.modelCatalog || []){
+      const id=typeof entry==="string" ? entry : entry?.id;
+      if(typeof id==="string"&&/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(id))advertisedBuildModels.add(id);
+    }
+    for(const id of advertisedBuildModels)if(!models.some(item=>item.value===id))models.push({value:id,label:id});
+    if (!models.some(item=>item.value===currentSettings.buildModel)) models.push({value:currentSettings.buildModel,label:ui.t("options.savedModel",uiLanguage,{model:currentSettings.buildModel})});
+    return models;
+  }
+  function populateBuildModels(model) {
+    const select = $("build-model");select.replaceChildren();
+    for (const item of buildModelChoices()) {
+      const option = document.createElement("option");option.value=item.value;option.textContent=item.label;
+      const catalog = buildStatus?.modelCatalog;
+      option.disabled = Array.isArray(catalog) && !catalog.some(entry => (typeof entry === "string" ? entry : entry.id) === item.value && entry.available !== false);
+      select.append(option);
+    }
+    select.value = model;
+  }
+  function populateBuildReasoning(model,effort) {
+    const select = $("build-reasoning-effort");select.replaceChildren();
+    const entry = buildStatus?.modelCatalog?.find(item => typeof item === "object" && item.id === model);
+    const supported = core.modelProfile(model)?.efforts || ["low","medium","high","xhigh"];
+    const efforts = Array.isArray(entry?.efforts) ? supported.filter(value => entry.efforts.includes(value)) : supported;
+    for (const value of efforts) {
+      const option=document.createElement("option");option.value=value;option.textContent=ui.t("options.reasoning."+value,uiLanguage);select.append(option);
+    }
+    select.value=efforts.includes(effort) ? effort : efforts[0] || "";
+  }
   function renderLanguage() {
     const interfaceLanguage = $("interface-language").value || currentSettings.interfaceLanguage;
     uiLanguage = ui.resolveLanguage(interfaceLanguage,observedUILanguage);
@@ -184,12 +255,19 @@
     const model = $("api-model").value || currentSettings.apiModel;
     const effort = $("api-reasoning-effort").value || currentSettings.apiReasoningEffort;
     populateModels(model);populateReasoning(model,effort);
+    const buildModel=$("build-model").value || currentSettings.buildModel;
+    const buildEffort=$("build-reasoning-effort").value || currentSettings.buildReasoningEffort;
+    populateBuildModels(buildModel);populateBuildReasoning(buildModel,buildEffort);
     showExplanationMode();
     renderSecurity();
+    renderProvider();
     if (statusMessage) setStatus(statusMessage.key,statusMessage.state,statusMessage.vars);
   }
   function populate(settings) {
     $("enabled").checked = settings.enabled;
+    $("provider").value = settings.provider;
+    $("build-transport").value = settings.buildTransport;
+    populateBuildModels(settings.buildModel);populateBuildReasoning(settings.buildModel,settings.buildReasoningEffort);
     $("explanation-mode").value = settings.explanationMode === "custom" ? "custom" : "preset";
     populateModels(settings.apiModel);
     populateReasoning(settings.apiModel,settings.apiReasoningEffort);
@@ -200,6 +278,7 @@
     populateLanguages(settings.language);
     populateInterfaceLanguages(settings.interfaceLanguage);
     showExplanationMode();
+    renderProvider();
   }
   async function send(message) {
     const result = await chrome.runtime.sendMessage(message);
@@ -216,9 +295,9 @@
       ]);
       // The worker hydrates remembered Keys before replying. Read its current
       // session mirror only afterwards so a browser restart cannot look empty.
-      await refreshSecurity(true);
       currentSettings = core.normalizeSettings(local.settings);
       populate(currentSettings);
+      try {await refreshSecurity(true);} catch(error) {if(currentSettings.provider!=="build")throw error;}
       $("remember-key").checked = security.remember;
       if (localeRevision === revision) applyLanguage(locale?.language || local.uiLanguage || observedUILanguage);
       else renderLanguage();
@@ -227,9 +306,40 @@
     } finally { setBusy(false);await consumeOptionsFocus(); }
   }
   $("explanation-mode").addEventListener("change",() => { showExplanationMode();markDraft(); });
+  $("provider").addEventListener("change",() => { renderProvider();markDraft(); });
+  $("build-model").addEventListener("change",() => { populateBuildReasoning($("build-model").value,$("build-reasoning-effort").value);renderBuildStatus();markDraft(); });
+  $("check-build").addEventListener("click",async () => {
+    if (busy || buildChecking || !isBuild()) return;
+    const revision=++buildCheckRevision;
+    buildChecking=true;renderBuildStatus();
+    let permissionGranted=false;
+    try {
+      // Request directly in this click's user gesture, before any awaited work.
+      const permissionRequest=chrome.permissions?.request({permissions:["nativeMessaging"]});
+      permissionGranted=await permissionRequest;
+      if (revision!==buildCheckRevision) return;
+      if(permissionGranted!==true){buildStatus={ready:false,permission:"denied",errorCode:"BUILD_PERMISSION_REQUIRED"};return;}
+      const result=await send({type:"GET_BUILD_STATUS",transport:$("build-transport").value});
+      if (revision!==buildCheckRevision) return;
+      buildStatus=result;
+      const model=$("build-model").value,effort=$("build-reasoning-effort").value;
+      populateBuildModels(model);populateBuildReasoning(model,effort);
+      markDraft();
+    } catch {if(revision===buildCheckRevision)buildStatus={ready:false,errorCode:permissionGranted ? "BUILD_STATUS_UNKNOWN" : "BUILD_PERMISSION_REQUIRED"};}
+    finally {if(revision===buildCheckRevision){buildChecking=false;renderBuildStatus();}}
+  });
+  $("connector-guide").addEventListener("click",async () => {
+    try {await send({type:"OPEN_CONNECTOR_GUIDE"});}
+    catch(error){setStatus("errors.operation","error",{error:error.message});}
+  });
+  $("build-transport").addEventListener("change",() => {
+    buildCheckRevision++;buildChecking=false;buildStatus=null;
+    const model=$("build-model").value,effort=$("build-reasoning-effort").value;
+    populateBuildModels(model);populateBuildReasoning(model,effort);renderBuildStatus();markDraft();
+  });
   $("interface-language").addEventListener("change",() => { renderLanguage();markDraft(); });
   $("api-model").addEventListener("change",() => { populateReasoning($("api-model").value,$("api-reasoning-effort").value);markDraft(); });
-  for (const id of ["enabled","api-reasoning-effort","api-concurrency","web-search","x-search","language",...promptFields.map(field => field.name + "-prompt")]) {
+  for (const id of ["enabled","build-reasoning-effort","api-reasoning-effort","api-concurrency","web-search","x-search","language",...promptFields.map(field => field.name + "-prompt")]) {
     $(id).addEventListener("input",markDraft);
     $(id).addEventListener("change",markDraft);
   }
@@ -271,7 +381,7 @@
   }
   $("settings-form").addEventListener("submit",async event => {
     event.preventDefault();
-    if (busy || !securityLoaded || !event.currentTarget.reportValidity()) return;
+    if (busy || (!isBuild() && !securityLoaded) || !event.currentTarget.reportValidity()) return;
     const oversized = promptFields.find(field => $(field.name + "-prompt").value.length > promptLimit);
     if (oversized) {
       setStatus("options.promptTooLong","error",{limit:promptLimit});
@@ -280,7 +390,10 @@
     const settings = core.normalizeSettings({
       ...currentSettings,
       enabled:$("enabled").checked,
-      provider:"api",
+      provider:$("provider").value,
+      buildTransport:$("build-transport").value,
+      buildModel:$("build-model").value,
+      buildReasoningEffort:$("build-reasoning-effort").value,
       explanationMode:$("explanation-mode").value,
       apiModel:$("api-model").value.trim(),
       apiReasoningEffort:$("api-reasoning-effort").value,
@@ -294,7 +407,7 @@
       commentsPrompt:$("comments-prompt").value,
     });
     const apiKey = $("api-key").value.trim();
-    const saveKey = keyNeedsSave();
+    const saveKey = !isBuild() && keyNeedsSave();
     const remember = $("remember-key").checked;
     if (saveKey && !apiKey) {
       setStatus("options.keyRequired","error");$("api-key").focus();return;
@@ -302,12 +415,19 @@
     if (saveKey && (apiKey.length > 500 || /[\r\n]/.test(apiKey))) {
       setStatus("errors.keyInvalid","error");$("api-key").focus();return;
     }
-    if (!core.API_MODELS.some(item => item.value === $("api-model").value)
+    if (!isBuild() && !core.API_MODELS.some(item => item.value === $("api-model").value)
       && $("api-model").value !== currentSettings.apiModel) {
       setStatus("options.modelInvalid","error");$("api-model").focus();return;
     }
-    if (!$("api-reasoning-effort").value || $("api-reasoning-effort").value !== settings.apiReasoningEffort) {
+    if (!isBuild() && (!$("api-reasoning-effort").value || $("api-reasoning-effort").value !== settings.apiReasoningEffort)) {
       setStatus("options.reasoningInvalid","error");$("api-reasoning-effort").focus();return;
+    }
+    if (isBuild() && (!buildModelChoices().some(item => item.value === $("build-model").value)
+      || Array.isArray(buildStatus?.modelCatalog) && !buildStatus.modelCatalog.some(item => (typeof item === "string" ? item : item.id) === settings.buildModel && item.available !== false))) {
+      setStatus("options.buildModelUnavailable","error",{model:settings.buildModel});$("build-model").focus();return;
+    }
+    if (isBuild() && (!$("build-reasoning-effort").value || $("build-reasoning-effort").value !== settings.buildReasoningEffort)) {
+      setStatus("options.reasoningInvalid","error");$("build-reasoning-effort").focus();return;
     }
     if (!settings.webSearch && !settings.xSearch) {
       setStatus("options.urlSearchRequired","error");$("x-search").focus();return;
@@ -322,7 +442,8 @@
         originalKey = apiKey;
       } else await send({type:"SAVE_SETTINGS",settings});
       currentSettings = settings;
-      await refreshSecurity();populate(currentSettings);renderLanguage();
+      if (!isBuild()) await refreshSecurity();
+      populate(currentSettings);renderLanguage();
       setStatus("options.saved");
     } catch (error) {
       setStatus("errors.operation","error",{error:error.message});
@@ -332,7 +453,7 @@
     finally { setBusy(false); }
   });
   $("clear-key").addEventListener("click",async () => {
-    if (busy) return;setBusy(true);
+    if (busy || isBuild()) return;setBusy(true);
     try {
       await send({type:"SAVE_KEY",apiKey:"",remember:$("remember-key").checked});
       keyInputClear();rememberChanged = false;await refreshSecurity();setStatus("options.keyCleared");

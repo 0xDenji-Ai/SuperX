@@ -2,6 +2,17 @@
 
 This checklist separates reproducible checks from manual browser and service checks. A passing mock test suite is not evidence that a particular X account, browser installation, or paid API request works.
 
+## 0.9.0 local candidate — dual provider, Windows and macOS
+
+- [x] Implement independent API Key and Grok Build (ACP / CLI) routes, preserve API defaults and credential drafts, and avoid automatic paid retries / provider fallback.
+- [x] Add Dashboard Key setup, optional native-messaging permission, connection diagnostics, host-advertised model choices and separate per-provider reasoning settings.
+- [x] Provide per-user Windows x64 / macOS arm64 / macOS x64 connector installers and uninstall commands with pinned official runtime integrity checks. No real account credential is included in packages.
+- [x] Exercise framing, model/effort negotiation, login-required states, tool policy, cancellation, usage retention, provider cache separation and status checks during long tasks with controlled fixtures. UI previews use isolated browser contexts and mocks.
+- [ ] Install candidate and connector on Windows Chrome / Edge; verify official login, Fact Check, comments, model/effort choices, language following, cancellation and browser restart.
+- [ ] Repeat installed-browser acceptance on Apple silicon and Intel Macs; check OS approval prompts, executable permissions, login/restart and clean uninstall. Simulated Mac paths are not a live-device pass.
+- [ ] Review managed-device limitations with actual device policy before claiming support there; do not remove or bypass company policy.
+- [ ] Accept the candidate, then explicitly publish Preview and its connector. Store submission, website update and Stable promotion remain separate. Preserve all published 0.7.26 artifacts.
+
 ## 0.8.2 local candidate — Model and reasoning selectors
 
 - [x] Replace free-form model entry with a model selector and a supported-effort selector. Preserve old saved model IDs and their previous effective reasoning defaults.

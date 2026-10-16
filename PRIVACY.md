@@ -1,14 +1,14 @@
 # Privacy and data handling
 
-This document describes SuperX 0.8.2's Fact Check data flow. It applies to the xAI API mode, not the removed X built-in Grok mode. Last updated: 2026-10-16. The currently published 0.7.26 stable release retains its earlier explanation-then-check flow.
+This document describes the unreleased SuperX 0.9.0 candidate's Fact Check data flow, through API Key or a separately installed Grok Build connector. Last updated: 2026-10-16. The currently published 0.7.26 stable release retains its earlier explanation-then-check flow and API-only connection.
 
 ## Setup and control
 
-SuperX uses your own xAI API Key directly. Add the Key in settings, save it, and enable analysis; there is no separate data-consent checkbox or ZDR-attestation step. Pause analysis to stop automatic requests. Clearing or replacing the Key cancels queued and active work and clears the previous session Key and session cache; this does not recall data already sent to xAI.
+API Key is the default route and uses your own Key directly. Alternatively select Grok Build, install the local connector, sign in through the official client, grant optional native messaging and save the selected connection. These routes keep credentials separate and never automatically fall back to the other route. There is no separate data-consent checkbox or ZDR-attestation step. Pause analysis to stop automatic requests. Clearing or replacing the Key cancels queued and active work and clears the previous session Key and session cache; this does not recall data already sent to the provider.
 
 ## What is sent to xAI
 
-When analysis is enabled, the Key is available and a visible post enters the queue, SuperX sends an HTTPS request directly to `api.x.ai` from its extension background worker. The request includes:
+In API mode, when analysis is enabled, the Key is available and a visible post enters the queue, SuperX sends an HTTPS request directly to `api.x.ai` from its extension background worker. Both routes use this post context:
 
 - The canonical original post URL and post ID.
 - The author's currently displayed post text, its language mark, author label and timestamp.
@@ -17,6 +17,10 @@ When analysis is enabled, the Key is available and a visible post enters the que
 - The existing Fact Check for an optional comment-drafting request. Fact Check itself uses one generation request and does not receive an earlier explanation.
 
 The API Key is sent as the request's authentication credential. Search-enabled requests ask xAI's tools to retrieve the original post and relevant evidence; provider tools may retrieve further posts, pages or media. SuperX does not independently preload every complete post or video.
+
+In Grok Build mode the extension instead sends the post context, effective instructions, selected model/effort and optional earlier Fact Check to the local `com.superx.grok` native host. The host starts the official client via ACP or CLI; that client authenticates and sends requests to its provider. The extension does not receive, read or copy OAuth tokens, login files or X cookies. Official Grok Build reads its own default login file using its supported auth-path setting; SuperX uses an isolated temporary Grok home / working directory and leaves personal Grok configuration unchanged. Build does not use the extension's API Key. The provider's Build/account terms and retention rules apply; the API `store: false` option below does not establish Build retention behavior.
+
+The connector rejects local-file, terminal and permission requests from the agent, disables imported coding/MCP tools and checks its restricted tool profile. This is not an operating-system sandbox. A separately installed native runtime can operate with the OS user's permissions; only install reviewed connector packages. Exact extension-origin checks restrict browser callers. Windows and macOS installers register only for the current OS user's Chrome and Edge and download pinned, integrity-checked official Node and Grok binaries. Neither telemetry nor a SuperX relay is added.
 
 The extension does not restrict analysis to public posts. **Protected posts, replies and posts visible in likes or bookmarks can be included if they appear as supported post elements on an enabled page.** A provider may be unable to retrieve them by URL, but the visible text can still be sent as supporting context. Pause SuperX before opening pages whose contents you do not want sent, or remove the Key.
 
@@ -28,7 +32,7 @@ The project does not operate an API relay, analytics service or telemetry endpoi
 
 SuperX's use and transfer of user data adheres to the Chrome Web Store User Data Policy, including its Limited Use requirements. Post content and related browsing activity are used only for factual-claim analysis, reply-drafting and on-device recent-history features and necessary caches; they are not used for advertising, data sales, credit decisions or unrelated profiling.
 
-Requests set `store: false` in the xAI Responses payload. This describes the extension's request option; **it is not a guarantee that xAI retains no request data, logs or tool inputs**. Review the provider's current policies for your account before using non-public or sensitive material.
+API requests set `store: false` in the xAI Responses payload. This describes the extension's request option; **it is not a guarantee that xAI retains no request data, logs or tool inputs**. Review the provider's current policies for your account before using non-public or sensitive material.
 
 xAI's account configuration and terms remain applicable. Its [API security documentation](https://docs.x.ai/developers/faq/security) describes default retention and optional team-wide ZDR; its [Data Processing Addendum](https://x.ai/legal/data-processing-addendum), effective September 22, 2026, separately requires ZDR-enabled processing for Personal Data. Public posts can contain Personal Data. SuperX does not check or configure these provider-side requirements, and a normal Key or `store: false` does not establish compliance. See also the [API Enterprise Terms](https://x.ai/legal/terms-of-service-enterprise).
 
@@ -47,6 +51,10 @@ Model-provided Markdown is parsed locally. SuperX does not execute model HTML or
 | Recent X browsing history | Unencrypted, restricted local extension storage (`superxHistory`), retained for 24 hours after each post's latest view across browser restart; bounded to 1,000 posts and approximately 6 MB |
 | Per-tab counters, collapse state and session interface language | Session extension storage |
 | Active page snapshots, partial answers and queued jobs | Runtime memory while their page / worker remains active |
+| Build connector files and browser host registrations | Per-user OS installation until explicitly uninstalled; removing the browser extension alone does not remove them |
+| Build prompts, turns and isolated home | Runtime memory and a per-host temporary directory; CLI also uses a temporary prompt file. Normal cancellation/shutdown removes these files. Forced termination or an OS crash may leave temporary remnants |
+
+The official client's existing login remains in its own default storage. SuperX's Clear saved Key does not log that client out, revoke subscription access or remove its provider records. Use official Grok Build logout to end that login. Connector uninstall preserves it and personal configuration. Runtime/account services can make supporting requests such as session titles, so one SuperX Fact Check prompt is not a promise of exactly one upstream network request.
 
 Session cache entries contain generated text or comments, sources, model and usage metadata, completion times and cache identities. Those identities can include the post URL, selected settings, effective prompts, and—for comment drafts—the visible post / quotation snapshot and earlier analysis. Cached output can repeat the original post's contents. Treat the cache as potentially sensitive, not merely an anonymous performance index. Cache contents are not deliberately saved to persistent local storage. On upgrade, old local caches are removed rather than imported.
 
@@ -86,6 +94,7 @@ There is no extension-level monetary budget or post-count cap. All visible eligi
 | --- | --- |
 | `storage` | Local settings, optional encrypted API Key, recent browsing history, restricted session Key and result cache |
 | `alarms` | Periodic removal of expired local browsing-history records; no scheduled paid requests |
+| Optional `nativeMessaging` | Connect only to the installed SuperX host for Grok Build; requested when the user checks that connection, not needed in API mode |
 | `https://x.com/*`, `https://twitter.com/*` | Observe supported post elements, follow theme / language and show the result column |
 | `https://api.x.ai/*` | Call the provider from the background worker |
 
@@ -97,4 +106,4 @@ Tests and local UI previews use simulated browser APIs and credentials. They do 
 
 Changes to collected fields, host access, storage or provider calls require this document to be updated alongside the code.
 
-Public support uses [SuperX Issues](https://github.com/bwjoke/SuperX/issues); sensitive security reports follow [SECURITY.md](SECURITY.md). The website's privacy address is [superx.vip/privacy/](https://superx.vip/privacy/). The hosted page, included notice and this source document describe the same extension behavior. Publication and accessibility of the website page are checked separately from local documentation changes.
+Public support uses [SuperX Issues](https://github.com/bwjoke/SuperX/issues); sensitive security reports follow [SECURITY.md](SECURITY.md). The website's privacy address is [superx.vip/privacy/](https://superx.vip/privacy/). The published website may describe the currently released stable version; this source document and the included notice describe the local candidate. Publication and accessibility of the website page are checked separately from local documentation changes.

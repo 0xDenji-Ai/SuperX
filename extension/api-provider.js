@@ -559,7 +559,7 @@
       return partial;
     }
   }
-  const api={run,generateComments,buildRequest,buildCommentsRequest,parseComments,validateComments,readEvents,responseText,responseSources,safeUrl,verificationMode,sanitizedUsage,sanitizedModel,sanitizedMetadata,sanitizedVerificationFailure,publicError,usageComplete,mergeUsage,searchedResponse,OUTPUT_LIMITS,languageInstruction,resolveLanguage,labels};
+  const api={run,generateComments,buildRequest,buildCommentsRequest,parseComments,validateComments,readEvents,responseText,responseSources,safeUrl,verificationMode,sanitizedUsage,sanitizedModel,sanitizedMetadata,sanitizedVerificationFailure,publicError,usageComplete,mergeUsage,searchedResponse,OUTPUT_LIMITS,languageInstruction,resolveLanguage,assertMatchingScript,labels};
   root.GrokFirstAPI=api;
   if(typeof module!=='undefined')module.exports=api;
 })(globalThis);

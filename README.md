@@ -4,15 +4,17 @@
 
 [Install for Chrome](https://chromewebstore.google.com/detail/superx/clcflilaihhnnglfamdblhopokpnlioo) · [Download ZIP](https://github.com/bwjoke/SuperX/releases/latest/download/SuperX.zip) · [Website](https://superx.vip/) · [Support](https://github.com/bwjoke/SuperX/issues) · [简体中文](README.zh-CN.md) · [Privacy](PRIVACY.md)
 
-SuperX is a Chrome / Edge extension that uses the xAI API to check factual claims in visible X posts. Answers stream into a right-hand column that follows X's theme, font and interface language. Your left navigation and original feed keep their layout.
+SuperX is a Chrome / Edge extension that checks factual claims in visible X posts using your own API Key or official local Grok Build login. Answers stream into a right-hand column that follows X's theme, font and interface language. Your left navigation and original feed keep their layout.
 
-**Source candidate: 0.8.2 (not released).** This candidate temporarily removes the explanation step and runs Fact Check directly. It asks for concise findings, relevant evidence and sources rather than retelling the post beside its original text. It also separates intermediate/tool-command output from the final answer and reports an incomplete check if no reader-facing answer arrives. The Chrome Web Store and GitHub stable download below remain **0.7.26**, which includes explanations. The behavior described under Features and Settings applies to the 0.8.2 candidate.
+**Source candidate: 0.9.0 (not released).** This candidate temporarily removes the explanation step and runs Fact Check directly. It asks for concise findings, relevant evidence and sources rather than retelling the post beside its original text. It also separates intermediate/tool-command output from the final answer and reports an incomplete check if no reader-facing answer arrives. The Chrome Web Store and GitHub stable download below remain **0.7.26**, which includes explanations. The behavior described under Features and Settings applies to the 0.9.0 candidate.
 
-The extension uses Manifest V3 and plain JavaScript. Installation needs no build step or package dependencies. This is a Beta: X's changing page structure, model behavior and API availability can affect results.
+The 0.9.0 candidate adds **API Key** and **Grok Build (ACP / CLI)** connection choices, with setup guidance for **Windows x64 and Apple silicon / Intel macOS**. API Key remains the default; Build needs the separate `SuperX-Connector-0.9.0.zip` and an official login. See [connection setup](docs/CONNECTIONS.md). Both routes retain language following, custom prompts, comments, history and Token/model information. There is no automatic provider fallback or quota bypass.
+
+The extension uses Manifest V3 and plain JavaScript. Browser-only API installation needs no build step or package dependencies. This is a Beta: X's changing page structure, model behavior and API availability can affect results.
 
 ![SuperX on X with English explanations and fact checks](docs/assets/superx-preview-en.png)
 
-*SuperX 0.7.26 on X, showing English explanations and fact checks. The 0.8.2 candidate uses Fact Check only.*
+*SuperX 0.7.26 on X, showing English explanations and fact checks. The 0.9.0 candidate uses Fact Check only.*
 
 ## Downloads and support
 
@@ -41,11 +43,11 @@ The user confirmed 0.7.26's core features on Chrome for Windows 11, and confirme
 - Local result caching and specific failure details when a fact check cannot finish; any available partial findings remain readable.
 - A searchable, on-device history of posts viewed in the last 24 hours, including already generated answers and comments; available after browser restart.
 
-SuperX's AI features require your own xAI API Key; local browsing history works without one. The X built-in Grok mode and URL-only interpretation mode were removed in version 0.7.0. SuperX is an independent project and is not affiliated with X or xAI.
+SuperX's AI features require either your own API Key or a connected official Grok Build login; local browsing history works without either. Build uses a separate native connector rather than clicking X’s Grok buttons. The X built-in Grok mode and URL-only interpretation mode were removed in version 0.7.0. SuperX is an independent project and is not affiliated with X or xAI.
 
 ## Install
 
-Requirements: desktop Chrome or Chromium-based Edge, version 120 or newer, and an xAI API account with access to your chosen model and search tools.
+Requirements: desktop Chrome or Chromium-based Edge 120+, and provider access to the selected model and search tools. API mode works in the browser; the optional Build connector supports Windows x64 and macOS arm64/x64. Actual Mac installed-browser acceptance remains pending.
 
 For Chrome, install from the store:
 
@@ -66,7 +68,7 @@ Switching from an unpacked installation to the store is a separate installation,
 
 ## Set up your API Key
 
-Create a Key and configure API billing in the [xAI console](https://console.x.ai/). X Premium and xAI API usage are billed separately.
+For The X Subscription, use [Grok Dashboard → API Keys](https://grok.com/dashboard/api-keys), select **Grok Inference** rather than the default **Cursor** type, and enable Chat / the required model permissions. Existing [xAI Console](https://console.x.ai/) Keys remain supported. Check your [usage dashboard](https://grok.com/dashboard/usage) and provider rules for entitlement, limits and charges. SuperX does not promise that every subscription includes free or unlimited API use.
 
 Use a normal xAI API Key with available credit and access to your selected model and search tools. See [Privacy](PRIVACY.md) for the data sent and the provider's handling.
 
@@ -74,13 +76,13 @@ Use a normal xAI API Key with available credit and access to your selected model
 
 Existing plaintext Keys and usable session Keys from older versions migrate automatically when Remember Key is selected; plaintext records are removed after the encrypted save succeeds. Missing or damaged saved data requires entering the API Key once again. Older password-encrypted records are not decrypted and remain only until successful migration, replacement or clearing. Automatic encryption protects against exposure of the stored ciphertext alone; it does not protect against access to the full browser profile or a compromised device. See [Privacy](PRIVACY.md) for storage details.
 
-Requests go directly from the extension's background worker to `api.x.ai`; the project does not operate a relay server. The Key is not passed to the X page's content script. Analysis uses your Key when SuperX is enabled. Clearing or replacing the Key cancels queued and active requests and clears the session cache; already sent work may still be billed. Read [Privacy](PRIVACY.md), especially on pages that show non-public posts.
+In API mode, requests go directly from the extension's background worker to `api.x.ai`; the project does not operate a relay server. The Key is not passed to the X page's content script. Analysis uses your Key when SuperX is enabled. Clearing or replacing the Key cancels queued and active requests and clears the session cache; already sent work may still be billed. Read [Privacy](PRIVACY.md), especially on pages that show non-public posts.
 
 ## Settings and behavior
 
-Choose the model and reasoning effort from separate dropdowns. Models offered are `grok-4.3`, `grok-4.5`, `grok-4.6` and `grok-4.7`, with only supported effort levels shown. The default remains Grok 4.3 with no reasoning and 4 concurrent requests; existing 4.5–4.7 settings retain low effort, and already saved custom model IDs remain available. Higher effort may increase latency and Token use; it does not enable Fast/Priority processing. Concurrency can be set from 1 to 8, and availability depends on your xAI account. At least one of **X search** or **Web search** must be enabled: both built-in and custom modes use the original post URL as their primary context and request its full text, including content hidden behind **Show more**. Retrieval can fail; the extension cannot guarantee that a model has obtained every part of a thread or inspected its media.
+API mode: choose the model and reasoning effort from separate dropdowns. Models offered are `grok-4.3`, `grok-4.5`, `grok-4.6` and `grok-4.7`, with only supported effort levels shown. The default remains Grok 4.3 with no reasoning and 4 concurrent requests; existing 4.5–4.7 settings retain low effort, and already saved custom model IDs remain available. Higher effort may increase latency and Token use; it does not enable Fast/Priority processing. Concurrency can be set from 1 to 8, and availability depends on your xAI account. At least one of **X search** or **Web search** must be enabled: both built-in and custom modes use the original post URL as their primary context and request its full text, including content hidden behind **Show more**. Retrieval can fail; the extension cannot guarantee that a model has obtained every part of a thread or inspected its media.
 
-The 0.8.2 candidate runs **Fact Check only**. It retrieves the linked post and checks its material factual claims in one streamed generation request. It does not first generate an explanation, paraphrase the post or append a second fact-check request. Only quote the minimum needed to identify a disputed claim; if there is no checkable factual claim, say so briefly rather than inventing a verdict. A sourced answer can still be mistaken.
+The 0.9.0 candidate runs **Fact Check only**. It retrieves the linked post and checks its material factual claims in one streamed generation request. It does not first generate an explanation, paraphrase the post or append a second fact-check request. Only quote the minimum needed to identify a disputed claim; if there is no checkable factual claim, say so briefly rather than inventing a verdict. A sourced answer can still be mistaken.
 
 Custom mode lets you edit the fact-check and comment prompts. Blank instructions use the defaults; each prompt accepts up to 12,000 characters. Saving new prompts affects new tasks. Use **Reanalyze** to apply them to an existing answer. Application rules still enforce the selected language, safe handling of source material, avoiding duplicate post recaps and comment output format. Earlier explanation settings no longer select a separate generation step; existing saved history, including earlier explanations, remains readable until its usual expiry or deletion.
 
@@ -90,7 +92,7 @@ Collapse the right column with its top chevron; click the SuperX symbol to expan
 
 ## Costs and cache
 
-Automatic analysis can generate paid requests for every visible post. All X tabs share the configured request slots; excess work queues. There is no extension-level post-count limit or spending cap. Faster scrolling, more tabs, search tools and **Reanalyze** can increase usage. The 0.8.2 candidate uses one generation request per fact check; comment suggestions use another request. Removing the separate explanation step avoids that extra request, but retrieval and model processing can still take time. A single request can invoke search tools multiple times. Missing final answers are shown as incomplete without an automatic paid retry. Check pricing and actual charges in the xAI console.
+Automatic analysis can generate paid requests for every visible post. All X tabs share the configured request slots; excess work queues. Build uses a separate serial queue and its own model / effort selections; check host availability in Settings. There is no extension-level post-count limit or spending cap. Faster scrolling, more tabs, search tools and **Reanalyze** can increase usage. The 0.9.0 candidate uses one generation request per fact check; comment suggestions use another request. Removing the separate explanation step avoids that extra request, but retrieval and model processing can still take time. A single request can invoke search tools multiple times. Missing final answers are shown as incomplete without an automatic paid retry. Check pricing and actual charges in the xAI console.
 
 The per-post Token display uses API-reported usage for the current fact check and comments. Hover it for model and stage details. It does not total earlier reanalyses or all account spending. Cached results show their original usage and that no new usage was incurred for that cache hit; partial or missing statistics are marked rather than estimated.
 
@@ -140,6 +142,7 @@ The validator checks declared resources, JavaScript syntax and automated tests. 
 | `tests/` | Automated regression tests with mocked browser and provider APIs |
 | `demo/` | Local UI previews using production code |
 | `tools/` | Validation, preview and release helpers |
+| `connector/` | Windows/macOS installer and restricted local Grok Build host |
 | `docs/` | Release channels, acceptance checklist and the README preview image |
 
 Some internal module and storage names retain GrokFirst identifiers for upgrade compatibility. Changes to them need migration review.

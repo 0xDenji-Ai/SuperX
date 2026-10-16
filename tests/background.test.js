@@ -7,6 +7,7 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const core = require('../extension/feed-core.js');
 const provider = require('../extension/api-provider.js');
+const buildProvider = require('../extension/build-provider.js');
 const ui = require('../extension/ui-i18n.js');
 const historyStore = require('../extension/history-store.js');
 const source = fs.readFileSync(path.join(__dirname, '../extension/background.js'), 'utf8');
@@ -70,7 +71,7 @@ function createBackground(options = {}) {
   };
   const cacheFixture=Object.hasOwn(options,'cache')?{cache:options.cache}:{};
   const session = storage(options.session === null ? cacheFixture : { apiKey: 'session-secret', ...cacheFixture, ...options.session }, { get: options.sessionGet, set: options.sessionSet, remove: options.sessionRemove });
-  const apiCalls = [], commentCalls = [], runtimeMessages = [], createdTabs = [], removedTabs = [], tabMessages = [], deadlines = [], createdWindows = [], removedWindows = [];
+  const apiCalls = [], commentCalls = [], buildCalls=[], buildCommentCalls=[], buildStatusCalls=[], runtimeMessages = [], createdTabs = [], removedTabs = [], tabMessages = [], deadlines = [], createdWindows = [], removedWindows = [];
   const tabs = new Map([[7, { id: 7, url: 'https://x.com/home', active: true, windowId: 1, status: 'complete' }], ...(options.tabs || [])]);
   const windows = new Map([[1, { id: 1, type: 'normal', focused: true }], ...(options.windows || [])]);
   let nextTabId = 50, nextWindowId = 600;
@@ -118,6 +119,10 @@ function createBackground(options = {}) {
   const context = vm.createContext({
     chrome, XGrokCore: core, GrokFirstUI:ui, SuperXKeyStore:options.keyStore||keyStore, SuperXHistoryStore:{...historyStore,create(area){return historyStore.create(area,{now:()=>now});}}, importScripts() {}, URL, AbortController, DOMException, crypto, Date: ClockDate, TextEncoder, TextDecoder,
     navigator: Object.hasOwn(options, 'navigator') ? options.navigator : { language: 'en-US' },
+    SuperXBuild:{publicError:buildProvider.publicError,async status(){buildStatusCalls.push({});return options.buildStatus?options.buildStatus():{connected:true,installed:true,available:true,authenticated:true,version:'1.0.60'};},
+      async run(post,settings,callbacks){const call={post,settings,...callbacks};buildCalls.push(call);return options.buildRun?options.buildRun(call,harness):{text:'Checked '+post.id,provider:'build',searched:true,verificationStatus:'completed',model:'grok-4.7',usage:{total_tokens:17}};},
+      async generateComments(post,settings,callbacks){const call={post,settings,...callbacks};buildCommentCalls.push(call);return options.buildCommentRun?options.buildCommentRun(call,harness):{comments:['One '+post.id,'Two '+post.id,'Three '+post.id],provider:'build',model:'grok-4.7'};}
+    },
     GrokFirstAPI: { safeUrl: provider.safeUrl, sanitizedUsage:provider.sanitizedUsage, sanitizedMetadata:provider.sanitizedMetadata, sanitizedVerificationFailure:provider.sanitizedVerificationFailure, publicError:provider.publicError, validateComments:provider.validateComments, async generateComments(post,settings,key,callbacks) {
       const call={post,settings,key,...callbacks};commentCalls.push(call);
       return options.commentRun?options.commentRun(call,harness):{comments:['First view '+post.id+'.','Second view '+post.id+'.','Third view '+post.id+'.'],provider:'api',task:'comments'};
@@ -133,7 +138,7 @@ function createBackground(options = {}) {
     clearTimeout(timer) { if (timer?.immediate) clearImmediate(timer.immediate); if (timer?.deadline) timer.cancelled = true; }
   });
   const harness = {
-    chrome, local, session, alarmCalls, keyStore:options.keyStore||keyStore, keyStoreState, keyStoreCalls, apiCalls, commentCalls, runtimeMessages, createdTabs, removedTabs, tabMessages, tabs, windows, createdWindows, removedWindows, deadlines,
+    chrome, local, session, alarmCalls, keyStore:options.keyStore||keyStore, keyStoreState, keyStoreCalls, apiCalls, commentCalls, buildCalls,buildCommentCalls,buildStatusCalls,runtimeMessages, createdTabs, removedTabs, tabMessages, tabs, windows, createdWindows, removedWindows, deadlines,
     now() { return now; },
     advance(ms) { now += ms; },
     expireDeadline(delay) {
@@ -162,6 +167,62 @@ function createBackground(options = {}) {
   return harness;
 }
 const post = id => ({ id: String(id), url: `https://x.com/author/status/${id}`, text: `Claim ${id}`, quotedContext: [], images: [] });
+test('Build cold-start config confirms connector without reading an API Key or generating',async()=>{
+  const bg=createBackground({settings:{provider:'build'},session:null});await bg.ready();
+  const config=await bg.message({type:'GET_CONFIG'});assert.equal(config.ready,true);assert.equal(config.buildStatus.authenticated,true);
+  assert.equal(bg.buildStatusCalls.length,1);assert.equal(bg.buildCalls.length,0);assert.equal(bg.apiCalls.length,0);
+  assert.equal(JSON.stringify(config).includes('session-secret'),false);
+});
+test('Build analysis and comments work without Key and never fall back to API',async()=>{
+  const bg=createBackground({settings:{provider:'build'},session:null});await bg.ready();await bg.message({type:'GET_CONFIG'});
+  const port=bg.connect();await until(()=>port.messages.some(m=>m.type==='CONFIG'&&m.ready));
+  const result=await analyze(bg,port,'build-post');assert.equal(result.type,'RESULT');assert.equal(result.result.provider,'build');assert.equal(result.result.model,'grok-4.7');assert.equal(result.result.usage.total_tokens,17);
+  assert.equal((await draftComments(bg,port,'build-comments')).type,'COMMENT_RESULT');assert.equal(bg.buildCommentCalls.length,1);assert.equal(bg.buildCalls.length,1);assert.equal(bg.apiCalls.length,0);assert.equal(bg.commentCalls.length,0);
+});
+test('Build login and missing-host failures never start inference and guide opens locally',async()=>{
+  for(const code of ['BUILD_LOGIN_REQUIRED','BUILD_NATIVE_MISSING','BUILD_PERMISSION_REQUIRED']){
+    const bg=createBackground({settings:{provider:'build'},session:null,buildStatus:()=>({connected:code==='BUILD_LOGIN_REQUIRED',installed:code==='BUILD_LOGIN_REQUIRED',available:false,errorCode:code})});await bg.ready();assert.equal((await bg.message({type:'GET_CONFIG'})).ready,false);
+    const port=bg.connect();await until(()=>port.messages.some(m=>m.type==='CONFIG'));assert.equal((await analyze(bg,port,code)).code,code);assert.equal(bg.buildCalls.length,0);assert.equal(bg.apiCalls.length,0);
+    assert.equal((await bg.message({type:'OPEN_CONNECTOR_GUIDE'})).ok,true);assert.equal(bg.createdTabs[0].url,bg.chrome.runtime.getURL('setup.html'));
+  }
+});
+test('API Key mode does not probe or use Build, even with no Key',async()=>{
+  const bg=createBackground({session:null});await bg.ready();const port=bg.connect();await until(()=>port.messages.some(m=>m.type==='CONFIG'));
+  assert.equal((await analyze(bg,port,'missing-api')).code,'NEEDS_KEY');assert.equal(bg.buildStatusCalls.length,0);assert.equal(bg.buildCalls.length,0);
+});
+test('provider, Build transport, model and effort produce separate answer caches',async()=>{
+  const bg=createBackground();await bg.ready();const port=bg.connect();await until(()=>port.messages.some(m=>m.type==='CONFIG'));
+  await analyze(bg,port,'cache-api');const change=async fields=>{await bg.message({type:'SAVE_SETTINGS',settings:{...bg.local.data.settings,...fields}});await bg.message({type:'GET_CONFIG'});};
+  await change({provider:'build'});assert.equal((await analyze(bg,port,'cache-build')).cached,false);
+  assert.equal((await analyze(bg,port,'cache-build-hit')).cached,true);
+  await change({buildTransport:'cli'});assert.equal((await analyze(bg,port,'cache-cli')).cached,false);
+  await change({buildModel:'grok-4.6'});assert.equal((await analyze(bg,port,'cache-46')).cached,false);
+  await change({buildReasoningEffort:'high'});assert.equal((await analyze(bg,port,'cache-high')).cached,false);
+  await change({provider:'api'});assert.equal((await analyze(bg,port,'cache-api-hit')).cached,true);assert.equal(bg.apiCalls.length,1);assert.equal(bg.buildCalls.length,4);
+});
+test('Build disconnect stops queued tasks, retains actual billed usage and does not auto-retry',async()=>{
+  const task=deferred();const bg=createBackground({settings:{provider:'build'},buildRun:()=>task.promise});await bg.ready();await bg.message({type:'GET_CONFIG'});
+  const port=bg.connect();await until(()=>port.messages.some(m=>m.type==='CONFIG'&&m.ready));
+  port.send({type:'ANALYZE',requestId:'running-build',post:post(100)});await until(()=>bg.buildCalls.length===1);
+  port.send({type:'ANALYZE',requestId:'waiting-build',post:post(101)});await until(()=>port.messages.some(m=>m.type==='QUEUED'&&m.requestId==='waiting-build'));
+  task.reject(Object.assign(new Error('local connection'),{code:'BUILD_DISCONNECTED',usage:{total_tokens:42},model:'grok-4.7'}));
+  await until(()=>port.messages.some(m=>m.type==='ERROR'&&m.requestId==='waiting-build'));
+  const failed=port.messages.find(m=>m.type==='ERROR'&&m.requestId==='running-build');assert.equal(failed.code,'BUILD_DISCONNECTED');assert.equal(failed.usage.total_tokens,42);
+  assert.equal(bg.buildCalls.length,1);assert.equal(bg.apiCalls.length,0);assert.equal(port.messages.findLast(m=>m.type==='CONFIG').ready,false);
+});
+test('only trusted extension UI can inspect native status or open its guide',async()=>{
+  const bg=createBackground();await bg.ready();
+  const feed={id:bg.chrome.runtime.id,frameId:0,tab:{id:7},url:'https://x.com/home'};
+  for(const type of ['GET_BUILD_STATUS','OPEN_CONNECTOR_GUIDE'])assert.equal((await bg.message({type},feed)).ok,false);
+  assert.equal(bg.buildStatusCalls.length,0);assert.equal((await bg.message({type:'GET_BUILD_STATUS'}, {id:bg.chrome.runtime.id,url:bg.chrome.runtime.getURL('setup.html')})).ready,true);assert.equal(bg.buildCalls.length,0);
+});
+test('checking native status during a long Build task reuses confirmed status and preserves its result',async()=>{
+  const task=deferred();const bg=createBackground({settings:{provider:'build'},buildRun:()=>task.promise});await bg.ready();await bg.message({type:'GET_CONFIG'});const port=bg.connect();await until(()=>port.messages.some(m=>m.type==='CONFIG'&&m.ready));
+  port.send({type:'ANALYZE',requestId:'long-build',post:post(100)});await until(()=>bg.buildCalls.length===1);bg.advance(30000);
+  const status=await bg.message({type:'GET_BUILD_STATUS'});assert.equal(status.ready,true);assert.equal(status.busy,true);assert.equal(bg.buildStatusCalls.length,1);assert.equal((await bg.message({type:'GET_CONFIG'})).ready,true);
+  task.resolve({text:'Completed evidence',provider:'build',searched:true,model:'grok-4.7',usage:{total_tokens:77}});await until(()=>port.messages.some(m=>m.type==='RESULT'&&m.requestId==='long-build'));
+  assert.equal(port.messages.find(m=>m.type==='RESULT').result.usage.total_tokens,77);assert.equal(bg.buildCalls.length,1);
+});
 async function analyze(harness, port, requestId, id = 100, extra = {}) {
   port.send({ type: 'ANALYZE', requestId, post: post(id), ...extra });
   await until(() => port.messages.some(message => message.requestId === requestId && ['RESULT', 'ERROR'].includes(message.type)), requestId);

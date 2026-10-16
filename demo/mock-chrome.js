@@ -3,7 +3,8 @@
   const query=new URLSearchParams(location.search);
   if(query.get('lang'))document.documentElement.lang=GrokFirstUI.normalizeLanguage(query.get('lang'));
   const keyState=query.get('security')==='migration'?'migration':query.get('security')==='missing'?'missing':'ready';
-  const config={settings:XGrokCore.normalizeSettings({provider:'api',apiVerification:'only',interfaceLanguage:query.get('interface')||'auto'}),ready:keyState==='ready',keyState,used:0,collapsed:false};
+  const provider=query.get('provider')==='build'?'build':'api';
+  const config={settings:XGrokCore.normalizeSettings({provider,apiVerification:'only',interfaceLanguage:query.get('interface')||'auto'}),ready:provider==='build'?query.get('permission')!=='denied'&&query.get('build')==='ready':keyState==='ready',keyState,buildStatus:provider==='build'?{installed:query.get('build')!=='missing',permission:query.get('permission')==='denied'?'denied':'granted',...(query.get('permission')==='denied'?{errorCode:'BUILD_PERMISSION_REQUIRED'}:{}),available:query.get('build')==='ready',authenticated:query.get('build')==='ready'?true:undefined}:undefined,used:0,collapsed:false};
   const listeners=[],pending=new Map(),analysisCache=new Map();let calls=0,commentCalls=0,cancelled=0,verificationPreview=false,citationsPreview=false,urlBoundaryPreview=false,markdownPreview=false,verificationFailurePreview='';
   const simulatedVerificationFailures={
     OUTPUT_LIMIT:{code:'OUTPUT_LIMIT',stage:'verify',errorCode:'API_INCOMPLETE',reason:'max_output_tokens'},
@@ -11,11 +12,11 @@
     LANGUAGE_MISMATCH:{code:'LANGUAGE_MISMATCH',stage:'verify',errorCode:'API_LANGUAGE_MISMATCH'}
   };
   const emit=message=>listeners.forEach(fn=>fn(message));
-  const log=()=>{document.getElementById('log').textContent=`模拟分析 ${calls} 次 · 评论 ${commentCalls} 次 · 取消 ${cancelled} 次 · 当前 xAI API · 未读取或发送 API Key`;};
+  const log=()=>{document.getElementById('log').textContent=`模拟分析 ${calls} 次 · 评论 ${commentCalls} 次 · 取消 ${cancelled} 次 · ${provider==='build'?'Grok Build':'xAI API'} · 未连接真实提供方`;};
   const configure=()=>emit({type:'CONFIG',...config});
   function openPreviewSettings(focus) {
     const destination=new URL('/demo/options.html',location.origin);destination.searchParams.set('lang',document.documentElement.lang);
-    destination.searchParams.set('focus','api-key');
+    destination.searchParams.set('provider',provider);destination.searchParams.set('focus',focus==='build'||provider==='build'?'build':'api-key');
     if(keyState==='migration')destination.searchParams.set('security','migration');
     location.assign(destination.href);
   }
@@ -86,7 +87,7 @@
     );
   }
   window.chrome={runtime:{
-    id:'superx-demo',getManifest:()=>({version:'0.8.2-demo'}),getURL:asset=>`/extension/${asset}`,
+    id:'superx-demo',getManifest:()=>({version:'0.9.0-demo'}),getURL:asset=>`/extension/${asset}`,
     async sendMessage(message){if(message.type==='GET_UI_LANGUAGE')return{ok:true,language:document.documentElement.lang};if(message.type==='OPEN_SETTINGS'){if(query.get('connection')==='expired')throw new Error('Extension context invalidated');openPreviewSettings(message.focus);}if(message.type==='OPEN_HISTORY')location.assign(`/demo/history.html?lang=${encodeURIComponent(document.documentElement.lang)}`);return{ok:true};},
     connect:()=>{
       setTimeout(configure,20);
@@ -116,7 +117,7 @@
         if(cacheKey&&!message.force&&analysisCache.has(cacheKey)){emit({type:'RESULT',requestId:message.requestId,result:analysisCache.get(cacheKey),cached:true});return;}
         if(comments)commentCalls++;else{calls++;config.used++;}
         log();
-        const entry={requestId:message.requestId,message,comments,provider:'api',apiModel:config.settings.apiModel,apiVerification:config.settings.apiVerification,verificationFailureDemo:comments?'':verificationFailurePreview,language:XGrokCore.resolvePostLanguage(config.settings.language,message.post),cacheKey,timers:[],started:false};
+        const entry={requestId:message.requestId,message,comments,provider,apiModel:provider==='build'?config.settings.buildModel:config.settings.apiModel,apiVerification:config.settings.apiVerification,verificationFailureDemo:comments?'':verificationFailurePreview,language:XGrokCore.resolvePostLanguage(config.settings.language,message.post),cacheKey,timers:[],started:false};
         pending.set(entry.requestId,entry);if(!comments)emit({type:'QUEUED',requestId:entry.requestId});
         begin(entry);
       }};

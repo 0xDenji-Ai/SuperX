@@ -2399,6 +2399,22 @@ function tokenHeader(card) {
   return header;
 }
 
+test('Build onboarding shows a clickable provider-specific setup action without requesting analysis',async()=>{
+  const page=fixture({postCount:1});page.port.onMessage.emit({type:'CONFIG',settings:{...core.DEFAULT_SETTINGS,provider:'build'},ready:false,buildStatus:{errorCode:'BUILD_LOGIN_REQUIRED'}});page.flush();
+  const card=page.cards()[0],status=card.testShadow.querySelector('.status');assert.match(status.textContent,/Grok Build/);assert.doesNotMatch(status.textContent,/API Key/);
+  status.querySelector('.status-settings').emit('click');await new Promise(resolve=>setImmediate(resolve));assert.equal(page.runtimeMessages.findLast(m=>m.type==='OPEN_SETTINGS').focus,'build');
+  assert.equal(page.port.sent.some(m=>m.type==='ANALYZE'),false);assert.equal(card.testShadow.querySelector('.generate-comments').hidden,true);
+});
+test('Build transport, model and effort changes clear prior answers and reject stale replies',()=>{
+  const fields=[{provider:'build'},{provider:'build',buildTransport:'cli'},{provider:'build',buildTransport:'cli',buildModel:'grok-4.6'},{provider:'build',buildTransport:'cli',buildModel:'grok-4.6',buildReasoningEffort:'high'}];
+  const page=fixture({postCount:1});page.configure();
+  for(const settings of fields){
+    const old=page.port.sent.findLast(m=>m.type==='ANALYZE');page.port.onMessage.emit({type:'RESULT',requestId:old.requestId,result:{text:'Old provider finding.',provider:'api',usage:{total_tokens:7}}});page.flush();
+    assert.equal(page.cards()[0].testShadow.querySelector('.answer').textContent,'Old provider finding.');page.configure(settings);page.intersect();page.tick();
+    const fresh=page.port.sent.findLast(m=>m.type==='ANALYZE');assert.notEqual(fresh.requestId,old.requestId);assert.equal(page.cards()[0].testShadow.querySelector('.answer').textContent,'');
+    page.port.onMessage.emit({type:'RESULT',requestId:old.requestId,result:{text:'Stale provider result.',provider:'api'}});page.flush();assert.equal(page.cards()[0].testShadow.querySelector('.answer').textContent,'');
+  }
+});
 test('a saved reasoning-only change clears completed analysis and comments before requesting the new setting',()=>{
   const settings={apiModel:'grok-4.7',apiReasoningEffort:'low'}, {page,request,card}=tokenFixture(settings);
   tokenResult(page,request,{usage:{total_tokens:22},model:'grok-4.7'});

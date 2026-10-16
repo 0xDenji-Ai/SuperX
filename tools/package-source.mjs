@@ -5,6 +5,7 @@ import { lstat, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { dirname, extname, isAbsolute, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createArchive, inspectPackage } from './package-extension.mjs';
+import { CONNECTOR_FILES } from '../connector/install.mjs';
 
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 export const PUBLIC_ROOT_FILES = Object.freeze([
@@ -12,10 +13,10 @@ export const PUBLIC_ROOT_FILES = Object.freeze([
   'PRIVACY.md', 'SECURITY.md', 'CONTRIBUTING.md', 'CHANGELOG.md', 'package.json',
 ]);
 export const PUBLIC_SOURCE_DIRECTORIES = Object.freeze([
-  '.github', 'demo', 'tests', 'tools', 'docs',
+  '.github', 'demo', 'tests', 'tools', 'docs', 'connector',
 ]);
 const privateTools = new Set(['tools/check-privacy-site.mjs', 'tools/render-store-assets.mjs']);
-const publicDocuments = new Set(['docs/RELEASE_CHANNELS.md', 'docs/RELEASE_CHECKLIST.md']);
+const publicDocuments = new Set(['docs/RELEASE_CHANNELS.md', 'docs/RELEASE_CHECKLIST.md', 'docs/CONNECTIONS.md']);
 // Only these two language-specific README screenshots are public and required;
 // obsolete previews and unrelated local screenshots stay out of exports.
 const documentationImages = new Set([
@@ -23,9 +24,11 @@ const documentationImages = new Set([
   'docs/assets/superx-preview-zh-CN.png',
 ]);
 const binaryExtensions = new Set(['.png', '.jpg', '.jpeg']);
+const connectorFiles=new Set(CONNECTOR_FILES.map(name=>`connector/${name}`));
 const hash = data => createHash('sha256').update(data).digest('hex');
 
 function isPublicFile(directory, name) {
+  if (directory === 'connector') return connectorFiles.has(name);
   if (directory === '.github') return /\.(?:ya?ml|md)$/.test(name);
   if (directory === 'demo') return /\.(?:html|js)$/.test(name);
   if (directory === 'tests') return name.endsWith('.test.js');

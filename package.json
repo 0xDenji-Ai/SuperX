@@ -1,9 +1,9 @@
 {
   "name": "superx",
-  "version": "0.8.2",
+  "version": "0.9.0",
   "private": true,
   "license": "MIT",
-  "description": "A Chrome/Edge extension for concise automatic fact-checks beside X posts, using your own xAI API Key.",
+  "description": "A Chrome/Edge extension for concise fact-checks beside X posts, using your own API Key or local Grok Build login.",
   "homepage": "https://superx.vip/",
   "repository": { "type": "git", "url": "https://github.com/bwjoke/SuperX.git" },
   "bugs": { "url": "https://github.com/bwjoke/SuperX/issues" },
@@ -13,7 +13,8 @@
     "package": "node tools/package-extension.mjs",
     "package:release": "node tools/package-release.mjs",
     "package:check": "node tools/package-extension.mjs --check",
-    "package:source": "node tools/package-source.mjs"
+    "package:source": "node tools/package-source.mjs",
+    "package:connector": "node tools/package-connector.mjs"
   },
   "engines": {
     "node": ">=22"

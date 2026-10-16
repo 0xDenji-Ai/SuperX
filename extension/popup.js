@@ -12,8 +12,18 @@
   let busy = true;
   let loaded = false;
   let config = {ready:false,keyState:"missing"};
+  function buildBlockedReason() {
+    const status=config.buildStatus || {};
+    if (status.errorCode==="BUILD_NOT_CONNECTED") return "build.unknown";
+    if(status.permission==="denied"||status.errorCode==="BUILD_PERMISSION_REQUIRED")return "build.permission";
+    if (status.installed===false && status.connected===true) return "options.buildStep2";
+    if (status.installed===false || ["BUILD_HOST_MISSING","BUILD_NATIVE_MISSING"].includes(status.errorCode)) return "build.missing";
+    if (status.authenticated===false || ["BUILD_AUTH_REQUIRED","BUILD_LOGIN_REQUIRED"].includes(status.errorCode)) return "build.login";
+    if (["BUILD_VERSION_UNSUPPORTED","BUILD_UNSUPPORTED_VERSION","BUILD_PROTOCOL_UNSUPPORTED"].includes(status.errorCode)) return "build.unsupported";
+    return "build.unknown";
+  }
   function blockedReason() {
-    if (!config.ready) return "status.needsKey";
+    if (!config.ready) return currentSettings.provider === "build" ? buildBlockedReason() : "status.needsKey";
     return null;
   }
   function render() {
@@ -21,9 +31,10 @@
     const reason = loaded ? blockedReason() : null;
     $("enabled-label").textContent = ui.t(loaded ? reason || (currentSettings.enabled ? "common.enabled" : "common.paused") : "common.loading",uiLanguage);
     $("indicator").dataset.enabled = String(loaded && !reason && currentSettings.enabled);
-    $("provider-label").textContent = ui.t("popup.apiLabel",uiLanguage,{count:currentSettings.apiConcurrency});
-    $("provider-hint").textContent = ui.t("popup.apiHint",uiLanguage);
-    $("toggle").textContent = ui.t(loaded ? (reason ? "popup.addKey" : currentSettings.enabled ? "common.pause" : "common.resume") : "common.loading",uiLanguage);
+    const build=currentSettings.provider==="build";
+    $("provider-label").textContent = ui.t(build ? "popup.buildLabel" : "popup.apiLabel",uiLanguage,{count:currentSettings.apiConcurrency,transport:currentSettings.buildTransport.toUpperCase()});
+    $("provider-hint").textContent = ui.t(build ? "popup.buildHint" : "popup.apiHint",uiLanguage);
+    $("toggle").textContent = ui.t(loaded ? (reason ? build ? "popup.setupBuild" : "popup.addKey" : currentSettings.enabled ? "common.pause" : "common.resume") : "common.loading",uiLanguage);
     $("toggle").disabled = busy || !loaded;
     $("options").hidden = Boolean(reason);
     $("status").textContent = errorMessage ? ui.t(errorMessage.key,uiLanguage,{error:errorMessage.error}) : "";
@@ -35,7 +46,7 @@
   }
   function showError(key,error) { errorMessage = {key,error};render(); }
   async function openKeySettings() {
-    const result = await chrome.runtime.sendMessage({type:"OPEN_SETTINGS",focus:"api-key"});
+    const result = await chrome.runtime.sendMessage({type:"OPEN_SETTINGS",focus:currentSettings.provider==="build" ? "build" : "api-key"});
     if (!result?.ok) throw new Error(ui.t("errors.noResponse",uiLanguage));
   }
   async function load() {
@@ -55,12 +66,25 @@
   }
   $("toggle").addEventListener("click",async () => {
     if (busy || !loaded) return;
-    if (blockedReason()) { busy = true;errorMessage = null;render();try { await openKeySettings(); } catch (error) { showError("errors.operation",error.message); } finally { busy = false;render(); }return; }
+    if (blockedReason()) {
+      busy=true;errorMessage=null;render();
+      try {
+        if(currentSettings.provider==="build"){
+          const latest=await chrome.runtime.sendMessage({type:"GET_CONFIG"});
+          if(!latest?.ok||typeof latest.ready!=="boolean")throw new Error(ui.t("errors.noResponse",uiLanguage));
+          config=latest;currentSettings=core.normalizeSettings(latest.settings);
+          if(blockedReason())await openKeySettings();
+        } else await openKeySettings();
+      } catch(error){showError("errors.operation",error.message);}
+      finally{busy=false;render();}
+      return;
+    }
     busy = true;errorMessage = null;render();
     try {
       const latest = await chrome.runtime.sendMessage({type:"GET_CONFIG"});
       if (!latest?.ok) throw new Error(ui.t("errors.noResponse",uiLanguage));
       config = latest;
+      currentSettings=core.normalizeSettings(latest.settings);
       if (blockedReason()) { await openKeySettings();return; }
       const latestSettings = core.normalizeSettings(latest.settings);
       const settings = core.normalizeSettings({...latestSettings,enabled:!latestSettings.enabled});
@@ -80,6 +104,10 @@
   });
   chrome.runtime.onMessage.addListener(message => {
     if (message?.type === "UI_LANGUAGE_CHANGED") { localeRevision++;applyLanguage(message.language); }
+    if(message?.type==="CONFIG"&&message.settings&&typeof message.ready==="boolean"&&!busy){
+      config=message;currentSettings=core.normalizeSettings(message.settings);loaded=true;
+      uiLanguage=ui.resolveLanguage(currentSettings.interfaceLanguage,observedUILanguage);render();
+    }
   });
   chrome.storage.onChanged.addListener((changes,area) => {
     if (area === "session" && (changes.apiKey || changes.securityFault) || area === "local" && (changes.apiKeyVault || changes.rememberApiKey || changes.apiKey)) {
@@ -87,7 +115,11 @@
       return;
     }
     if (area !== "local") return;
-    if (changes.settings && !busy) currentSettings = core.normalizeSettings(changes.settings.newValue);
+    if (changes.settings && !busy) {
+      const previousProvider=currentSettings.provider;
+      currentSettings=core.normalizeSettings(changes.settings.newValue);
+      if(previousProvider!==currentSettings.provider){config.ready=false;busy=true;void load();}
+    }
     if (changes.uiLanguage) { localeRevision++;observedUILanguage = ui.normalizeLanguage(changes.uiLanguage.newValue); }
     uiLanguage = ui.resolveLanguage(currentSettings.interfaceLanguage,observedUILanguage);
     render();

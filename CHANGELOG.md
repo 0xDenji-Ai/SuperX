@@ -2,6 +2,15 @@
 
 SuperX release history. The extension's `manifest.json` is the authoritative installed version. Test counts below describe those releases' recorded checks, not live provider or browser-store certification.
 
+## 0.9.0 — API Key and local Grok Build (unreleased candidate)
+
+- Keep API Key as the default and add an independent official Grok Build login route with ACP or CLI. Both routes use the same concise Fact Check and comment rules, current displayed-post language, model/effort selectors, Markdown, usage metadata and local history. Provider, transport, model and effort partition result caches. No automatic paid retries or provider fallback.
+- Add first-use API Key guidance for The X Subscription: Grok Dashboard, Grok Inference Key type, Chat/model access and account usage. Existing xAI Console Keys remain supported. Subscription entitlement and billing follow the account and provider; no free/unlimited claim is made.
+- Add a separate per-user native connector for Windows x64 and macOS Apple silicon / Intel, with pinned, integrity-checked official Node and Grok Build runtimes. The browser requests optional native-messaging permission only when checking Build. API-only users do not need it.
+- Isolate the official runtime's temporary configuration/working directory, preserve its existing official login without reading/copying credentials, restrict local tools, validate model/effort selections, handle cancellation/timeouts and use actual hosted search events as retrieval evidence. These application restrictions are not an OS sandbox. Build tasks queue immediately and execute serially.
+- Include a built-in Windows/macOS connection guide, a connector ZIP, uninstall commands and provider-specific privacy disclosures. Connection checks send no Fact Check prompt and do not interrupt an active task.
+- This is a local candidate. Mock tests and Windows-local runtime/archive checks do not establish macOS or authenticated browser end-to-end acceptance. Published Stable remains 0.7.26.
+
 ## 0.8.2 — Model and reasoning selectors (unreleased candidate)
 
 - Replace the editable model-name field with separate model and reasoning-effort dropdowns. Offer Grok 4.3, 4.5, 4.6 and 4.7, and only the effort levels supported by each model. Keep already saved custom model IDs as existing selections without adding a free-form input.

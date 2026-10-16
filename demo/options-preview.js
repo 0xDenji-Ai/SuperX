@@ -7,13 +7,15 @@
   let state;
   try {state=JSON.parse(sessionStorage.getItem('grokfirst-options-preview')||'null');} catch {state=null;}
   state={settings:XGrokCore.normalizeSettings({...state?.settings,apiVerification:'only',
+    ...(query.has('provider')?{provider:query.get('provider')}:{}),
     ...(query.has('interface')?{interfaceLanguage:query.get('interface')}:{}),
     ...(query.has('answer')?{language:query.get('answer')}:{})}),rememberApiKey:typeof state?.rememberApiKey==='boolean'?state.rememberApiKey:true,hasSavedKey:state?.hasSavedKey===true,migration:state?.migration===true,uiLanguage:GrokFirstUI.normalizeLanguage(query.get('lang')||'zh-CN')};
   if(query.get('security')==='migration'){state.hasSavedKey=true;state.migration=true;}
   if(query.get('security')==='saved'){state.hasSavedKey=true;state.migration=false;}
   let previewKey=state.hasSavedKey&&!state.migration?'preview-test-key-not-real':'';
   const previewSession={};
-  if(query.has('focus'))previewSession.superxOptionsFocus={id:'api-key',nonce:'local-preview-focus'};
+  if(query.has('focus'))previewSession.superxOptionsFocus={id:query.get('focus')==='build'?'build':'api-key',nonce:'local-preview-focus'};
+  const buildStatus=()=>query.get('permission')==='denied'?{connected:false,permission:'denied',installed:false,available:false,ready:false,errorCode:'BUILD_PERMISSION_REQUIRED'}:{connected:true,permission:'granted',installed:query.get('build')!=='missing',available:query.get('build')==='ready',authenticated:query.get('build')==='ready'?true:query.get('build')==='login'?false:undefined,ready:query.get('build')==='ready',version:'preview',...(query.get('build')==='models'?{modelCatalog:[{id:'grok-4.7',available:true,efforts:['low','high']},{id:'grok-preview-fast',available:true,efforts:['low','high']}]}:{})};
   const security=()=>({keyState:previewKey?'ready':state.migration?'migration':'missing',remember:state.rememberApiKey,hasSavedKey:state.hasSavedKey});
   const banner=document.createElement('div');banner.id='preview-note';
   banner.style.cssText='display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:8px 16px;margin:0;padding:8px 16px;font:12px/1.5 system-ui;color:var(--muted,#71767b);background:var(--background,#000);border-bottom:1px solid var(--line,#2f3336)';
@@ -37,13 +39,16 @@
   const persist=()=>sessionStorage.setItem('grokfirst-options-preview',JSON.stringify({settings:state.settings,rememberApiKey:state.rememberApiKey,hasSavedKey:state.hasSavedKey,migration:state.migration}));
   const pick=keys=>Object.fromEntries((Array.isArray(keys)?keys:[keys]).filter(key=>Object.hasOwn(state,key)).map(key=>[key,state[key]]));
   window.chrome={
+    permissions:{request(request){receipt.textContent=JSON.stringify({type:'PERMISSION_REQUEST',...request});return Promise.resolve(query.get('permission')!=='denied');}},
     runtime:{
-      getManifest:()=>({version:'0.8.2-preview'}),reload:()=>location.reload(),
+      getManifest:()=>({version:'0.9.0-preview'}),reload:()=>location.reload(),
       onMessage:{addListener:fn=>runtimeListeners.push(fn)},
       async sendMessage(message){
         if(message.type==='GET_UI_LANGUAGE')return {ok:true,language:state.uiLanguage};
         if(message.type==='GET_SECURITY_STATUS')return {ok:true,...security()};
-        if(message.type==='GET_CONFIG')return {ok:true,...state,ready:Boolean(previewKey),...security()};
+        if(message.type==='GET_CONFIG')return {ok:true,...state,ready:state.settings.provider==='build'?buildStatus().ready:Boolean(previewKey),buildStatus:buildStatus(),...security()};
+        if(message.type==='GET_BUILD_STATUS'){receipt.textContent=JSON.stringify({type:message.type});return {ok:true,...buildStatus()};}
+        if(message.type==='OPEN_CONNECTOR_GUIDE'){receipt.textContent=JSON.stringify({type:message.type});location.assign('/extension/setup.html');return {ok:true};}
         if(message.type==='SAVE_SETTINGS'){
           const previous=state.settings;state.settings=XGrokCore.normalizeSettings(message.settings);persist();
           receipt.textContent=JSON.stringify({type:message.type,settings:state.settings,rememberApiKey:state.rememberApiKey});

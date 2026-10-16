@@ -1,5 +1,5 @@
 /* SuperX: credentials and provider calls stay in the extension worker. */
-importScripts('feed-core.js', 'api-provider.js', 'ui-i18n.js', 'key-store.js', 'history-store.js');
+importScripts('feed-core.js', 'api-provider.js', 'build-provider.js', 'ui-i18n.js', 'key-store.js', 'history-store.js');
 const Core = XGrokCore;
 const UI = GrokFirstUI;
 const KeyStore = SuperXKeyStore;
@@ -14,6 +14,7 @@ let ratePaused = false, uiLanguage = UI.browserLanguage(globalThis);
 let quotaWrites = Promise.resolve(), cacheWrites = Promise.resolve(), railStateWrites = Promise.resolve(), uiLanguageWrites = Promise.resolve();
 let securityWrites = Promise.resolve(), securityPending = 0, securityGeneration = 0;
 let hasSavedKey = false, rememberApiKey = true, credentialReady = false, securityFault = false, sealAttempted = false;
+let buildStatus = {connected:false,installed:false,available:false,errorCode:'BUILD_NOT_CONNECTED'}, buildStatusAt = 0, buildStatusPending;
 const CACHE_TTL = 24 * 60 * 60 * 1000;
 const ready = initialize();
 
@@ -71,24 +72,44 @@ async function initialize() {
 }
 function validKey(value) { return typeof value==='string' && Boolean(value.trim()) && value.length<=500 && !/[\r\n]/.test(value); }
 function securityAllowsCalls() { return !securityFault && credentialReady && securityPending===0; }
+function buildReady() { return buildStatus.connected===true&&buildStatus.installed===true&&buildStatus.available===true&&buildStatus.authenticated===true&&buildStatus.permission!==false; }
+function providerAllowsCalls(s=settings) { return s?.provider==='build'?buildReady():securityAllowsCalls(); }
+async function refreshBuildStatus(force=false) {
+  // A STATUS queued behind a long native task would hit its short probe
+  // timeout. Reuse the last authenticated status while this worker has an
+  // accepted Build task; probing must not cancel or hide paid work.
+  if(buildReady()&&[...runningJobs].some(job=>job.settings.provider==='build')){buildStatusAt=Date.now();return {...buildStatus,busy:true};}
+  if(buildStatusPending)return buildStatusPending;
+  if(!force&&Date.now()-buildStatusAt<10000)return buildStatus;
+  buildStatusPending=(async()=>{
+    try {buildStatus=await SuperXBuild.status();}
+    catch(error){buildStatus={connected:false,installed:false,available:false,errorCode:SuperXBuild.publicError(error).code};}
+    buildStatusAt=Date.now();return buildStatus;
+  })();
+  try{return await buildStatusPending;}finally{buildStatusPending=undefined;}
+}
+function ensureBuildStatus(){
+  if(!buildStatusPending&&(!buildStatusAt||Date.now()-buildStatusAt>10000))void refreshBuildStatus().then(()=>broadcastConfig()).then(()=>pump()).catch(()=>{});
+}
 function securityStatus() {
   return {keyState:securityAllowsCalls()?'ready':hasSavedKey&&!credentialReady?'migration':'missing',
     remember:rememberApiKey,hasSavedKey};
 }
 function isX(url) { try { return ['x.com','twitter.com'].includes(new URL(url).hostname) && new URL(url).protocol === 'https:'; } catch { return false; } }
 function isFeed(url) { return isX(url) && !/^\/(?:messages|i\/(?:chat|grok|flow|premium|settings))\b/.test(new URL(url).pathname); }
-function trustedUI(sender) { try { const url=new URL(sender.url),base=new URL(chrome.runtime.getURL(''));return sender.id===chrome.runtime.id&&url.protocol===base.protocol&&url.host===base.host&&['/options.html','/popup.html','/history.html'].includes(url.pathname); }catch{return false;} }
+function trustedUI(sender) { try { const url=new URL(sender.url),base=new URL(chrome.runtime.getURL(''));return sender.id===chrome.runtime.id&&url.protocol===base.protocol&&url.host===base.host&&['/options.html','/popup.html','/history.html','/setup.html'].includes(url.pathname); }catch{return false;} }
 function trustedFeed(sender) { return sender.id===chrome.runtime.id && sender.frameId===0 && Number.isInteger(sender.tab?.id) && isFeed(sender.url); }
 function send(port, message) { try { port.postMessage(message); } catch { /* Tab closed. */ } }
 async function publicConfig() {
   const generation=securityGeneration,canRefresh=securityPending===0;
-  const session = await chrome.storage.session.get('apiKey');
+  const session = settings.provider==='build'?{}:await chrome.storage.session.get('apiKey');
   // A lookup started before a Key change or while a mutation was pending cannot
   // overwrite the newer operation's readiness with an old storage snapshot.
-  if(canRefresh && generation===securityGeneration && securityPending===0)credentialReady = validKey(session.apiKey);
+  if(settings.provider!=='build'&&canRefresh && generation===securityGeneration && securityPending===0)credentialReady = validKey(session.apiKey);
   const status=securityStatus();
   const historyConfig=history.config();
-  return {settings,ready:securityAllowsCalls(),keyState:status.keyState,historyEnabled:historyConfig.enabled,historyEpoch:historyConfig.epoch};
+  if(settings.provider==='build')ensureBuildStatus();
+  return {settings,ready:providerAllowsCalls(),keyState:status.keyState,...(settings.provider==='build'?{buildStatus:{...buildStatus,ready:buildReady()}}:{}),historyEnabled:historyConfig.enabled,historyEpoch:historyConfig.epoch};
 }
 async function notifyHistoryChanged(){await chrome.runtime.sendMessage({type:'HISTORY_CHANGED',...history.config()}).catch(()=>{});}
 async function broadcastHistoryConfig(){
@@ -101,7 +122,11 @@ function rememberHistoryResult(ticket,result,comments=false,language=''){
   if(!comments&&Core.readerOutput(result?.text,{final:true}).kind!=='content')return;
   void Promise.resolve(ticket).then(value=>comments?history.comments(value,{...result,language}):history.analysis(value,{...result,language})).then(()=>notifyHistoryChanged()).catch(()=>{});
 }
-async function broadcastConfig() { const config = await publicConfig(); for (const client of clients) send(client.port,{type:'CONFIG',...config,used:quotas[client.tabId] || 0,collapsed:Boolean(railStates[client.tabId]),uiLanguage:client.uiLanguage}); }
+async function broadcastConfig() {
+  const config=await publicConfig();
+  for(const client of clients)send(client.port,{type:'CONFIG',...config,used:quotas[client.tabId]||0,collapsed:Boolean(railStates[client.tabId]),uiLanguage:client.uiLanguage});
+  void chrome.runtime.sendMessage({type:'CONFIG',...config}).catch(()=>{});
+}
 async function currentUILanguage() {
   try {
     const tabs=await chrome.tabs.query({active:true,lastFocusedWindow:true});
@@ -134,9 +159,9 @@ function sanitizePost(raw) {
 function cacheKey(post, s, inputFingerprint) {
   const mode=Core.explanationMode(s);
   const prompts=['fact-check-prompts-v1',mode==='preset'?Core.DEFAULT_PROMPTS.verify:s.verifyPrompt];
-  return JSON.stringify(['GrokFirst-v1','api',s.apiModel,s.language,s.webSearch,s.xSearch,
+  return JSON.stringify(['GrokFirst-v1',s.provider,s.provider==='build'?[s.buildTransport,s.buildModel]:s.apiModel,s.language,s.webSearch,s.xSearch,
     'api-v10-model-reasoning',mode,'only',
-    Core.apiPostIdentity(post,s),...prompts,Core.reasoningEffort(s.apiModel,s.apiReasoningEffort)]);
+    Core.apiPostIdentity(post,s),...prompts,s.provider==='build'?s.buildReasoningEffort:Core.reasoningEffort(s.apiModel,s.apiReasoningEffort)]);
 }
 function sanitizeAnalysis(raw) {
   const value=typeof raw==='string'?{text:raw}:raw&&typeof raw==='object'?raw:{};
@@ -147,10 +172,10 @@ function sanitizeAnalysis(raw) {
 }
 function commentCacheKey(post,s,inputFingerprint,analysis) {
   const prompts=['comments-prompt-v1',s.commentsPrompt];
-  return JSON.stringify(['GrokFirst-comments-v2-language','api',s.apiModel,s.language,Core.postFingerprint(post),analysis,...prompts,Core.reasoningEffort(s.apiModel,s.apiReasoningEffort)]);
+  return JSON.stringify(['GrokFirst-comments-v2-language',s.provider,s.provider==='build'?[s.buildTransport,s.buildModel]:s.apiModel,s.language,Core.postFingerprint(post),analysis,...prompts,s.provider==='build'?s.buildReasoningEffort:Core.reasoningEffort(s.apiModel,s.apiReasoningEffort)]);
 }
 function commentsJob(job) { return job.settings.task==='comments'; }
-function billingMetadata(value,provider) { return provider==='api'?GrokFirstAPI.sanitizedMetadata(value):{}; }
+function billingMetadata(value,provider) { return ['api','build'].includes(provider)?GrokFirstAPI.sanitizedMetadata(value):{}; }
 function verificationMetadata(value,mode,text=String(value?.text||'').slice(0,30000)) {
   const start=value?.verificationStart;
   const failure=['only','background'].includes(mode)?GrokFirstAPI.sanitizedVerificationFailure(value?.verificationFailure):undefined;
@@ -216,10 +241,10 @@ function waitForAbort(promise, signal) {
   });
 }
 
-async function openSettings() {
+async function openSettings(focus) {
   // Replace stale focus requests even when the caller uses a generic Settings
   // entry point or sends an unlock target from an older content script.
-  try { await chrome.storage.session.set({superxOptionsFocus:{id:'api-key',nonce:crypto.randomUUID()}}); }
+  try { await chrome.storage.session.set({superxOptionsFocus:{id:focus==='build'||settings.provider==='build'?'build':'api-key',nonce:crypto.randomUUID()}}); }
   catch { /* The settings page remains reachable when session storage fails. */ }
   await chrome.runtime.openOptionsPage();
 }
@@ -241,7 +266,7 @@ chrome.runtime.onConnect.addListener(port => {
       if(message.type==='PING') { send(port,{type:'PONG'}); return; }
       if(message.type==='UI_LANGUAGE') { await updateUILanguage(client,message.language);return; }
       if(message.type==='CANCEL_ALL') { cancelClient(client); return; }
-      if(message.type==='OPEN_SETTINGS') { await openSettings(); return; }
+      if(message.type==='OPEN_SETTINGS') { await openSettings(message.focus); return; }
       if(message.type==='OPEN_HISTORY'&&trustedFeed(port.sender)){await openHistory();return;}
       if(message.type==='HISTORY_VISIT'){
         // No Key, provider call or dwell timer is required to record visibility.
@@ -279,7 +304,7 @@ chrome.runtime.onConnect.addListener(port => {
       if(!requestId) return;
       if(client.requestCancellations.get(requestId)!==receivedCancellation)return;
       if(client.cancelEpoch!==receivedEpoch || receivedRevision!==revision){report('任务已取消。','CANCELLED');return;}
-      if(securityPending || securityFault) { report('API Key 设置需要重新确认，请在设置中重试。','NEEDS_KEY');return; }
+      if(settings.provider!=='build'&&(securityPending || securityFault)) { report('API Key 设置需要重新确认，请在设置中重试。','NEEDS_KEY');return; }
       const snapshot={...settings,...(comments?{task:'comments'}:{})};
       if(!settings.enabled&&!comments) { report('已暂停自动分析。','PAUSED'); return; }
       if(railStates[client.tabId]){report('右栏已收起。','RAIL_COLLAPSED');return;}
@@ -294,7 +319,7 @@ chrome.runtime.onConnect.addListener(port => {
       const config=await publicConfig();
       if(!clients.has(client)||client.cancelEpoch!==receivedEpoch||receivedRevision!==revision||client.requestCancellations.get(requestId)!==receivedCancellation)return;
       if(railStates[client.tabId]){report('右栏已收起。','RAIL_COLLAPSED');return;}
-      if(!config.ready) { report('请打开设置并输入 xAI API Key。','NEEDS_KEY'); return; }
+      if(!config.ready) { report(settings.provider==='build'?'请在设置中连接 Grok Build。':'请打开设置并输入 xAI API Key。',settings.provider==='build'?(buildStatus.errorCode||'BUILD_NOT_CONNECTED'):'NEEDS_KEY'); return; }
       const key=`${client.tabId}:${requestId}`;
       if(jobs.has(key)) return;
       if(ratePaused && !message.force) { report('Grok 已限速，自动队列已暂停，请稍后手动重试。','RATE_LIMIT'); return; }
@@ -310,9 +335,9 @@ chrome.runtime.onConnect.addListener(port => {
 });
 
 function liveJob(job) {
-  return securityAllowsCalls() && runningJobs.has(job) && jobs.get(job.key)===job && !job.controller.signal.aborted && job.revision===revision && job.clientEpoch===job.client.cancelEpoch && clients.has(job.client);
+  return runningJobs.has(job) && jobs.get(job.key)===job && !job.controller.signal.aborted && job.revision===revision && job.clientEpoch===job.client.cancelEpoch && clients.has(job.client);
 }
-function apiLimit(s) { return Math.max(1,Math.min(8,Math.trunc(Number(s.apiConcurrency))||4)); }
+function apiLimit(s) { return s.provider==='build'?1:Math.max(1,Math.min(8,Math.trunc(Number(s.apiConcurrency))||4)); }
 function rateLimitError() { return Object.assign(new Error('Grok 已限速，自动队列已暂停，请稍后手动重试。'),{code:'RATE_LIMIT'}); }
 function clearAPIDeadline(job) { clearTimeout(job.deadline);job.deadline=undefined; }
 function startAPIDeadline(job) {
@@ -330,8 +355,13 @@ function pauseWaitingJobs() {
   }
   queue=[];
 }
+function stopUnavailableBuild(code) {
+  buildStatus={...buildStatus,available:false,errorCode:code};buildStatusAt=Date.now();
+  for(const waiting of [...queue]){jobError(waiting,SuperXBuild.publicError({code}).error,code);removeJob(waiting);}
+  queue=[];void broadcastConfig();
+}
 function pump() {
-  if(pumping || !securityAllowsCalls())return;
+  if(pumping || !providerAllowsCalls())return;
   pumping=true;
   try {
     queue=queue.filter(job=>jobs.get(job.key)===job && !job.controller.signal.aborted && job.revision===revision && job.clientEpoch===job.client.cancelEpoch && clients.has(job.client));
@@ -362,7 +392,7 @@ async function executeJob(job) {
       const hasText=typeof update.text==='string';
       const text=hasText?Core.readerOutput(update.text).text.slice(0,30000):undefined;
       if(!commentsJob(job)&&hasText) {
-        if(text.trim())job.retainedFactCheck={...sanitizeAnalysis({...update,text}),...job.billing,provider:'api',apiVerification:'only',verified:false,searched:update.searched===true};
+        if(text.trim())job.retainedFactCheck={...sanitizeAnalysis({...update,text}),...job.billing,provider:job.settings.provider,apiVerification:'only',verified:false,searched:update.searched===true};
         else delete job.retainedFactCheck;
       }
       if(liveJob(job)&&!commentsJob(job))send(client.port,{type:'UPDATE',requestId,...(hasText?{text}:{}),phase:update.phase,
@@ -395,10 +425,11 @@ async function executeJob(job) {
       const errorBilling={...job.billing,...billingMetadata(e.partialResult,job.settings.provider),...billingMetadata(e,job.settings.provider)};
       const partialText=Core.readerOutput(e.partialResult?.text,{final:true}).text.slice(0,30000);
       const partialResult=partialText?withBillingMetadata({...e.partialResult,...errorBilling,text:partialText,verificationStatus:'incomplete'},job.settings.provider,job.settings.apiVerification):undefined;
-      const safeError=GrokFirstAPI.publicError(e);
+      const safeError=job.settings.provider==='build'?SuperXBuild.publicError(e):GrokFirstAPI.publicError(e);
       if(partialResult)rememberHistoryResult(job.historyTicket,{...partialResult,completedAt:Date.now()},false,job.historyLanguage);
       jobError(job,safeError.error,safeError.code,{...errorBilling,...(commentsJob(job)?{}:{...verificationMetadata({verificationFailure:e.verificationFailure||partialResult?.verificationFailure},job.settings.apiVerification),partialResult})});
       if(e.code==='RATE_LIMIT')pauseWaitingJobs();
+      if(job.settings.provider==='build'&&['BUILD_NATIVE_MISSING','BUILD_PERMISSION_REQUIRED','BUILD_LOGIN_REQUIRED','BUILD_VERSION_UNSUPPORTED','BUILD_CONFIG_UNSUPPORTED','BUILD_TOOL_POLICY','BUILD_DISCONNECTED','BUILD_UNAVAILABLE'].includes(safeError.code))stopUnavailableBuild(safeError.code);
     } else if(signal.aborted && clients.has(client) && job.revision===revision && (!jobs.has(job.key)||jobs.get(job.key)===job)) {
       const reason=signal.reason;
       const timedOut=reason?.code==='TIMEOUT';
@@ -416,6 +447,10 @@ async function executeJob(job) {
 }
 async function runAPI(job,onUpdate) {
   const signal=job.controller.signal;
+  if(job.settings.provider==='build'){
+    if(commentsJob(job))return SuperXBuild.generateComments(job.post,job.settings,{analysis:job.analysis,signal});
+    return SuperXBuild.run(job.post,job.settings,{signal,onUpdate});
+  }
   const session=await waitForAbort(chrome.storage.session.get('apiKey'),signal);
   const key=session.apiKey;
   if(!liveJob(job))throw signal.reason || new DOMException('Cancelled','AbortError');
@@ -573,12 +608,14 @@ chrome.runtime.onMessage.addListener((message,sender,respond)=>{
   }
   (async()=>{
     await ready;
-    if(message?.type==='OPEN_SETTINGS' && (trustedUI(sender)||trustedFeed(sender))) {await openSettings();return {ok:true};}
+    if(message?.type==='OPEN_SETTINGS' && (trustedUI(sender)||trustedFeed(sender))) {await openSettings(message.focus);return {ok:true};}
     if(message?.type==='OPEN_HISTORY' && (trustedUI(sender)||trustedFeed(sender))) {await openHistory();return {ok:true};}
     if(!trustedUI(sender)) return {ok:false,error:'此操作仅允许在扩展设置页中执行。'};
     if(message.type==='GET_UI_LANGUAGE')return {ok:true,language:await currentUILanguage()};
     if(message.type==='GET_SECURITY_STATUS')return {ok:true,...securityStatus()};
-    if(message.type==='GET_CONFIG')return {ok:true,...await publicConfig()};
+    if(message.type==='OPEN_CONNECTOR_GUIDE'){await chrome.tabs.create({url:chrome.runtime.getURL('setup.html')});return {ok:true};}
+    if(message.type==='GET_BUILD_STATUS'){const status=await refreshBuildStatus(true);void broadcastConfig();return {ok:true,...status,ready:buildReady()};}
+    if(message.type==='GET_CONFIG'){if(settings.provider==='build')await refreshBuildStatus();return {ok:true,...await publicConfig()};}
     if(message.type==='GET_HISTORY'||message.type==='GET_HISTORY_STATUS'){
       try{return {ok:true,...await history[message.type==='GET_HISTORY'?'get':'status']()};}
       catch{return {ok:false,errorKey:'history.storageError'};}

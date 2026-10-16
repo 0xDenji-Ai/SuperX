@@ -5,7 +5,7 @@
   const listeners = [];
   const runtimeListeners = [];
   const state = {
-    settings: XGrokCore.normalizeSettings({...XGrokCore.DEFAULT_SETTINGS,apiVerification:'only',apiConcurrency:Number(query.get('count')) || 4,interfaceLanguage:query.get('interface') || 'auto',language:query.get('answer') || 'auto'}),
+    settings: XGrokCore.normalizeSettings({...XGrokCore.DEFAULT_SETTINGS,provider:query.get('provider')||'api',buildTransport:query.get('transport')||'acp',apiVerification:'only',apiConcurrency:Number(query.get('count')) || 4,interfaceLanguage:query.get('interface') || 'auto',language:query.get('answer') || 'auto'}),
     uiLanguage: GrokFirstUI.normalizeLanguage(query.get('lang') || 'en'),
   };
   const receipt = document.createElement('output');
@@ -16,12 +16,12 @@
     .filter(key => Object.hasOwn(state,key)).map(key => [key,state[key]]));
   window.chrome = {
     runtime: {
-      getManifest: () => ({version:'0.8.2-preview'}),
+      getManifest: () => ({version:'0.9.0-preview'}),
       onMessage: {addListener: fn => runtimeListeners.push(fn)},
       async sendMessage(message) {
         if (message.type === 'GET_UI_LANGUAGE') return {ok:true,language:state.uiLanguage};
-        if (message.type === 'GET_CONFIG') return {ok:true,settings:state.settings,keyState:query.get('security')==='migration'?'migration':query.get('security')==='missing'?'missing':'ready',ready:!['missing','migration'].includes(query.get('security'))};
-        if (message.type === 'OPEN_SETTINGS') { await this.openOptionsPage('api-key');return {ok:true}; }
+        if (message.type === 'GET_CONFIG') return {ok:true,settings:state.settings,keyState:query.get('security')==='migration'?'migration':query.get('security')==='missing'?'missing':'ready',ready:state.settings.provider==='build'?query.get('permission')!=='denied'&&query.get('build')==='ready':!['missing','migration'].includes(query.get('security')),buildStatus:{connected:query.get('build')!=='missing',permission:query.get('permission')==='denied'?'denied':'granted',...(query.get('permission')==='denied'?{errorCode:'BUILD_PERMISSION_REQUIRED'}:{}),installed:query.get('build')!=='missing',available:query.get('build')==='ready',authenticated:query.get('build')==='ready'?true:query.get('build')==='login'?false:undefined}};
+        if (message.type === 'OPEN_SETTINGS') { await this.openOptionsPage(message.focus);return {ok:true}; }
         if (message.type === 'OPEN_HISTORY') {location.assign('/demo/history.html?lang='+encodeURIComponent(state.uiLanguage));return {ok:true};}
         if (message.type === 'SAVE_SETTINGS') {
           receipt.dataset.saveRequests = String(Number(receipt.dataset.saveRequests || 0) + 1);
@@ -38,7 +38,10 @@
         if (query.get('failure') === 'options') throw new Error('Local preview options error');
         const destination = new URL('/demo/options.html',location.origin);
         destination.searchParams.set('lang',state.uiLanguage);
-        destination.searchParams.set('focus','api-key');
+        destination.searchParams.set('provider',state.settings.provider);
+        destination.searchParams.set('focus',focus||'api-key');
+        if(query.has('build'))destination.searchParams.set('build',query.get('build'));
+        if(query.has('permission'))destination.searchParams.set('permission',query.get('permission'));
         if (query.get('security')==='migration') destination.searchParams.set('security','migration');
         if (query.get('scheme') === 'light') destination.searchParams.set('scheme','light');
         location.assign(destination.href);

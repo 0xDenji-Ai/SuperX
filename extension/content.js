@@ -179,8 +179,10 @@
     return true;
   }
   function usableConnection(){return !needsPageRefresh&&providerReady&&(connected||workerSleeping||awaitingConfig);}
+  let buildErrorCode='';
+  function needsProvider(){return settings.provider==='build'?(buildErrorCode.startsWith('BUILD_')?errorKey(buildErrorCode):'build.unknown'):'status.needsKey';}
   async function openSettings() {
-    const message={type:'OPEN_SETTINGS',focus:'api-key'};
+    const message={type:'OPEN_SETTINGS',focus:settings.provider==='build'?'build':'api-key'};
     // Settings can add or replace a Key. Restore the feed subscription so its
     // updated CONFIG can reach a tab that previously had no usable credential.
     if(workerSleeping)connect();
@@ -203,11 +205,11 @@
     railHeader.setAttribute('lang',uiLanguage);railHeader.setAttribute('dir',direction);
     rail.setAttribute('aria-label',t('aria.rail'));railLanguage.setAttribute('aria-label',t('aria.outputLanguage'));
     const auto=Array.from(railLanguage.children).find(option=>option.value==='auto');if(auto)auto.textContent=t('lang.auto').split(' · ')[0];railLanguage.title=t(settings.language==='auto'?'lang.auto':'aria.outputLanguage');
-    railOptions.setAttribute('aria-label',t('common.settings'));railOptions.title=t(needsPageRefresh?'status.refreshRequired':!providerReady?'common.enterKey':'common.settings');
+    railOptions.setAttribute('aria-label',t('common.settings'));railOptions.title=t(needsPageRefresh?'status.refreshRequired':!providerReady?(settings.provider==='build'?'popup.setupBuild':'common.enterKey'):'common.settings');
     railHistory.setAttribute('aria-label',t('common.history'));railHistory.title=t('common.history');
     railCollapse.setAttribute('aria-label',t('common.collapse'));railCollapse.title=t('tooltip.collapse');
     railExpand.setAttribute('aria-label',t('common.expand'));railExpand.title=t('tooltip.expand');
-    railHeader.title=t('tooltip.apiMode',{count:settings.apiConcurrency});
+    railHeader.title=settings.provider==='build'?t('popup.buildLabel',{transport:settings.buildTransport.toUpperCase()}):t('tooltip.apiMode',{count:settings.apiConcurrency});
   }
   function syncUILanguage() {
     const observed=UI.normalizeLanguage(document.documentElement.getAttribute('lang') || navigator.language || 'en');
@@ -223,6 +225,10 @@
       const marker='\uFFFC',parts=t('status.refreshRequiredAction',{refresh:marker}).split(marker),button=node('button','status-settings',t('common.refreshPage'));
       button.type='button';button.addEventListener('click',()=>location.reload());
       target.replaceChildren(document.createTextNode(parts[0]),button,document.createTextNode(parts.slice(1).join(marker)));return;
+    }
+    if(key.startsWith('build.')){
+      const button=node('button','status-settings',t('popup.setupBuild'));button.type='button';button.addEventListener('click',()=>openSettings());
+      target.replaceChildren(document.createTextNode(t(key,vars)+' '),button);return;
     }
     if(key!=='status.needsKey'){target.replaceChildren(document.createTextNode(t(key,vars)));return;}
     // Keep the translated sentence intact while making its Settings word an
@@ -284,12 +290,13 @@
     entry.ui.box.setAttribute('aria-busy',String(active));
   }
   function errorKey(code) {
+    if(code?.startsWith('BUILD_'))return ({BUILD_LOGIN_REQUIRED:'build.login',BUILD_NATIVE_MISSING:'build.missing',BUILD_VERSION_UNSUPPORTED:'build.unsupported',BUILD_MODEL_UNSUPPORTED:'build.unsupported',BUILD_EFFORT_UNSUPPORTED:'build.unsupported'})[code]||'build.unavailable';
     return ({RATE_LIMIT:'status.rateLimited',NEEDS_KEY:'status.needsKey',KEY_MIGRATION_REQUIRED:'status.needsKey',
       CANCELLED:'status.cancelled',RAIL_COLLAPSED:'status.disabled',URL_SEARCH_REQUIRED:'error.urlSearchRequired',API_LANGUAGE_MISMATCH:'error.outputLanguageMismatch'})[code]||'status.failed';
   }
   function requestSnapshot(entry,requestId,task='analysis') {
-    return {requestId,task,entry,postSnapshot:entry.post,apiIdentity:Core.apiPostIdentity(entry.post,task==='comments'?undefined:settings),path:location.pathname,provider:'api',
-      language:settings.language,apiModel:settings.apiModel,
+    return {requestId,task,entry,postSnapshot:entry.post,apiIdentity:Core.apiPostIdentity(entry.post,task==='comments'?undefined:settings),path:location.pathname,provider:settings.provider,
+      language:settings.language,apiModel:settings.provider==='build'?settings.buildModel:settings.apiModel,
       verifyPrompt:settings.verifyPrompt,commentsPrompt:settings.commentsPrompt};
   }
   function setCollapsed(value,persist=false) {
@@ -338,11 +345,13 @@
       for(const field of ['explainPrompt','verifyPrompt','commentsPrompt','interfaceLanguage']){delete previousOptions[field];delete nextOptions[field];}
       const allChanged=JSON.stringify(previousOptions)!==JSON.stringify(nextOptions);
       const presentationOrPromptsOnlyChanged=!allChanged&&JSON.stringify(settings)!==JSON.stringify(nextSettings);
-      const previous=JSON.stringify([settings.apiModel,settings.apiReasoningEffort,settings.language,settings.webSearch,settings.xSearch,settings.apiVerification,settings.explanationMode]);
+      const identity=value=>JSON.stringify([value.provider,value.apiModel,value.apiReasoningEffort,value.buildModel,value.buildReasoningEffort,value.buildTransport,value.language,value.webSearch,value.xSearch,value.apiVerification,value.explanationMode]);
+      const previous=identity(settings);
       const wasReady=providerReady;
       settings=nextSettings;
       configureHistory(message.historyEnabled,message.historyEpoch);
       providerReady=Boolean(message.ready);used=message.used || 0;
+      buildErrorCode=typeof message.buildStatus?.errorCode==='string'?message.buildStatus.errorCode:'';
       syncUILanguage();
       for(const entry of entries.values())if(entry.connectionStatus){
         if(entry.status==='done'&&entry.connectionStatus.key)status(entry,entry.connectionStatus.key,entry.connectionStatus.vars);
@@ -351,7 +360,7 @@
       if(!Core.LANGUAGES.some(item=>item.value===settings.language)&&!Array.from(railLanguage.children).some(item=>item.value===settings.language)){const option=node('option','',settings.language);option.value=settings.language;railLanguage.append(option);}
       railLanguage.value=settings.language;railLanguage.disabled=false;
       refreshHeaderLanguage();
-      const changed=previous!==JSON.stringify([settings.apiModel,settings.apiReasoningEffort,settings.language,settings.webSearch,settings.xSearch,settings.apiVerification,settings.explanationMode]);
+      const changed=previous!==identity(settings);
       if(!presentationOrPromptsOnlyChanged){queue.clear();limited=false;pauseReason='';}
       if(allChanged || !settings.enabled || (wasReady&&!providerReady)) {
         post({type:'CANCEL_ALL'});requests.clear();
@@ -472,13 +481,13 @@
       const partialVerification=partialResult&&(['incomplete','failed'].includes(partialResult.verificationStatus)||partialResult.verificationFailure);
       setVerificationFailure(entry,partialResult?.verificationFailure,Boolean(partialVerification));
       entry.status='error';entry.errorCode=message.code;status(entry,partialVerification?'status.incomplete':errorKey(message.code));note(entry,'');entry.ui.retry.hidden=false;
-      if(message.code==='API_LANGUAGE_MISMATCH'){entry.cached=false;entry.result=null;renderAnswer(entry,'',true);renderSources(entry,[]);}
+      if(['API_LANGUAGE_MISMATCH','BUILD_LANGUAGE_MISMATCH'].includes(message.code)){entry.cached=false;entry.result=null;renderAnswer(entry,'',true);renderSources(entry,[]);}
       if(partialResult){entry.verificationStart=partialResult.verificationStart;renderAnswer(entry,partialResult.text,true);renderSources(entry,partialResult.sources||[]);note(entry,retained.invalid?'':partialResultNote(partialResult));}
       if(!partialVerification) {
         entry.ui.diagnostics.hidden=!message.diagnostics&&!message.error;
         entry.ui.diagnosticText.textContent=JSON.stringify({code:message.code,error:message.error,...message.diagnostics,...(message.usage?{usage:message.usage}:{})},null,2).slice(0,4000);
       }
-      if(['NEEDS_KEY','KEY_MIGRATION_REQUIRED'].includes(message.code)){
+      if(['NEEDS_KEY','KEY_MIGRATION_REQUIRED','BUILD_NATIVE_MISSING','BUILD_PERMISSION_REQUIRED','BUILD_LOGIN_REQUIRED','BUILD_VERSION_UNSUPPORTED','BUILD_CONFIG_UNSUPPORTED','BUILD_TOOL_POLICY','BUILD_DISCONNECTED','BUILD_UNAVAILABLE'].includes(message.code)){
         providerReady=false;queue.clear();
         for(const pending of entries.values())refreshCard(pending);
       }
@@ -778,7 +787,7 @@
     entry.ui.retry.textContent=t('common.retry');entry.ui.generateComments.textContent=t('common.generateComments');
     entry.ui.diagnosticLabel.textContent=t('common.diagnostics');
     if(entry.status==='new') {
-      status(entry,!connected&&!workerSleeping?(needsPageRefresh?'status.refreshRequired':'status.connectionLost'):limited?(pauseReason||'status.disabled'):!providerReady?'status.needsKey':entry.pending?'status.queued':'status.waiting');
+      status(entry,!connected&&!workerSleeping?(needsPageRefresh?'status.refreshRequired':'status.connectionLost'):limited?(pauseReason||'status.disabled'):!providerReady?needsProvider():entry.pending?'status.queued':'status.waiting');
       note(entry,limited?(pauseReason==='status.rateLimited'?'note.rateLimited':'note.settingsRequired'):'');
       entry.ui.retry.hidden=!limited;
     }

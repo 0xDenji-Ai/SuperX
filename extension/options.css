@@ -55,6 +55,16 @@ h2 { margin: 0 0 20px; font-size: 20px; line-height: 1.35; font-weight: 700; scr
 .section-description { margin: 7px 0 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
 .section-heading-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .field { min-width: 0; margin-top: 22px; }
+.provider-field { margin-top: 0; margin-bottom: 16px; }
+.onboarding { margin-top: 22px; padding: 16px; border: 1px solid var(--line); border-radius: 10px; background: var(--hover); }
+.onboarding h3 { margin: 0; font-size: 15px; line-height: 1.5; }
+.onboarding ol { margin: 10px 0 0; padding-inline-start: 22px; font-size: 13px; line-height: 1.6; }
+.onboarding li + li { margin-top: 5px; }
+.onboarding-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin-top: 14px; font-size: 13px; }
+.onboarding-actions .secondary-button { width: auto; }
+.connection-check, .shared-search { margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--line); }
+.connection-check .key-state { margin-top: 12px; }
+#build-status[data-state="unknown"] { color: var(--muted); }
 .field > label, .prompt-label > label { display: block; margin-bottom: 8px; color: var(--foreground); font-size: 14px; line-height: 1.4; font-weight: 500; }
 input[type="text"], input[type="password"], input[type="number"], select, textarea { display: block; width: 100%; min-width: 0; max-width: 100%; min-height: 48px; padding: 12px; border: 1px solid var(--field-line); border-radius: 4px; background: var(--background); color: var(--foreground); font-size: 15px; }
 input::placeholder { color: var(--muted); opacity: 1; }
