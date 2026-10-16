@@ -189,6 +189,11 @@ test('local launch is a draft, uses a random connection code, and never saves or
   const other=await bg.message({type:'GET_BUILD_LAUNCH',platform:'macos'});assert.notEqual(other.secret,launch.secret);
   assert.equal((await bg.message({type:'GET_BUILD_LAUNCH',platform:'windows'},{id:bg.chrome.runtime.id,url:bg.chrome.runtime.getURL('history.html')})).ok,false);
 });
+test('an API stream error without reader output retains safe upstream diagnostics through the worker',async()=>{
+  let calls=0;
+  const bg=createBackground({apiRun:call=>provider.run(call.post,call.settings,call.key,{...call,fetchImpl:async()=>{calls++;return new Response('data: '+JSON.stringify({type:'response.failed',response:{error:{code:'service_unavailable',status:503,message:'PRIVATE_UPSTREAM_CANARY',account_id:'PRIVATE_ACCOUNT'},usage:{total_tokens:4}}})+'\n\n',{status:200,headers:{'Content-Type':'text/event-stream'}});}})});await bg.ready();const port=bg.connect();await until(()=>port.messages.some(value=>value.type==='CONFIG'));
+  const result=await analyze(bg,port,'provider-stream-failure');assert.equal(result.code,'API_ERROR');assert.deepEqual(result.verificationFailure,{stage:'verify',code:'SERVER',errorCode:'API_ERROR',httpStatus:503,providerCode:'service_unavailable'});assert.equal(result.partialResult,undefined);assert.equal(result.usage.total_tokens,4);assert.doesNotMatch(JSON.stringify(result),/PRIVATE_UPSTREAM_CANARY|PRIVATE_ACCOUNT/);assert.equal(calls,1);assert.equal(bg.buildCalls.length,0);
+});
 test('local connection is encrypted independently, restores after worker restart, and never enters public config',async()=>{
   const bg=createBackground();await bg.ready();assert.equal((await bg.configureBuild()).ok,true);
   assert.equal(JSON.stringify(bg.local.data).includes(BUILD_SECRET),false);assert.equal(JSON.stringify(await bg.message({type:'GET_CONFIG'})).includes(BUILD_SECRET),false);

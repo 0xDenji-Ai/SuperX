@@ -43,6 +43,12 @@
     // catalog. Never translate its minimum setting into API 'none'.
     return ['minimal','low','medium','high','xhigh'].includes(value)?value:'low';
   }
+  const API_FAILURE_PROVIDER_CODES=new Set(['invalid_request_error','invalid_request','bad_request','invalid_api_key','authentication_error','unauthenticated','permission_error','permission_denied','forbidden','insufficient_quota','insufficient_credits','spending_limit','usage_limit_exceeded','rate_limit_exceeded','rate_limit_error','too_many_requests','resource_exhausted','model_not_found','model_not_supported','unsupported_model','unsupported_parameter','invalid_parameter','invalid_argument','context_length_exceeded','server_error','internal_server_error','internal_error','service_unavailable','overloaded_error','timeout','request_timeout','gateway_timeout','tool_error','tool_unavailable','search_error','search_unavailable','content_filter']);
+  function apiFailureProviderCode(value){
+    if(typeof value!=='string'||value.length>64)return undefined;
+    const code=value.toLowerCase().replace(/-/g,'_');
+    return API_FAILURE_PROVIDER_CODES.has(code)?code:undefined;
+  }
 
   const MAX_PROMPT_LENGTH = 12000;
   const DEFAULT_PROMPTS = Object.freeze({
@@ -521,5 +527,5 @@
     clear() { this.items.clear(); }
   }
 
-  return Object.freeze({ LANGUAGES, API_MODELS, modelProfile, reasoningEffort, buildReasoningEffort, DEFAULT_SETTINGS, DEFAULT_PROMPTS, MAX_PROMPT_LENGTH, normalizePrompt, readerOutput, explanationMode, normalizeSettings, resolvePostLanguage, canonicalPostUrl, extractPost, postFingerprint, nativePostIdentity, apiPostIdentity, visibilityEligibility, BoundedPostQueue });
+  return Object.freeze({ LANGUAGES, API_MODELS, modelProfile, reasoningEffort, buildReasoningEffort, apiFailureProviderCode, DEFAULT_SETTINGS, DEFAULT_PROMPTS, MAX_PROMPT_LENGTH, normalizePrompt, readerOutput, explanationMode, normalizeSettings, resolvePostLanguage, canonicalPostUrl, extractPost, postFingerprint, nativePostIdentity, apiPostIdentity, visibilityEligibility, BoundedPostQueue });
 });

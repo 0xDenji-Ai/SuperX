@@ -1,6 +1,6 @@
 # Connect SuperX
 
-The unreleased **0.9.1** candidate offers two independent modes. **API Key** is the default. **Grok CLI / ACP** connects directly to the official Grok service on your computer. Neither mode automatically falls back to the other or resubmits a paid task. Published Stable remains **0.7.26**.
+The unreleased **0.9.2** candidate offers two independent modes. **API Key** is the default. **Grok CLI / ACP** connects directly to the official Grok service on your computer. Neither mode automatically falls back to the other or resubmits a paid task. Published Stable remains **0.7.26**.
 
 ## API Key
 

@@ -968,3 +968,61 @@ test('comment generation and invalid draft errors retain actual terminal usage a
   const missing=await api.generateComments(post,settings,'key',{fetchImpl:async()=>responseFor([completed('["First.","Second.","Third."]')])});
   assert.deepEqual(missing.usage,{});assert.equal(missing.usageComplete,false);assert.equal(missing.model,settings.apiModel);
 });
+
+test('SSE errors preserve bounded HTTP and allowlisted provider classifications across supported wrappers',async()=>{
+  const cases=[
+    [{type:'error',error:{code:'invalid_api_key',data:{status:'401'},message:'PRIVATE_SERVER_CANARY'}},'ACCESS',401,'invalid_api_key'],
+    [{type:'response.failed',response:{status:'failed',error:{type:'permission_error',status_code:403,message:'PRIVATE_SERVER_CANARY'}}},'ACCESS',403,'permission_error'],
+    [{type:'error',httpStatus:503,data:{error:{code:'service-unavailable',message:'PRIVATE_SERVER_CANARY'}}},'SERVER',503,'service_unavailable'],
+    [{type:'error',data:{error:{code:'request_timeout',data:{http_status:'504'}}}},'CONNECTION',504,'request_timeout'],
+    [{type:'error',error:{code:'rate_limit_exceeded',data:{status:429}}},'RATE_LIMIT',429,'rate_limit_exceeded']
+  ];
+  for(const [event,category,httpStatus,providerCode]of cases){let calls=0;await assert.rejects(api.run({...post,language:'en'},{...settings,language:'auto'},'synthetic-key',{fetchImpl:async()=>{calls++;return responseFor([event]);}}),error=>{
+    assert.equal(error.code,category==='RATE_LIMIT'?'RATE_LIMIT':'API_ERROR');assert.deepEqual(error.verificationFailure,{stage:'verify',code:category,errorCode:error.code,httpStatus,providerCode});assert.doesNotMatch(JSON.stringify({...api.publicError(error),details:error.failureDetails}),/PRIVATE_SERVER_CANARY/);return true;
+  });assert.equal(calls,1);}
+});
+
+test('SSE error prose, arbitrary codes and deep or malformed status fields cannot become public diagnostics',async()=>{
+  const event={type:'error',error:{code:'PRIVATE_CODE_CANARY',type:'arbitrary_type',message:'invalid_api_key PRIVATE_MESSAGE_CANARY',status:'401 PRIVATE_STATUS_CANARY',data:{data:{data:{data:{data:{code:'permission_denied',status:403}}}}}},url:'https://private.example/?key=PRIVATE_URL_CANARY'};
+  await assert.rejects(api.run(post,settings,'synthetic-key',{fetchImpl:async()=>responseFor([event])}),error=>{
+    assert.deepEqual(error.verificationFailure,{stage:'verify',code:'UNKNOWN',errorCode:'API_ERROR'});assert.doesNotMatch(JSON.stringify({...api.publicError(error),details:error.failureDetails}),/PRIVATE_|private\.example|invalid_api_key|permission_denied/);return true;
+  });
+});
+
+test('account-prefixed spending errors publish only a fixed code and do not equate HTTP 402 with an empty balance',async()=>{
+  const raw='personal-acct_PRIVATE_ACCOUNT_CANARY:spending-limit';
+  for(const streamed of [false,true]){let calls=0;await assert.rejects(api.run(post,settings,'synthetic-key',{fetchImpl:async()=>{calls++;return streamed?responseFor([{type:'error',error:{code:raw,data:{httpStatus:402},message:'PRIVATE_MESSAGE_CANARY'}}]):new Response(JSON.stringify({error:{code:raw,message:'PRIVATE_MESSAGE_CANARY',status:503}}),{status:402});}}),error=>{
+    assert.deepEqual(error.verificationFailure,{stage:'verify',code:'ACCESS',errorCode:'API_ERROR',httpStatus:402,providerCode:'spending_limit'});assert.doesNotMatch(JSON.stringify({...api.publicError(error),details:error.failureDetails}),/PRIVATE_|personal-acct|余额不足/);if(!streamed)assert.match(api.publicError(error).error,/余额、预算或用量限制/);return true;
+  });assert.equal(calls,1);}
+});
+
+test('HTTP diagnostics retain actual transport status ahead of error-body claims and parse only allowlisted codes',async()=>{
+  let calls=0;await assert.rejects(api.run(post,settings,'synthetic-key',{fetchImpl:async()=>{calls++;return new Response(JSON.stringify({error:{code:'INVALID_API_KEY',httpStatus:503,message:'PRIVATE_BODY_CANARY',authorization:'PRIVATE_CREDENTIAL_CANARY'}}),{status:401});}}),error=>{
+    assert.deepEqual(error.verificationFailure,{stage:'verify',code:'ACCESS',errorCode:'API_ERROR',httpStatus:401,providerCode:'invalid_api_key'});assert.doesNotMatch(JSON.stringify(error.failureDetails),/PRIVATE_/);return true;
+  });assert.equal(calls,1);
+});
+
+test('oversized HTTP error bodies are canceled without exposing body content or retrying the request',async()=>{
+  let calls=0,canceled=false;
+  const body=new ReadableStream({start(controller){controller.enqueue(encoder.encode(JSON.stringify({error:{code:'invalid_api_key',message:'PRIVATE_BODY_CANARY'+ 'x'.repeat(17000)}})));},cancel(){canceled=true;}});
+  await assert.rejects(api.run(post,settings,'synthetic-key',{fetchImpl:async()=>{calls++;return new Response(body,{status:400});}}),error=>{assert.deepEqual(error.verificationFailure,{stage:'verify',code:'ACCESS',errorCode:'API_ERROR',httpStatus:400});assert.doesNotMatch(JSON.stringify({...api.publicError(error),details:error.failureDetails}),/PRIVATE_|invalid_api_key/);return true;});
+  assert.equal(calls,1);assert.equal(canceled,true);
+});
+
+test('an HTTP diagnostic body that never ends cannot hold the failure open or issue another request',async()=>{
+  let calls=0,canceled=false;
+  const body=new ReadableStream({cancel(){canceled=true;}}),request=api.run(post,settings,'synthetic-key',{fetchImpl:async()=>{calls++;return new Response(body,{status:503});}});
+  let deadline;try{await assert.rejects(Promise.race([request,new Promise((resolve,reject)=>{deadline=setTimeout(()=>reject(new Error('Diagnostic read did not finish')),5000);})]),error=>{assert.equal(error.code,'API_ERROR');assert.deepEqual(error.verificationFailure,{stage:'verify',code:'SERVER',errorCode:'API_ERROR',httpStatus:503});return true;});}finally{clearTimeout(deadline);}
+  assert.equal(calls,1);assert.equal(canceled,true);
+});
+
+test('cancellation while reading an HTTP diagnostic body is prompt, does not retain output and cancels the reader',async()=>{
+  let calls=0,canceled=false;const controller=new AbortController();
+  const body=new ReadableStream({cancel(){canceled=true;}}),request=api.run(post,settings,'synthetic-key',{signal:controller.signal,fetchImpl:async()=>{calls++;return new Response(body,{status:400});}});
+  await new Promise(resolve=>setImmediate(resolve));controller.abort();await assert.rejects(request,error=>{assert.equal(error.code,'CANCELED');assert.equal(error.partialText,undefined);return true;});assert.equal(calls,1);assert.equal(canceled,true);
+});
+
+test('verification-failure provider metadata accepts only the shared fixed enum and no private fields',()=>{
+  assert.deepEqual(api.sanitizedVerificationFailure({stage:'verify',code:'SERVER',errorCode:'API_ERROR',providerCode:'SERVICE-UNAVAILABLE',httpStatus:503,message:'PRIVATE_CANARY',requestId:'PRIVATE_ID'}),{stage:'verify',code:'SERVER',errorCode:'API_ERROR',httpStatus:503,providerCode:'service_unavailable'});
+  assert.deepEqual(api.sanitizedVerificationFailure({stage:'verify',code:'UNKNOWN',providerCode:'PRIVATE_PROVIDER_CODE',httpStatus:'403'}),{stage:'verify',code:'UNKNOWN'});
+});

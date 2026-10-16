@@ -2,6 +2,10 @@
 const test=require('node:test');
 const assert=require('node:assert/strict');
 const Core=require('../extension/feed-core.js');
+test('provider diagnostics accept only fixed public codes and never arbitrary upstream strings',()=>{
+  assert.equal(Core.apiFailureProviderCode('INVALID-API-KEY'),'invalid_api_key');assert.equal(Core.apiFailureProviderCode('spending_limit'),'spending_limit');
+  for(const value of ['PRIVATE_SECRET_CANARY','account-private:spending-limit','xai-'+'a'.repeat(40),'server_error\nPRIVATE','SERVER_ERROR '.repeat(10),{},null])assert.equal(Core.apiFailureProviderCode(value),undefined);
+});
 
 test('API remains the default; retired page automation is not Grok Build',()=>{
   assert.equal(Core.DEFAULT_SETTINGS.provider,'api');

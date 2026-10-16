@@ -2747,6 +2747,34 @@ test('a newly visible post wakes an idle worker and starts only its own first an
   assert.equal(card.testShadow.querySelector('.answer').textContent,'A completed explanation.');assertTokenCount(card,25);
 });
 
+test('API failures without partial text keep safe causes and show actionable localized status',()=>{
+  const cases=[
+    [401,'invalid_api_key','ACCESS','API_ERROR','error.apiKeyRejected'],
+    [402,'spending_limit','ACCESS','API_ERROR','error.apiUsage'],
+    [403,'permission_denied','ACCESS','API_ERROR','error.apiAccess'],
+    [400,'unsupported_parameter','ACCESS','API_ERROR','error.apiRequest'],
+    [503,'service_unavailable','SERVER','API_ERROR','error.apiServer'],
+    [undefined,'tool_error','SERVER','API_ERROR','error.apiServer'],
+    [undefined,undefined,'CONNECTION','API_STREAM_INTERRUPTED','error.apiConnection'],
+    [undefined,undefined,'OUTPUT_LIMIT','API_INCOMPLETE','error.apiOutputLimit'],
+    [undefined,undefined,'TIMEOUT','TIMEOUT','error.apiTimeout']
+  ];
+  for(const [httpStatus,providerCode,code,errorCode,key]of cases){
+    const page=fixture({postCount:1});page.configure();const request=page.port.sent.find(value=>value.type==='ANALYZE'),card=page.cards()[0];
+    page.port.onMessage.emit({type:'ERROR',requestId:request.requestId,code:errorCode,error:'Safe generic error',verificationFailure:{stage:'verify',code,httpStatus,providerCode,errorCode,rawMessage:'PRIVATE_CANARY',key:'PRIVATE_API_KEY'},usage:{total_tokens:13}});page.flush();
+    assert.equal(card.testShadow.querySelector('.status').textContent,ui.t(key,'zh-CN'));
+    const details=card.testShadow.querySelector('.diagnostics');assert.equal(details.hidden,false);assert.match(details.textContent,new RegExp(code));
+    if(httpStatus)assert.match(details.textContent,new RegExp(String(httpStatus)));if(providerCode)assert.match(details.textContent,new RegExp(providerCode));
+    assert.doesNotMatch(details.textContent,/PRIVATE_CANARY|PRIVATE_API_KEY/);assert.equal(card.testShadow.querySelector('.answer').textContent,'');assert.equal(card.testShadow.querySelector('.retry').hidden,false);
+    page.tick(10000);assert.equal(page.port.sent.filter(value=>value.type==='ANALYZE').length,1,'Failure diagnostics never trigger another paid request');
+  }
+});
+test('unknown upstream codes are not copied to diagnostics and generic API errors identify the provider',()=>{
+  const page=fixture({postCount:1});page.configure();const request=page.port.sent.find(value=>value.type==='ANALYZE'),card=page.cards()[0];
+  page.port.onMessage.emit({type:'ERROR',requestId:request.requestId,code:'API_ERROR',error:'Safe generic error',verificationFailure:{stage:'verify',code:'UNKNOWN',providerCode:'PRIVATE_CREDENTIAL_CANARY'}});page.flush();
+  assert.equal(card.testShadow.querySelector('.status').textContent,ui.t('error.apiFailed','zh-CN'));assert.doesNotMatch(card.testShadow.querySelector('.diagnostics').textContent,/PRIVATE_CREDENTIAL_CANARY/);
+});
+
 test('an active port disconnect marks only interrupted work and reconnect never automatically replays it',()=>{
   const page=fixture({postCount:2});page.configure();
   const requests=page.port.sent.filter(message=>message.type==='ANALYZE');assert.equal(requests.length,2);

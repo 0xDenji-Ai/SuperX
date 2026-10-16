@@ -2,6 +2,14 @@
 
 SuperX release history. The extension's `manifest.json` is the authoritative installed version. Test counts below describe those releases' recorded checks, not live provider or browser-store certification.
 
+## 0.9.2 — Settings layout and API failure details (unreleased candidate)
+
+- Fix a misplaced closing tag that displayed local Grok model, reasoning and connection controls outside their selected provider panel. Add strict structural checks and verify real browser form containment, validation and provider switching.
+- Show actionable API error categories instead of the same generic “Analysis failed” for rejected Keys, access/usage limits, request support, service errors, interrupted streams and incomplete output. Keep sanitized HTTP status and allowlisted provider error codes even when no partial answer exists.
+- Bound error-body inspection and keep raw upstream messages, account identifiers and credentials out of diagnostics. A 402 can indicate balance, budget or usage limits; it does not by itself prove an empty account.
+- Do not automatically retry paid requests or switch providers. Earlier failures without detailed metadata cannot be diagnosed retrospectively; new diagnostics provide evidence for the next failure.
+- This remains a local candidate. Published Stable is still 0.7.26.
+
 ## 0.9.1 — Direct official Grok connection (unreleased candidate)
 
 - Keep API Key as the default and add a direct official Grok CLI / ACP connection. Windows and macOS users install and sign in through official Grok, then copy a generated launch command; no additional SuperX program, Node runtime or browser host registration is required.

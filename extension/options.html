@@ -90,8 +90,10 @@
               </div>
             </div>
             <p class="help" data-i18n="options.usageRules">Usage depends on your account and provider rules. View usage in Grok Dashboard.</p>
-            <a class="help" href="https://grok.com/dashboard/usage" target="_blank" rel="noopener noreferrer" data-i18n="options.dashboardUsage">View Grok Dashboard usage</a>
-            <button id="clear-key" class="text-button" type="button" data-i18n="common.clearKey">Clear saved Key</button>
+            <div class="credential-actions">
+              <a class="help" href="https://grok.com/dashboard/usage" target="_blank" rel="noopener noreferrer" data-i18n="options.dashboardUsage">View Grok Dashboard usage</a>
+              <button id="clear-key" class="text-button" type="button" data-i18n="common.clearKey">Clear saved Key</button>
+            </div>
           </div>
           <div id="build-fields" hidden>
             <div class="onboarding" aria-labelledby="build-setup-heading">
@@ -119,7 +121,6 @@
               <div><label for="build-secret" data-i18n="build.code">Local connection code</label><input id="build-secret" type="password" maxlength="256" autocomplete="off" spellcheck="false" dir="ltr" aria-describedby="build-secret-help"><p id="build-secret-help" class="help" data-i18n="build.codeHelp">Generated automatically with the command, or paste the code of an existing local service. This is not your Grok account password.</p></div>
             </div></details>
             <div class="connection-actions"><button id="clear-build-connection" class="text-button" type="button" data-i18n="build.clear">Forget local connection</button></div>
-            </div>
             <div class="field">
               <label for="build-model" data-i18n="options.model">Model</label>
               <select id="build-model" required aria-describedby="build-model-help build-fast-help"></select>

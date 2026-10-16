@@ -295,6 +295,7 @@
     if(INCOMPLETE_REASONS.has(value.reason))result.reason=value.reason;
     if(SAFE_API_ERROR_CODES.has(value.errorCode))result.errorCode=value.errorCode;
     if(Number.isInteger(value.httpStatus)&&value.httpStatus>=100&&value.httpStatus<=599)result.httpStatus=value.httpStatus;
+    const providerCode=Core.apiFailureProviderCode(value.providerCode);if(providerCode)result.providerCode=providerCode;
     return result;
   }
   function failed(error,code,details={}) {
@@ -316,14 +317,64 @@
     if(status>=500&&status<600)return 'SERVER';
     return 'UNKNOWN';
   }
+  function failureDiagnostics(value,httpStatus) {
+    const nodes=[],seen=new Set();
+    function visit(item,depth) {
+      if(!item||typeof item!=='object'||Array.isArray(item)||depth>4||nodes.length>=24||seen.has(item))return;
+      seen.add(item);nodes.push(item);
+      for(const key of ['error','response','data'])visit(item[key],depth+1);
+    }
+    visit(value,0);
+    const status=value=>Number.isInteger(value)&&value>=100&&value<=599?value:typeof value==='string'&&/^[1-5][0-9]{2}$/.test(value)?Number(value):undefined;
+    let providerCode,foundStatus=status(httpStatus);
+    for(const node of nodes) {
+      if(foundStatus===undefined)for(const field of ['httpStatus','http_status','status_code','status']) {const found=status(node[field]);if(found!==undefined){foundStatus=found;break;}}
+      if(!providerCode)for(const field of ['code','error_code','type']) {
+        const raw=node[field];
+        // Some spending-limit codes contain a private account prefix. Publish
+        // only this fixed classification, never that prefix or the raw code.
+        const candidate=typeof raw==='string'&&/:spending[-_]limit$/i.test(raw)?'spending_limit':raw;
+        providerCode=Core.apiFailureProviderCode(candidate);if(providerCode)break;
+      }
+    }
+    return {...(foundStatus!==undefined?{httpStatus:foundStatus}:{}),...(providerCode?{providerCode}:{})};
+  }
+  async function httpFailureDiagnostics(response,signal) {
+    // Error bodies are untrusted, bounded input. Extract fixed classifications
+    // without exposing prose, account IDs, request URLs, or the response body.
+    const body=response.body;if(!body||typeof body.getReader!=='function')return failureDiagnostics(null,response.status);
+    let reader,timer;const timeout=Symbol('error-body-timeout');
+    const cancel=()=>{try{void reader?.cancel().catch(()=>{});}catch{}};
+    try {
+      reader=body.getReader();signal?.addEventListener('abort',cancel,{once:true});
+      const reading=(async()=>{
+        const decoder=new TextDecoder();let bytes=0,text='';
+        while(true) {
+          assertNotAborted(signal);const {value,done}=await reader.read();assertNotAborted(signal);
+          if(done)return text+decoder.decode();
+          bytes+=value.byteLength;if(bytes>16384)return timeout;
+          text+=decoder.decode(value,{stream:true});
+        }
+      })();
+      const text=await Promise.race([reading,new Promise(resolve=>{timer=setTimeout(()=>resolve(timeout),1000);})]);
+      if(text===timeout)return failureDiagnostics(null,response.status);
+      let data;try{data=JSON.parse(text);}catch{return failureDiagnostics(null,response.status);}
+      return failureDiagnostics(data,response.status);
+    } catch {return failureDiagnostics(null,response.status);}
+    finally{clearTimeout(timer);signal?.removeEventListener('abort',cancel);cancel();try{reader?.releaseLock();}catch{}}
+  }
+  function providerFailure(diagnostics) {
+    const {httpStatus:status,providerCode:code}=diagnostics;
+    if(status===429||RATE_LIMIT_CODES.has(code)||code==='usage_limit_exceeded')return 'RATE_LIMIT';
+    if(['authentication_error','invalid_api_key','unauthenticated','permission_error','permission_denied','forbidden','insufficient_quota','insufficient_credits','spending_limit','model_not_found','model_not_supported','unsupported_model','unsupported_parameter','invalid_parameter','invalid_argument','invalid_request_error','invalid_request','bad_request','context_length_exceeded','content_filter'].includes(code))return 'ACCESS';
+    if(['timeout','request_timeout','gateway_timeout'].includes(code))return 'CONNECTION';
+    if(status!==undefined&&status>=400)return httpFailure(status);
+    if(['server_error','internal_server_error','internal_error','service_unavailable','overloaded_error','tool_error','tool_unavailable','search_error','search_unavailable'].includes(code))return 'SERVER';
+    return 'UNKNOWN';
+  }
   function streamError(event) {
-    const error=event.response?.error||event.error||event;
-    const knownCode=typeof error.code==='string'?error.code.toLowerCase():typeof error.type==='string'?error.type.toLowerCase():'';
-    const status=Number.isInteger(error.status)?error.status:Number.isInteger(error.status_code)?error.status_code:undefined;
-    const rateLimited=RATE_LIMIT_CODES.has(knownCode)||status===429;
-    const access=['authentication_error','permission_error','invalid_api_key','permission_denied','insufficient_quota'].includes(knownCode);
-    const code=rateLimited?'RATE_LIMIT':access?'ACCESS':status?httpFailure(status):'SERVER';
-    return failed(apiError(rateLimited?'xAI 请求限速或额度耗尽，请稍后再试。':'xAI 生成失败，请检查模型、额度或搜索工具支持。',rateLimited?'RATE_LIMIT':'API_ERROR'),code,status?{httpStatus:status}:{});
+    const diagnostics=failureDiagnostics(event),code=providerFailure(diagnostics),rateLimited=code==='RATE_LIMIT';
+    return failed(apiError(rateLimited?'xAI 请求限速或额度耗尽，请稍后再试。':'xAI 生成失败，请检查模型、额度或搜索工具支持。',rateLimited?'RATE_LIMIT':'API_ERROR'),code,diagnostics);
   }
   // Server-sent events can split at any byte, including in a UTF-8 character.
   async function readEvents(body,onEvent,{signal}={}) {
@@ -367,8 +418,10 @@
       });
       assertNotAborted(signal);
       if(!response.ok) {
-        const hints={401:'API Key 无效或已失效。',403:'此 Key 没有访问该模型的权限。',402:'xAI API 余额不足。',429:'xAI 请求限速或额度耗尽，请稍后再试。'};
-        throw failed(apiError(hints[response.status]||'xAI API 请求失败，请检查模型和网络。',response.status===429?'RATE_LIMIT':'API_ERROR'),httpFailure(response.status),{httpStatus:response.status});
+        const diagnostics=await httpFailureDiagnostics(response,signal);assertNotAborted(signal);
+        const category=providerFailure(diagnostics),rateLimited=category==='RATE_LIMIT';
+        const hints={401:'API Key 无效或已失效。',403:'此 Key 没有访问该模型的权限。',402:'xAI API 的余额、预算或用量限制阻止了本次请求。',429:'xAI 请求限速或额度耗尽，请稍后再试。'};
+        throw failed(apiError(hints[response.status]||'xAI API 请求失败，请检查模型和网络。',rateLimited?'RATE_LIMIT':'API_ERROR'),category,diagnostics);
       }
       if(!response.body)throw failed(apiError('API 未返回可读取的响应。','API_STREAM_INTERRUPTED'),'CONNECTION');
       await readEvents(response.body,event=>{

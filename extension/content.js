@@ -262,6 +262,8 @@
       if(['max_output_tokens','content_filter'].includes(value.reason))failure.reason=value.reason;
       if(['API_INCOMPLETE','API_STREAM_INTERRUPTED','API_STREAM_ERROR','API_LANGUAGE_MISMATCH','RATE_LIMIT','API_ERROR','CANCELED','TIMEOUT'].includes(value.errorCode))failure.errorCode=value.errorCode;
       if(Number.isSafeInteger(value.httpStatus)&&value.httpStatus>=100&&value.httpStatus<=599)failure.httpStatus=value.httpStatus;
+      const providerCode=Core.apiFailureProviderCode(value.providerCode);
+      if(providerCode)failure.providerCode=providerCode;
     }
     entry.verificationFailure=incomplete?failure:null;
     refreshVerificationFailure(entry);
@@ -289,8 +291,22 @@
     entry.ui.analysisDivider.hidden=!entry.answerSplit||!(verifying||entry.verificationRendered?.trim());
     entry.ui.box.setAttribute('aria-busy',String(active));
   }
-  function errorKey(code) {
+  function errorKey(code,failure) {
     if(code?.startsWith('BUILD_'))return ({BUILD_LOGIN_REQUIRED:'build.login',BUILD_CANCEL_UNCONFIRMED:'build.cancelUnconfirmed',BUILD_CONNECTION_REQUIRED:'build.codeRequired',BUILD_AUTH_FAILED:'build.codeInvalid',BUILD_UNAVAILABLE:'build.missing',BUILD_DISCONNECTED:'build.missing',BUILD_NATIVE_MISSING:'build.missing',BUILD_VERSION_UNSUPPORTED:'build.unsupported',BUILD_MODEL_UNSUPPORTED:'build.unsupported',BUILD_EFFORT_UNSUPPORTED:'build.unsupported'})[code]||'build.unavailable';
+    const http=failure?.httpStatus,provider=Core.apiFailureProviderCode(failure?.providerCode);
+    if(code==='API_ERROR'){
+      if(http===401||['invalid_api_key','authentication_error','unauthenticated'].includes(provider))return 'error.apiKeyRejected';
+      if(http===402||['insufficient_quota','insufficient_credits','spending_limit','usage_limit_exceeded'].includes(provider))return 'error.apiUsage';
+      if(http===403||['permission_error','permission_denied','forbidden'].includes(provider))return 'error.apiAccess';
+      if(http===429||failure?.code==='RATE_LIMIT')return 'status.rateLimited';
+      if(failure?.code==='CONNECTION')return 'error.apiConnection';
+      if(http>=500||failure?.code==='SERVER')return 'error.apiServer';
+      if(http>=400&&http<500||failure?.code==='ACCESS')return 'error.apiRequest';
+      return 'error.apiFailed';
+    }
+    if(['API_STREAM_INTERRUPTED','API_STREAM_ERROR'].includes(code))return 'error.apiConnection';
+    if(code==='TIMEOUT')return 'error.apiTimeout';
+    if(code==='API_INCOMPLETE')return failure?.code==='OUTPUT_LIMIT'?'error.apiOutputLimit':'error.apiIncomplete';
     return ({RATE_LIMIT:'status.rateLimited',NEEDS_KEY:'status.needsKey',KEY_MIGRATION_REQUIRED:'status.needsKey',
       CANCELLED:'status.cancelled',RAIL_COLLAPSED:'status.disabled',URL_SEARCH_REQUIRED:'error.urlSearchRequired',API_LANGUAGE_MISMATCH:'error.outputLanguageMismatch'})[code]||'status.failed';
   }
@@ -479,11 +495,12 @@
       const partialResult=retained?.result;
       captureUsage(entry,'analysis',{...partialResult,...message},request,false);
       const partialVerification=partialResult&&(['incomplete','failed'].includes(partialResult.verificationStatus)||partialResult.verificationFailure);
-      setVerificationFailure(entry,partialResult?.verificationFailure,Boolean(partialVerification));
-      entry.status='error';entry.errorCode=message.code;status(entry,partialVerification?'status.incomplete':errorKey(message.code));note(entry,'');entry.ui.retry.hidden=false;
+      const failure=message.verificationFailure||partialResult?.verificationFailure;
+      setVerificationFailure(entry,failure,Boolean(failure||partialVerification));
+      entry.status='error';entry.errorCode=message.code;status(entry,partialVerification?'status.incomplete':errorKey(message.code,entry.verificationFailure));note(entry,'');entry.ui.retry.hidden=false;
       if(['API_LANGUAGE_MISMATCH','BUILD_LANGUAGE_MISMATCH'].includes(message.code)){entry.cached=false;entry.result=null;renderAnswer(entry,'',true);renderSources(entry,[]);}
       if(partialResult){entry.verificationStart=partialResult.verificationStart;renderAnswer(entry,partialResult.text,true);renderSources(entry,partialResult.sources||[]);note(entry,retained.invalid?'':partialResultNote(partialResult));}
-      if(!partialVerification) {
+      if(!entry.verificationFailure) {
         entry.ui.diagnostics.hidden=!message.diagnostics&&!message.error;
         entry.ui.diagnosticText.textContent=JSON.stringify({code:message.code,error:message.error,...message.diagnostics,...(message.usage?{usage:message.usage}:{})},null,2).slice(0,4000);
       }

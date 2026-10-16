@@ -5,6 +5,11 @@ const ui = require('../extension/ui-i18n.js');
 const core = require('../extension/feed-core.js');
 
 const reasons = ['outputLimit','incomplete','connection','languageMismatch','rateLimit','access','server','unknown','timeout'];
+test('API failure statuses explain recovery in every interface language without requiring raw provider prose',()=>{
+  const keys=['apiKeyRejected','apiUsage','apiAccess','apiRequest','apiServer','apiConnection','apiTimeout','apiOutputLimit','apiIncomplete','apiFailed'];
+  for(const language of ui.SUPPORTED_LANGUAGES)for(const suffix of keys){const key='error.'+suffix,value=ui.catalog[language][key];assert.ok(value?.trim(),`${language}: ${key}`);if(language!=='en')assert.notEqual(value,ui.catalog.en[key]);assert.ok(Array.from(value).length<180);assert.doesNotMatch(value,/\{(?:error|message|body)\}/);}
+  assert.match(ui.t('error.apiUsage','en'),/budget or usage/);assert.match(ui.t('error.apiServer','zh-CN'),/xAI 服务/);
+});
 
 test('English UI consistently names the feature fact check while internal localization keys stay compatible', () => {
   assert.equal(ui.t('common.verification','en'),'Fact check');
