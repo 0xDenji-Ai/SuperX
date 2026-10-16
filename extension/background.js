@@ -363,7 +363,8 @@ function removeJob(job) { if(jobs.get(job.key)===job)jobs.delete(job.key); }
 function abortJob(job) { job.controller.abort(); removeJob(job); queue = queue.filter(j=>j!==job); pump(); }
 function cancelClient(client) { client.cancelEpoch++; for (const job of [...jobs.values()]) if(job.client===client) abortJob(job); }
 // Browser message promises do not reject when an AbortSignal is cancelled.
-// Settle our await independently so a silent provider cannot hold a dispatch slot.
+// Keep the UI await interruptible; paid calls retain their separate slot until
+// the actual provider promise (including transport cleanup) has settled.
 function waitForAbort(promise, signal) {
   return new Promise((resolve,reject)=>{
     let settled=false;
@@ -459,7 +460,7 @@ chrome.runtime.onConnect.addListener(port => {
       const key=`${client.tabId}:${requestId}`;
       if(jobs.has(key)) return;
       const budgetProbe=snapshot.provider==='api'&&apiAccountPause&&message.force===true?apiAccountPause:undefined;
-      if(queuePausedFor(snapshot) && (message.force!==true||budgetProbe&&[...jobs.values()].some(job=>job.budgetProbe&&job.settings.provider===snapshot.provider))) { const paused=queuePauseError(snapshot);report(paused.error,paused.code,paused.verificationFailure?{verificationFailure:paused.verificationFailure}:{});return; }
+      if(queuePausedFor(snapshot) && (message.force!==true||budgetProbe&&[...jobs.values(),...apiSlots].some(job=>job.budgetProbe&&job.settings.provider===snapshot.provider))) { const paused=queuePauseError(snapshot);report(paused.error,paused.code,paused.verificationFailure?{verificationFailure:paused.verificationFailure}:{});return; }
       if(message.force===true)clearQueuePause(snapshot.provider);
       const job={key,requestId,post,inputFingerprint,analysis,client,clientEpoch:receivedEpoch,settings:snapshot,revision:receivedRevision,fingerprint,historyTicket:ticket,historyLanguage,budgetProbe,controller:new AbortController()};
       jobs.set(key,job);
@@ -533,6 +534,15 @@ function startAPIDeadline(job) {
     ...(stage==='verify'?{verificationFailure:{code:'TIMEOUT',stage:'verify',errorCode:'TIMEOUT'}}:{})})),150000);
 }
 function releaseAPISlot(job) { clearAPIDeadline(job);apiSlots.delete(job);job.slotHeld=false;job.slotPhase=null; }
+function trackedAPICall(job,onUpdate) {
+  job.apiProviderPending=true;
+  return runAPI(job,onUpdate).finally(()=>{
+    job.apiProviderPending=false;
+    // A canceled UI job may have finished long before fetch/reader cleanup.
+    // It still owns its global slot until this actual provider call settles.
+    if(job.executionFinished){releaseAPISlot(job);pump();}
+  });
+}
 function pauseWaitingJobs(job,error) {
   const budget=job.settings.provider==='api'?apiBudgetFailure(error):undefined;
   if(!budget&&error?.code!=='RATE_LIMIT')return;
@@ -592,7 +602,7 @@ async function executeJob(job) {
       if(liveJob(job)&&!commentsJob(job))send(client.port,{type:'UPDATE',requestId,...(hasText?{text}:{}),phase:update.phase,
         verificationStatus:update.verificationStatus,warning:update.warning,sources:update.sources,...job.billing,...verificationMetadata(update,job.settings.apiVerification,text||'')});
     };
-    const result=withBillingMetadata(await (job.settings.provider==='build'?runAPI(job,onUpdate):waitForAbort(runAPI(job,onUpdate),signal)),job.settings.provider,commentsJob(job)?undefined:job.settings.apiVerification);
+    const result=withBillingMetadata(await (job.settings.provider==='build'?runAPI(job,onUpdate):waitForAbort(trackedAPICall(job,onUpdate),signal)),job.settings.provider,commentsJob(job)?undefined:job.settings.apiVerification);
     if(!liveJob(job))return;
     job.billing=billingMetadata(result,job.settings.provider);
     if(result.requestDiagnostics)job.requestDiagnostics=result.requestDiagnostics;
@@ -619,7 +629,9 @@ async function executeJob(job) {
     if(epoch===cacheEpoch && !['incomplete','failed'].includes(result.verificationStatus)) {
       cache[job.fingerprint]=result;
       cache=pruneCache(cache);
-      try{await waitForAbort(persistCache(epoch),signal);}catch(e){if(signal.aborted)throw e;/* Storage failure must not hide a complete answer. */}
+      // Display a completed answer immediately. Optional serialized cache I/O
+      // must not leave finished requests looking as though they still run.
+      void persistCache(epoch).catch(()=>{});
     }
     if(liveJob(job))send(client.port,commentsJob(job)?{type:'COMMENT_RESULT',requestId,comments:result.comments,cached:false,...job.billing,...(budgetRecovered?{apiBudgetRecovered:true}:{})}:{type:'RESULT',requestId,result,cached:false,...(budgetRecovered?{apiBudgetRecovered:true}:{})});
   } catch(e) {
@@ -647,8 +659,8 @@ async function executeJob(job) {
         {...job.billing,...(timedOut&&!commentsJob(job)?verificationMetadata(reason,job.settings.apiVerification):{}),...(partialResult?{partialResult}:{} )});
     }
   } finally {
-    clearAPIDeadline(job);removeJob(job);runningJobs.delete(job);
-    releaseAPISlot(job);
+    clearAPIDeadline(job);removeJob(job);runningJobs.delete(job);job.executionFinished=true;
+    if(!job.apiProviderPending)releaseAPISlot(job);
     pump();
   }
 }

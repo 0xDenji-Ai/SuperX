@@ -249,7 +249,7 @@ test('cancellation before or during a Fact Check discards partial output and can
   assert.equal(reads,1);assert.ok(canceled>=1);assert.equal(released,1);
 });
 
-test('terminal completion returns immediately without waiting for a socket tail in Fact Check or comments',async()=>{
+test('terminal completion cancels a socket tail without waiting for EOF in Fact Check or comments',async()=>{
   for(const stage of ['verify','comments']) {
     let reads=0,canceled=0,released=0,calls=0;
     const drafts=['First observation.','Second question?','Third perspective.'];
@@ -1013,7 +1013,7 @@ test('oversized HTTP error bodies are canceled without exposing body content or 
   assert.equal(calls,1);assert.equal(canceled,true);
 });
 
-test('an HTTP diagnostic body that never ends cannot hold the failure open or issue another request',async()=>{
+test('HTTP diagnostic reading has a deadline and never issues another request',async()=>{
   let calls=0,canceled=false;
   const body=new ReadableStream({cancel(){canceled=true;}}),request=api.run(post,settings,'synthetic-key',{fetchImpl:async()=>{calls++;return new Response(body,{status:503});}});
   let deadline;try{await assert.rejects(Promise.race([request,new Promise((resolve,reject)=>{deadline=setTimeout(()=>reject(new Error('Diagnostic read did not finish')),5000);})]),error=>{assert.equal(error.code,'API_ERROR');assert.deepEqual(error.verificationFailure,{stage:'verify',code:'SERVER',errorCode:'API_ERROR',httpStatus:503});return true;});}finally{clearTimeout(deadline);}

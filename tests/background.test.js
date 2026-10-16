@@ -1384,7 +1384,7 @@ test('legacy attempt limits and slow informational count writes cannot delay ava
   await until(() => port.messages.filter(message => message.type === 'RESULT').length === 6);
 });
 
-test('cancelling one API job releases only its slot and a noncooperative late answer cannot affect a replacement request', async () => {
+test('cancelling one API job retains its slot until the provider settles and late callbacks cannot affect its replacement', async () => {
   const calls = []; const bg = createBackground({ settings: { apiConcurrency: 2 }, apiRun: call => { const gate = deferred(); calls.push({ call, gate }); return gate.promise; } });
   await bg.ready(); const port = bg.connect();
   port.send({ type: 'ANALYZE', requestId: 'reuse', post: post(100) });
@@ -1392,11 +1392,12 @@ test('cancelling one API job releases only its slot and a noncooperative late an
   await until(() => calls.length === 2);
   port.send({ type: 'CANCEL', requestId: 'reuse' });
   port.send({ type: 'ANALYZE', requestId: 'reuse', post: post(102) });
-  await until(() => calls.length === 3);
+  await until(() => port.messages.some(message=>message.type==='ERROR'&&message.requestId==='reuse'));
+  assert.equal(calls.length,2,'An abort signal alone is not transport completion');
   assert.equal(calls[0].call.signal.aborted, true); assert.equal(calls[1].call.signal.aborted, false);
   calls[0].call.onUpdate({ text: 'Obsolete update' });
   calls[0].gate.reject(Object.assign(new Error('Obsolete rate limit'), { code: 'RATE_LIMIT' }));
-  await tick(); await tick();
+  await until(()=>calls.length===3);await tick();
   calls[2].call.onUpdate({ text: 'New bound stream', phase: 'explain' });
   assert.equal(port.messages.findLast(message => message.type === 'UPDATE').text, 'New bound stream');
   calls[2].gate.resolve({ text: 'Replacement', provider: 'api' }); calls[1].gate.resolve({ text: 'Other', provider: 'api' });
@@ -1405,19 +1406,87 @@ test('cancelling one API job releases only its slot and a noncooperative late an
   assert.equal(port.messages.some(message => message.code === 'RATE_LIMIT'), false);
 });
 
-test('an API timeout releases one slot without cancelling other streams or accepting a late result', async () => {
+test('an API timeout reports promptly but retains its slot until the provider settles without accepting late output', async () => {
   const gates = new Map(Array.from({ length: 3 }, (_, i) => [String(100 + i), deferred()]));
   const bg = createBackground({ settings: { apiConcurrency: 2 }, apiRun: call => gates.get(call.post.id).promise });
   await bg.ready(); const port = bg.connect();
   for (let i = 0; i < 3; i += 1) port.send({ type: 'ANALYZE', requestId: 'timeout-' + i, post: post(100 + i) });
   await until(() => bg.apiCalls.length === 2); bg.expireDeadline(150000);
-  await until(() => bg.apiCalls.length === 3);
+  await until(()=>port.messages.some(message=>message.requestId==='timeout-0'&&message.type==='ERROR'));
+  assert.equal(bg.apiCalls.length,2,'Timeout cannot free an unfinished transport slot');
   assert.equal(bg.apiCalls[0].signal.aborted, true); assert.equal(bg.apiCalls[1].signal.aborted, false);
   assert.equal(port.messages.find(message => message.requestId === 'timeout-0' && message.type === 'ERROR').code, 'TIMEOUT');
+  gates.get('100').resolve({text:'Late answer',provider:'api'});await until(()=>bg.apiCalls.length===3);
   for (const [id, gate] of gates) gate.resolve({ text: 'Answer ' + id, provider: 'api' });
   await until(() => port.messages.filter(message => message.type === 'RESULT').length === 2);
   assert.equal(port.messages.some(message => message.requestId === 'timeout-0' && message.type === 'RESULT'), false);
   assert.equal((await analyze(bg, port, 'timeout-retry', 100)).cached, false);
+});
+
+test('rapid cancellation across tabs and comments retains every unfinished provider slot below the global limit',async()=>{
+  const calls=[];let active=0,maximum=0;
+  const run=task=>async call=>{
+    const gate=deferred(),record={call,gate,task};calls.push(record);active++;maximum=Math.max(maximum,active);
+    try{return await gate.promise;}finally{active--;}
+  };
+  const complete=record=>record.gate.resolve(record.task==='comments'?{comments:['First optional view.','Second optional view.','Third optional view.'],provider:'api'}:{text:'Completed evidence '+record.call.post.id,provider:'api'});
+  const bg=createBackground({settings:{apiConcurrency:4},apiRun:run('analysis'),commentRun:run('comments')});await bg.ready();const scrolling=bg.connect(),other=bg.connect({sender:{id:bg.chrome.runtime.id,frameId:0,url:'https://x.com/home',tab:{id:8}}});
+  const submitRound=round=>{
+    for(let i=0;i<2;i++)scrolling.send({type:'ANALYZE',requestId:'scroll-'+round+'-'+i,post:post(100+round*3+i)});
+    scrolling.send({type:'GENERATE_COMMENTS',requestId:'scroll-'+round+'-comment',post:post(102+round*3)});
+  };
+  other.send({type:'ANALYZE',requestId:'other-tab-running',post:post(999)});submitRound(0);await until(()=>calls.length===4);
+  for(let round=1;round<=3;round++){
+    const canceled=calls.filter(record=>record.call.post.id!=='999'&&!record.call.signal.aborted);
+    scrolling.send({type:'CANCEL_ALL'});await until(()=>canceled.every(record=>record.call.signal.aborted));submitRound(round);await tick();await tick();
+    assert.equal(calls.length,1+round*3,'New posts cannot reuse slots while canceled providers are still pending');assert.equal(active,4);
+    for(const record of canceled){record.call.onUpdate?.({text:'STALE_CANCELED_OUTPUT',phase:'verify'});complete(record);}
+    await until(()=>calls.length===1+(round+1)*3);assert.equal(active,4);assert.equal(maximum,4);
+    for(const record of canceled)record.call.onUpdate?.({text:'STALE_CANCELED_OUTPUT',phase:'verify'});
+  }
+  const pendingOther=calls.find(record=>record.call.post.id==='999');other.disconnect();await until(()=>pendingOther.call.signal.aborted);const reconnected=bg.connect({sender:{id:bg.chrome.runtime.id,frameId:0,url:'https://x.com/home',tab:{id:8}}});reconnected.send({type:'GENERATE_COMMENTS',requestId:'replacement-port-comment',post:post(500)});await tick();await tick();assert.equal(calls.length,13,'Disconnect cannot pretend its running provider already ended');complete(pendingOther);await until(()=>calls.length===14);assert.equal(maximum,4);
+  for(const record of calls.filter(value=>!value.call.signal.aborted))complete(record);
+  await until(()=>active===0);await tick();await tick();assert.equal(maximum,4);assert.doesNotMatch(JSON.stringify([...scrolling.messages,...reconnected.messages]),/STALE_CANCELED_OUTPUT/);assert.equal(other.messages.some(message=>message.type==='RESULT'),false);
+  assert.equal(Object.values(bg.session.data.cache||{}).some(value=>String(value.text||'').includes('STALE_CANCELED_OUTPUT')),false);
+});
+
+test('a canceled API fetch keeps its slot through delayed browser abort settlement',async()=>{
+  const pending=deferred();let fetches=0;
+  const bg=createBackground({settings:{apiConcurrency:1},apiRun:call=>provider.run(call.post,call.settings,call.key,{...call,fetchImpl:async()=>{
+    fetches++;if(fetches===1)return pending.promise;
+    return new Response('data: '+JSON.stringify({type:'response.completed',response:{status:'completed',output:[{type:'message',role:'assistant',content:[{type:'output_text',text:'The primary source supports this correction.'}]}]}})+'\n\n',{status:200});
+  }})});await bg.ready();const port=bg.connect();port.send({type:'ANALYZE',requestId:'delayed-fetch-abort',post:post(100)});await until(()=>fetches===1);port.send({type:'CANCEL',requestId:'delayed-fetch-abort'});port.send({type:'ANALYZE',requestId:'after-fetch-abort',post:post(101)});await until(()=>port.messages.some(message=>message.requestId==='delayed-fetch-abort'&&message.type==='ERROR'));await tick();assert.equal(fetches,1);pending.reject(new DOMException('Mock browser abort finished','AbortError'));await until(()=>port.messages.some(message=>message.requestId==='after-fetch-abort'&&message.type==='RESULT'));assert.equal(fetches,2);assert.equal(port.messages.some(message=>message.requestId==='delayed-fetch-abort'&&message.type==='RESULT'),false);
+});
+
+test('real API stream cleanup keeps four slots reserved across rapid scrolling and mixed replacement tasks',async()=>{
+  const cleanup=[];let requests=0,cancels=0,active=0,maximum=0;
+  const execute=task=>async call=>{
+    active++;maximum=Math.max(maximum,active);
+    try{return await provider[task==='comments'?'generateComments':'run'](call.post,call.settings,call.key,{...call,fetchImpl:async()=>{
+      requests++;
+      if(Number(call.post.id)<104){const gate=deferred();cleanup.push(gate);return new Response(new ReadableStream({cancel(){cancels++;return gate.promise;}}),{status:200,headers:{'Content-Type':'text/event-stream'}});}
+      const text=task==='comments'?JSON.stringify(['First optional view.','Second optional view.','Third optional view.']):'The primary source supports this correction.';
+      return new Response('data: '+JSON.stringify({type:'response.completed',response:{status:'completed',output:[{type:'message',role:'assistant',content:[{type:'output_text',text}]}]}})+'\n\n',{status:200});
+    }});}finally{active--;}
+  };
+  const bg=createBackground({settings:{apiConcurrency:4},apiRun:execute('analysis'),commentRun:execute('comments')});await bg.ready();const first=bg.connect(),second=bg.connect({sender:{id:bg.chrome.runtime.id,frameId:0,url:'https://x.com/home',tab:{id:8}}});
+  for(let i=0;i<4;i++)first.send({type:'ANALYZE',requestId:'stream-cleanup-old-'+i,post:post(100+i)});await until(()=>cleanup.length===4);await tick();first.send({type:'CANCEL_ALL'});await until(()=>cancels===4);
+  for(let i=0;i<4;i++)(i%2?second:first).send({type:i%2?'GENERATE_COMMENTS':'ANALYZE',requestId:'stream-cleanup-new-'+i,post:post(104+i)});
+  await until(()=>first.messages.filter(message=>message.type==='ERROR').length===4);await tick();await tick();assert.equal(requests,4);assert.equal(active,4,'Provider promises remain pending until their real reader cancellation settles');
+  cleanup[0].resolve();await until(()=>requests===8);await until(()=>[...first.messages,...second.messages].filter(message=>['RESULT','COMMENT_RESULT'].includes(message.type)).length===4);assert.equal(maximum,4);assert.equal(active,3);
+  for(const gate of cleanup.slice(1))gate.resolve();await until(()=>active===0);assert.equal(first.messages.some(message=>message.requestId?.startsWith('stream-cleanup-old-')&&message.type==='RESULT'),false);
+});
+
+test('cancellation during a dispatch Key read does not start a provider or retain its slot',async()=>{
+  const reading=deferred();let reads=0,blocked=false;
+  const bg=createBackground({settings:{apiConcurrency:1},sessionGet:async keys=>{if(keys==='apiKey'&&++reads===2){blocked=true;await reading.promise;}}});await bg.ready();const port=bg.connect();port.send({type:'ANALYZE',requestId:'cancel-before-fetch',post:post(100)});await until(()=>blocked);port.send({type:'CANCEL',requestId:'cancel-before-fetch'});port.send({type:'ANALYZE',requestId:'after-canceled-key-read',post:post(101)});await until(()=>port.messages.some(message=>message.requestId==='after-canceled-key-read'&&message.type==='RESULT'));assert.equal(bg.apiCalls.length,1);assert.equal(bg.apiCalls[0].post.id,'101');reading.resolve();await tick();assert.equal(bg.apiCalls.length,1);
+});
+
+test('a canceled account-budget probe blocks a second probe until its actual provider settles',async()=>{
+  const cleanup=deferred();let calls=0;
+  const bg=createBackground({apiRun:()=>{calls++;if(calls===1)throw spendingError();if(calls===2)return cleanup.promise;return {text:'Accepted complete manual check.',provider:'api',verificationStatus:'completed'};}});await bg.ready();const port=bg.connect();await analyze(bg,port,'before-pending-budget-probe');port.send({type:'ANALYZE',requestId:'pending-budget-probe',post:post(101),force:true});await until(()=>calls===2);port.send({type:'CANCEL',requestId:'pending-budget-probe'});await until(()=>port.messages.some(message=>message.requestId==='pending-budget-probe'&&message.type==='ERROR'));
+  const blocked=await analyze(bg,port,'second-pending-budget-probe',102,{force:true});assert.equal(blocked.code,'API_ERROR');assert.deepEqual(blocked.verificationFailure,spendingFailure);assert.equal(calls,2);assert.equal((await bg.message({type:'GET_CONFIG'})).apiBudgetPaused,true);
+  cleanup.resolve({text:'Canceled probe response must not reopen automatic work.',provider:'api',verificationStatus:'completed'});await tick();await tick();assert.equal(port.messages.some(message=>message.type==='API_BUDGET_RECOVERED'),false);assert.equal((await analyze(bg,port,'after-budget-probe-cleanup',102,{force:true})).apiBudgetRecovered,true);assert.equal(calls,3);
 });
 
 test('an idle feed disconnect and worker wake retain session credentials and cached answers without replaying paid tasks', async () => {
@@ -1680,7 +1749,7 @@ test('parallel cache writes preserve all completed answers and clearing cache ca
     if (clear) await tick(); write.resolve(); if (clear) await clearing;
     await until(() => port.messages.filter(message => message.type === 'RESULT').length === 2);
     if (clear) { assert.equal('cache' in bg.session.data, false); assert.equal((await analyze(bg, port, 'after-clear', 100)).cached, false); }
-    else assert.deepEqual(Object.values(bg.session.data.cache).map(value => value.text).sort(), ['First', 'Second']);
+    else {await until(()=>Object.keys(bg.session.data.cache||{}).length===2);assert.deepEqual(Object.values(bg.session.data.cache).map(value => value.text).sort(), ['First', 'Second']);}
   }
 });
 
@@ -1703,7 +1772,7 @@ test('a Fact Check rate limit before output has no invented retained answer and 
   assert.equal(error.verificationFailure.stage,'verify');assert.equal(bg.apiCalls.length,1);
 });
 
-test('completed API HTTP stages release their slots even while result persistence is still pending', async () => {
+test('completed API HTTP stages release slots and display results while optional cache persistence is pending', async () => {
   const writing = deferred(); let firstWrite = true;
   const bg = createBackground({ settings: { apiConcurrency: 1 }, sessionSet: async values => {
     if ('cache' in values && firstWrite) { firstWrite = false; await writing.promise; }
@@ -1712,9 +1781,10 @@ test('completed API HTTP stages release their slots even while result persistenc
   port.send({ type: 'ANALYZE', requestId: 'persisting-result', post: post(100) });
   port.send({ type: 'ANALYZE', requestId: 'next-http', post: post(101) });
   await until(() => bg.apiCalls.length === 2);
-  assert.equal(port.messages.some(message => message.type === 'RESULT'), false);
+  await until(()=>port.messages.filter(message=>message.type==='RESULT').length===2);
+  assert.equal(bg.session.data.cache,undefined,'The visible completed results do not wait for the blocked cache write');
   assert.equal(bg.deadlines[0].cancelled,true,'Completed HTTP work cannot time out during a pending cache write');
-  writing.resolve(); await until(() => port.messages.filter(message => message.type === 'RESULT').length === 2);
+  writing.resolve();await until(()=>Object.keys(bg.session.data.cache||{}).length===2);
 });
 
 test('newly visible posts take a released Fact Check slot immediately without a second-stage reservation',async()=>{
@@ -2041,7 +2111,7 @@ test('a comment rate limit pauses waiting drafts and analyses with task-specific
   assert.equal(bg.commentCalls.length,2);assert.equal(bg.session.data.quotas?.[7]||0,0);
 });
 
-test('cancelling a comment job releases its slot while late drafts cannot be displayed or cached', async () => {
+test('cancelling a comment reports promptly but retains its slot until late drafts settle without being displayed or cached', async () => {
   const pending=deferred();const bg=createBackground({settings:{apiConcurrency:1},commentRun:()=>pending.promise});
   await bg.ready();const port=bg.connect();
   port.send({type:'GENERATE_COMMENTS',requestId:'cancelled-draft',post:post(100)});
@@ -2049,8 +2119,9 @@ test('cancelling a comment job releases its slot while late drafts cannot be dis
   port.send({type:'ANALYZE',requestId:'next-explanation',post:post(101)});
   await until(()=>port.messages.some(message=>message.requestId==='next-explanation'&&message.type==='QUEUED'));
   port.send({type:'CANCEL',requestId:'cancelled-draft'});
-  await until(()=>bg.commentCalls[0].signal.aborted&&port.messages.some(message=>message.requestId==='next-explanation'&&message.type==='RESULT'));
-  pending.resolve({comments:['Late first.','Late second.','Late third.'],provider:'api'});await tick();await tick();
+  await until(()=>bg.commentCalls[0].signal.aborted&&port.messages.some(message=>message.requestId==='cancelled-draft'&&message.type==='COMMENT_ERROR'));
+  assert.equal(bg.apiCalls.length,0,'A canceled comment still owns its unfinished HTTP slot');
+  pending.resolve({comments:['Late first.','Late second.','Late third.'],provider:'api'});await until(()=>port.messages.some(message=>message.requestId==='next-explanation'&&message.type==='RESULT'));
   assert.equal(port.messages.some(message=>message.requestId==='cancelled-draft'&&message.type==='COMMENT_RESULT'),false);
   assert.equal(Object.values(bg.session.data.cache||{}).some(value=>Array.isArray(value.comments)),false);
   assert.equal(port.messages.find(message=>message.requestId==='cancelled-draft'&&message.type==='COMMENT_ERROR').code,'CANCELLED');
@@ -2444,7 +2515,7 @@ test('queued visible posts retain FIFO order across single-stage Fact Checks',as
   await until(()=>port.messages.filter(m=>m.type==='RESULT').length===3);
 });
 
-test('a Fact Check timeout retains only streamed evidence with incomplete diagnostics and releases its slot',async()=>{
+test('a Fact Check timeout retains streamed evidence while keeping its unfinished provider slot',async()=>{
   const gate=deferred(),bg=createBackground({settings:{apiConcurrency:1},apiRun:async call=>{
     if(call.post.id!=='100')return{text:'Next completed check.',provider:'api'};
     call.onUpdate({text:'Partial evidence only.',phase:'verify',usage:{total_tokens:15},model:'grok-current'});
@@ -2456,8 +2527,8 @@ test('a Fact Check timeout retains only streamed evidence with incomplete diagno
   const error=port.messages.find(m=>m.requestId==='timeout-check'&&m.type==='ERROR');assert.equal(error.code,'TIMEOUT');
   assert.equal(error.partialResult.text,'Partial evidence only.');assert.equal(error.partialResult.verificationStatus,'incomplete');
   assert.equal(error.partialResult.verificationFailure.code,'TIMEOUT');assert.equal(error.partialResult.verificationStart,undefined);
-  assert.deepEqual(error.partialResult.usage,{total_tokens:15});await until(()=>bg.apiCalls.length===2);
-  gate.resolve();await tick();await tick();assert.equal(port.messages.some(m=>m.requestId==='timeout-check'&&m.type==='RESULT'),false);
+  assert.deepEqual(error.partialResult.usage,{total_tokens:15});assert.equal(bg.apiCalls.length,1);
+  gate.resolve();await until(()=>bg.apiCalls.length===2);assert.equal(port.messages.some(m=>m.requestId==='timeout-check'&&m.type==='RESULT'),false);
   assert.equal(Object.values(bg.session.data.cache||{}).some(v=>v.text==='Partial evidence only.'||v.text==='Late answer'),false);
 });
 
@@ -2853,8 +2924,9 @@ test('key changes wait for old session cache writes and remove post content with
     const writing=deferred();let firstWrite=true,blocked=false;
     const bg=createBackground({sessionSet:async values=>{if(Object.hasOwn(values,'cache')&&firstWrite){firstWrite=false;blocked=true;await writing.promise;}}});
     await bg.ready();const port=bg.connect();port.send({type:'ANALYZE',requestId:'persisting-private-post',post:post(100)});await until(()=>blocked);
-    const changing=bg.message(mutation);assert.equal(bg.apiCalls[0].signal.aborted,true);writing.resolve();assert.equal((await changing).ok,true);await tick();await tick();
-    assert.equal(Object.hasOwn(bg.session.data,'cache'),false);assert.equal(Object.hasOwn(bg.local.data,'cache'),false);assert.equal(port.messages.some(value=>value.type==='RESULT'),false);
+    await until(()=>port.messages.some(value=>value.type==='RESULT'));
+    const changing=bg.message(mutation);assert.equal(bg.apiCalls[0].signal.aborted,false,'The provider already completed; only its cache write remains');writing.resolve();assert.equal((await changing).ok,true);await tick();await tick();
+    assert.equal(Object.hasOwn(bg.session.data,'cache'),false);assert.equal(Object.hasOwn(bg.local.data,'cache'),false);assert.equal(port.messages.filter(value=>value.type==='RESULT').length,1,'A completed result displays before cache persistence and is not replayed after the Key change');
   }
 });
 

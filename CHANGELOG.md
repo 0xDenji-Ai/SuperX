@@ -2,6 +2,13 @@
 
 SuperX release history. The extension's `manifest.json` is the authoritative installed version. Test counts below describe those releases' recorded checks, not live provider or browser-store certification.
 
+## 0.9.6 — Keep cancelled API transports inside the concurrency limit (unreleased candidate)
+
+- Retain shared API request slots until the underlying provider call and response-reader cancellation settle. Cancellation and timeout can update the UI promptly without allowing replacement requests to exceed the configured local transport limit while old requests are still closing.
+- Include response-reader cleanup after terminal events, provider errors, oversized HTTP error bodies and headers arriving after cancellation. Keep late output isolated from replacement tasks and share the same limit across tabs, fact checks and comment drafts.
+- Display a completed result without waiting for local cache persistence. Waiting posts still show queued status; visible loading labels are not a measurement of upstream server execution.
+- This corrects a reproduced local concurrency defect, not a proven cause of xAI's intermittent `spending_limit` responses. Cancelling a local request does not confirm that server-side work or billing has stopped. No automatic paid retries or account-budget changes. Published Stable remains 0.7.26.
+
 ## 0.9.5 — Preserve official string-shaped API error details (unreleased candidate)
 
 - Read official flat `{code, error: string}` errors and complete JSON string error bodies through the same bounded redaction as object-shaped error messages. Prefer specific message fields when both are present.

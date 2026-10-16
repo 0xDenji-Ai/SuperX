@@ -409,8 +409,11 @@
     // without exposing prose, account IDs, request URLs, or the response body.
     const fallback=()=>({failure:failureDiagnostics(null,response.status),metadata:{}});
     const body=response.body;if(!body||typeof body.getReader!=='function')return fallback();
-    let reader,timer;const timeout=Symbol('error-body-timeout');
-    const cancel=()=>{try{void reader?.cancel().catch(()=>{});}catch{}};
+    let reader,timer,cancellation;const timeout=Symbol('error-body-timeout');
+    const cancel=()=>{
+      if(!cancellation)try{cancellation=Promise.resolve(reader?.cancel()).catch(()=>{});}catch{cancellation=Promise.resolve();}
+      return cancellation;
+    };
     try {
       reader=body.getReader();signal?.addEventListener('abort',cancel,{once:true});
       const reading=(async()=>{
@@ -427,7 +430,7 @@
       let data;try{data=JSON.parse(text);}catch{return fallback();}
       return {failure:failureDiagnostics(data,response.status),metadata:errorRequestMetadata(data,redaction)};
     } catch {return fallback();}
-    finally{clearTimeout(timer);signal?.removeEventListener('abort',cancel);cancel();try{reader?.releaseLock();}catch{}}
+    finally{clearTimeout(timer);signal?.removeEventListener('abort',cancel);await cancel();try{reader?.releaseLock();}catch{}}
   }
   function providerFailure(diagnostics) {
     const {httpStatus:status,providerCode:code}=diagnostics;
@@ -445,8 +448,13 @@
   // Server-sent events can split at any byte, including in a UTF-8 character.
   async function readEvents(body,onEvent,{signal}={}) {
     const reader=body.getReader(),decoder=new TextDecoder();
-    let buffer='',terminal=false;
-    const cancel=()=>{void reader.cancel().catch(()=>{});};
+    let buffer='',terminal=false,cancellation;
+    // A cancelled read can finish before the transport's cancellation does.
+    // Keep cleanup in this promise so the shared scheduler still counts it.
+    const cancel=()=>{
+      if(!cancellation)try{cancellation=Promise.resolve(reader.cancel()).catch(()=>{});}catch{cancellation=Promise.resolve();}
+      return cancellation;
+    };
     signal?.addEventListener('abort',cancel,{once:true});
     function emit(block) {
       const data=block.split('\n').filter(line=>line.startsWith('data:')).map(line=>line.slice(5).trimStart()).join('\n');
@@ -470,7 +478,7 @@
         if(terminal){cancel();break;}
       }
     } catch(error) {cancel();throw error;}
-    finally {signal?.removeEventListener('abort',cancel);reader.releaseLock();}
+    finally {signal?.removeEventListener('abort',cancel);if(cancellation)await cancellation;reader.releaseLock();}
   }
   async function runStage(post,settings,apiKey,stage,analysis,{signal,onUpdate,fetchImpl}) {
     assertNotAborted(signal);
@@ -485,6 +493,7 @@
         method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${apiKey}`},
         body:JSON.stringify(request),signal
       });
+      if(signal?.aborted)try{await response.body?.cancel();}catch{/* An errored body is already closed. */}
       assertNotAborted(signal);
       if(Number.isInteger(response.status))diagnostic.transportStatus=response.status;
       for(const header of ['x-request-id','request-id']) {
