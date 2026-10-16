@@ -2225,7 +2225,7 @@ test('Settings viewing-time control saves seconds as milliseconds and keeps expl
   }
 });
 
-test('Settings uses one Key flow with optional account-specific help and the existing reading controls',async()=>{
+test('Settings uses one Key flow with expanded account-specific help and the existing reading controls',async()=>{
   const fixture=uiPageFixture('options');await settleUI();await settleUI();
   for(const [id,min,max,step]of [['api-concurrency','1','8','1'],['analysis-dwell','0','30','any']]){
     const input=fixture.ids.get(id);assert.equal(input.getAttribute('min'),min);assert.equal(input.getAttribute('max'),max);assert.equal(input.getAttribute('step'),step);
@@ -2234,7 +2234,8 @@ test('Settings uses one Key flow with optional account-specific help and the exi
   for(const [key,url]of [['options.apiSubscriptionLink','https://grok.com/dashboard/api-keys'],['options.dashboardUsage','https://grok.com/dashboard/usage'],['options.apiMeteredLink','https://console.x.ai/']]){
     assert.equal(html.split('href="'+url+'"').length-1,1);assert.ok(html.includes('data-i18n="'+key+'"'));
   }
-  assert.doesNotMatch(html,/<details[^>]*id="api-access-guide"[^>]*\bopen\b|options\.(?:providerIntro|uiHint|apiPriorityHelp|apiPriorityLink|apiDirectHint|keyStorageHelp|console|apiStep[123])/);
+  assert.match(html,/<details[^>]*id="api-access-guide"[^>]*\bopen\b/);
+  assert.doesNotMatch(html,/options\.(?:providerIntro|uiHint|apiPriorityHelp|apiPriorityLink|apiDirectHint|keyStorageHelp|console|apiStep[123])/);
   assert.ok(html.indexOf('id="api-key"')<html.indexOf('id="api-access-guide"'));assert.ok(html.indexOf('id="clear-key"')<html.indexOf('id="api-model"'));
   assert.equal(fixture.ids.get('source-description').hidden,true);assert.equal(fixture.ids.get('source-description').textContent,'');
   assert.equal(fixture.messages.some(message=>/PRIORITY|TIER|UPGRADE|BILLING/.test(message.type)),false);

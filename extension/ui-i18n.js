@@ -949,7 +949,7 @@
     'options.rememberHelp','options.keyReadySaved','options.keyReady','options.keyMissing','options.keyMigration','options.modelHelp','options.reasoningHelp'],{
     en:[
       'Connection','Enable SuperX','Grok API Key','Paste your Grok API Key','Grok API Keys from grok.com and xAI Console both work here.','Get a Grok API Key or check usage',
-      'grok.com · Subscription','Use eligible API allowance from The X Subscription. Check your Grok Dashboard account for availability and limits.',
+      'grok.com · The X Subscription','Use eligible API allowance from The X Subscription. Check your Grok Dashboard account for availability and limits.',
       'Choose Grok Inference (not Cursor) and allow Chat and your chosen model.','Create Grok API Key','View usage',
       'xAI Console · Pay as you go','Add API credits and pay for the Tokens and tools you use. Manage usage and billing in xAI Console.','Keys & billing',
       'Check usage and charges at the site where you created your Key.',
@@ -960,7 +960,7 @@
     ],
     'zh-CN':[
       '连接','启用 SuperX','Grok API Key','粘贴你的 Grok API Key','grok.com 和 xAI Console 创建的 Grok API Key 均可使用。','获取 Grok API Key 或查看用量',
-      'grok.com · 订阅','使用 The X Subscription 支持的 API 额度，具体资格与限制以你的 Grok Dashboard 账户页面为准。',
+      'grok.com · The X Subscription','使用 The X Subscription 支持的 API 额度，具体资格与限制以你的 Grok Dashboard 账户页面为准。',
       '选择 Grok Inference（不是 Cursor），并允许 Chat 和所选模型。','创建 Grok API Key','查看用量',
       'xAI Console · 按量付费','购买 API credits，按实际使用的 Token 和工具计费。在 xAI Console 管理用量和账单。','Key 与账单',
       '请在创建 Key 的网站查看用量和费用。',
@@ -971,7 +971,7 @@
     ],
     'zh-TW':[
       '連線','啟用 SuperX','Grok API Key','貼上你的 Grok API Key','grok.com 和 xAI Console 建立的 Grok API Key 均可使用。','取得 Grok API Key 或查看用量',
-      'grok.com · 訂閱','使用 The X Subscription 支援的 API 額度，具體資格與限制以你的 Grok Dashboard 帳戶頁面為準。',
+      'grok.com · The X Subscription','使用 The X Subscription 支援的 API 額度，具體資格與限制以你的 Grok Dashboard 帳戶頁面為準。',
       '選擇 Grok Inference（不是 Cursor），並允許 Chat 和所選模型。','建立 Grok API Key','查看用量',
       'xAI Console · 按用量付費','購買 API credits，依實際使用的 Token 和工具計費。在 xAI Console 管理用量與帳單。','Key 與帳單',
       '請在建立 Key 的網站查看用量與費用。',
@@ -982,7 +982,7 @@
     ],
     ja:[
       '接続','SuperX を有効にする','Grok API Key','Grok API Key を貼り付け','grok.com と xAI Console のどちらで作成した Grok API Key も使えます。','Grok API Key の取得・利用量の確認',
-      'grok.com · サブスクリプション','The X Subscription の対象 API 利用枠を使用します。利用資格と上限は Grok Dashboard のアカウントで確認してください。',
+      'grok.com · The X Subscription','The X Subscription の対象 API 利用枠を使用します。利用資格と上限は Grok Dashboard のアカウントで確認してください。',
       'Grok Inference（Cursor ではありません）を選択し、Chat と選択したモデルを許可してください。','Grok API Key を作成','利用量を確認',
       'xAI Console · 従量課金','API クレジットを購入し、使用したトークンとツールの料金を支払います。利用量と請求は xAI Console で管理します。','Key と請求',
       'Key を作成したサイトで利用量と料金を確認してください。',
@@ -993,7 +993,7 @@
     ],
     ko:[
       '연결','SuperX 활성화','Grok API Key','Grok API Key 붙여넣기','grok.com과 xAI Console에서 만든 Grok API Key를 모두 사용할 수 있습니다.','Grok API Key 발급 또는 사용량 확인',
-      'grok.com · 구독','The X Subscription에서 지원하는 API 한도를 사용합니다. 이용 자격과 제한은 Grok Dashboard 계정에서 확인하세요.',
+      'grok.com · The X Subscription','The X Subscription에서 지원하는 API 한도를 사용합니다. 이용 자격과 제한은 Grok Dashboard 계정에서 확인하세요.',
       'Grok Inference(Cursor 아님)를 선택하고 Chat과 선택한 모델을 허용하세요.','Grok API Key 만들기','사용량 보기',
       'xAI Console · 종량제','API 크레딧을 구매하고 사용한 토큰과 도구에 대해 결제하세요. 사용량과 청구는 xAI Console에서 관리합니다.','Key 및 청구',
       'Key를 만든 사이트에서 사용량과 요금을 확인하세요.',
@@ -1004,7 +1004,7 @@
     ],
     es:[
       'Conexión','Activar SuperX','Grok API Key','Pega tu Grok API Key','Aquí funcionan las Grok API Keys de grok.com y de xAI Console.','Obtener una Grok API Key o consultar el uso',
-      'grok.com · Suscripción','Usa la cuota de API elegible de The X Subscription. Consulta la disponibilidad y los límites en tu cuenta de Grok Dashboard.',
+      'grok.com · The X Subscription','Usa la cuota de API elegible de The X Subscription. Consulta la disponibilidad y los límites en tu cuenta de Grok Dashboard.',
       'Elige Grok Inference (no Cursor) y permite Chat y el modelo elegido.','Crear Grok API Key','Ver uso',
       'xAI Console · Pago por uso','Compra créditos de API y paga por los tokens y herramientas que uses. Gestiona el uso y la facturación en xAI Console.','Keys y facturación',
       'Consulta el uso y los cargos en el sitio donde creaste tu Key.',
@@ -1015,7 +1015,7 @@
     ],
     fr:[
       'Connexion','Activer SuperX','Grok API Key','Collez votre Grok API Key','Les Grok API Keys de grok.com et de xAI Console fonctionnent ici.','Obtenir une Grok API Key ou consulter l’utilisation',
-      'grok.com · Abonnement','Utilisez le quota API éligible de The X Subscription. Consultez la disponibilité et les limites de votre compte dans Grok Dashboard.',
+      'grok.com · The X Subscription','Utilisez le quota API éligible de The X Subscription. Consultez la disponibilité et les limites de votre compte dans Grok Dashboard.',
       'Choisissez Grok Inference (pas Cursor) et autorisez Chat et le modèle choisi.','Créer une Grok API Key','Voir l’utilisation',
       'xAI Console · Paiement à l’usage','Achetez des crédits API et payez les tokens et outils utilisés. Gérez l’utilisation et la facturation dans xAI Console.','Keys et facturation',
       'Consultez l’utilisation et les frais sur le site où vous avez créé votre Key.',
@@ -1026,7 +1026,7 @@
     ],
     de:[
       'Verbindung','SuperX aktivieren','Grok API Key','Grok API Key einfügen','Grok API Keys von grok.com und der xAI Console funktionieren hier.','Grok API Key erstellen oder Nutzung prüfen',
-      'grok.com · Abo','Nutze das berechtigte API-Kontingent von The X Subscription. Verfügbarkeit und Limits findest du in deinem Konto im Grok Dashboard.',
+      'grok.com · The X Subscription','Nutze das berechtigte API-Kontingent von The X Subscription. Verfügbarkeit und Limits findest du in deinem Konto im Grok Dashboard.',
       'Wähle Grok Inference (nicht Cursor) und erlaube Chat und das gewählte Modell.','Grok API Key erstellen','Nutzung ansehen',
       'xAI Console · Nutzungsbasierte Abrechnung','Kaufe API-Guthaben und bezahle die verwendeten Tokens und Tools. Verwalte Nutzung und Abrechnung in der xAI Console.','Keys und Abrechnung',
       'Prüfe Nutzung und Kosten auf der Website, auf der du den Key erstellt hast.',
@@ -1037,7 +1037,7 @@
     ],
     pt:[
       'Conexão','Ativar SuperX','Grok API Key','Cole sua Grok API Key','Grok API Keys do grok.com e do xAI Console funcionam aqui.','Obter uma Grok API Key ou consultar o uso',
-      'grok.com · Assinatura','Use a cota de API elegível do The X Subscription. Confira a disponibilidade e os limites na sua conta do Grok Dashboard.',
+      'grok.com · The X Subscription','Use a cota de API elegível do The X Subscription. Confira a disponibilidade e os limites na sua conta do Grok Dashboard.',
       'Escolha Grok Inference (não Cursor) e permita Chat e o modelo escolhido.','Criar Grok API Key','Ver uso',
       'xAI Console · Pagamento por uso','Compre créditos de API e pague pelos tokens e ferramentas utilizados. Gerencie o uso e a cobrança no xAI Console.','Keys e cobrança',
       'Confira o uso e as cobranças no site onde criou sua Key.',
@@ -1048,7 +1048,7 @@
     ],
     ar:[
       'الاتصال','تفعيل SuperX','Grok API Key','الصق Grok API Key','تعمل هنا مفاتيح Grok API Key من grok.com وxAI Console.','الحصول على Grok API Key أو مراجعة الاستخدام',
-      'grok.com · الاشتراك','استخدم حصة API المؤهلة ضمن The X Subscription. راجع التوافر والحدود في حسابك على Grok Dashboard.',
+      'grok.com · The X Subscription','استخدم حصة API المؤهلة ضمن The X Subscription. راجع التوافر والحدود في حسابك على Grok Dashboard.',
       'اختر Grok Inference وليس Cursor، واسمح بـChat والنموذج المختار.','إنشاء Grok API Key','عرض الاستخدام',
       'xAI Console · الدفع حسب الاستخدام','اشترِ رصيد API وادفع مقابل الرموز والأدوات المستخدمة. أدر الاستخدام والفوترة في xAI Console.','المفاتيح والفوترة',
       'راجع الاستخدام والرسوم في الموقع الذي أنشأت فيه المفتاح.',
@@ -1059,7 +1059,7 @@
     ],
     ru:[
       'Подключение','Включить SuperX','Grok API Key','Вставьте Grok API Key','Здесь работают Grok API Keys из grok.com и xAI Console.','Получить Grok API Key или проверить использование',
-      'grok.com · Подписка','Используйте доступный лимит API в The X Subscription. Доступность и ограничения указаны в вашем аккаунте Grok Dashboard.',
+      'grok.com · The X Subscription','Используйте доступный лимит API в The X Subscription. Доступность и ограничения указаны в вашем аккаунте Grok Dashboard.',
       'Выберите Grok Inference (не Cursor) и разрешите Chat и выбранную модель.','Создать Grok API Key','Посмотреть использование',
       'xAI Console · Оплата за использование','Купите API-кредиты и платите за использованные токены и инструменты. Управляйте использованием и счетами в xAI Console.','Keys и счета',
       'Проверяйте использование и расходы на сайте, где создали Key.',
@@ -1070,7 +1070,7 @@
     ],
     hi:[
       'कनेक्शन','SuperX चालू करें','Grok API Key','अपनी Grok API Key पेस्ट करें','grok.com और xAI Console की Grok API Keys यहाँ काम करती हैं।','Grok API Key लें या उपयोग देखें',
-      'grok.com · सदस्यता','The X Subscription की पात्र API सीमा का उपयोग करें। उपलब्धता और सीमाएँ अपने Grok Dashboard खाते में देखें।',
+      'grok.com · The X Subscription','The X Subscription की पात्र API सीमा का उपयोग करें। उपलब्धता और सीमाएँ अपने Grok Dashboard खाते में देखें।',
       'Grok Inference चुनें (Cursor नहीं) और Chat व चुने गए मॉडल की अनुमति दें।','Grok API Key बनाएँ','उपयोग देखें',
       'xAI Console · उपयोग के अनुसार भुगतान','API क्रेडिट खरीदें और इस्तेमाल किए गए टोकन व टूल के लिए भुगतान करें। xAI Console में उपयोग और बिलिंग सँभालें।','Keys और बिलिंग',
       'जिस साइट पर Key बनाई थी, वहीं उपयोग और शुल्क देखें।',
@@ -1079,6 +1079,20 @@
       'तेज़ जवाब और कम टोकन कीमतों के लिए grok-4.3 सुझाया जाता है।',
       'केवल चुने गए मॉडल के समर्थित स्तर दिखते हैं। ऊँचे स्तर अधिक समय और टोकन ले सकते हैं।'
     ]
+  });
+  section(['options.recommended'],{
+    en:['Recommended'],
+    'zh-CN':['推荐'],
+    'zh-TW':['推薦'],
+    ja:['おすすめ'],
+    ko:['추천'],
+    es:['Recomendado'],
+    fr:['Recommandé'],
+    de:['Empfohlen'],
+    pt:['Recomendado'],
+    ar:['موصى به'],
+    ru:['Рекомендуется'],
+    hi:['अनुशंसित']
   });
   section(["retry.waiting","retry.running","retry.exhausted"], {
     "en": ["Retrying in {seconds}s ({attempt}/{max})","Automatic retry {attempt}/{max}","Still unsuccessful after {max} automatic retries. You can retry manually."],

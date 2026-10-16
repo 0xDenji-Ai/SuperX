@@ -254,17 +254,18 @@ test('API access copy separates subscription allowance, metered billing and opti
 
 test('compact connection and Key guidance is translated without guessing account type or claiming authentication',()=>{
   const keys=['options.source','options.enable','options.apiKeyLabel','options.keyPlaceholder','options.apiKeyHint','options.apiAccess',
-    'options.apiSubscriptionTitle','options.apiSubscriptionHelp','options.apiSubscriptionSetup','options.apiSubscriptionLink','options.dashboardUsage',
+    'options.apiSubscriptionTitle','options.apiSubscriptionHelp','options.apiSubscriptionSetup','options.apiSubscriptionLink','options.dashboardUsage','options.recommended',
     'options.apiMeteredTitle','options.apiMeteredHelp','options.apiMeteredLink','options.apiAccountHelp','options.rememberHelp',
     'options.keyReadySaved','options.keyReady','options.keyMissing','options.keyMigration','options.modelHelp','options.reasoningHelp'];
   for(const language of ui.SUPPORTED_LANGUAGES){
     for(const key of keys){
       const value=ui.catalog[language][key];assert.equal(typeof value,'string',`${language}: ${key}`);assert.ok(value.trim(),`${language}: ${key}`);
       assert.equal(ui.t(key,language),value);assert.doesNotMatch(value,/<\/?[A-Za-z][^>]*>|\{[A-Za-z][A-Za-z0-9_]*\}/,`${language}: ${key}`);
-      if(language!=='en'&&key!=='options.apiKeyLabel')assert.notEqual(value,ui.catalog.en[key],`${language}: ${key} is translated`);
+      if(language!=='en'&&!['options.apiKeyLabel','options.apiSubscriptionTitle'].includes(key))assert.notEqual(value,ui.catalog.en[key],`${language}: ${key} is translated`);
     }
     assert.match(ui.t('options.enable',language),/SuperX/);
     assert.equal(ui.t('options.apiKeyLabel',language),'Grok API Key');
+    assert.equal(ui.t('options.apiSubscriptionTitle',language),'grok.com · The X Subscription');
     assert.match(ui.t('options.apiKeyHint',language),/grok\.com/);assert.match(ui.t('options.apiKeyHint',language),/xAI Console/);
     assert.match(ui.t('options.apiSubscriptionSetup',language),/Grok Inference/);assert.match(ui.t('options.apiSubscriptionSetup',language),/Cursor/);assert.match(ui.t('options.apiSubscriptionSetup',language),/Chat/);
     assert.match(ui.t('options.modelHelp',language),/grok-4\.3/);assert.doesNotMatch(ui.t('options.modelHelp',language),/grok-4\.[567]/);
@@ -279,7 +280,7 @@ test('compact connection and Key guidance is translated without guessing account
   assert.equal(ui.t('options.keyPlaceholder','en'),'Paste your Grok API Key');
   assert.equal(ui.t('options.apiKeyHint','en'),'Grok API Keys from grok.com and xAI Console both work here.');
   assert.equal(ui.t('options.apiAccess','en'),'Get a Grok API Key or check usage');
-  assert.equal(ui.t('options.apiSubscriptionTitle','en'),'grok.com · Subscription');
+  assert.equal(ui.t('options.apiSubscriptionTitle','en'),'grok.com · The X Subscription');
   assert.equal(ui.t('options.apiSubscriptionLink','en'),'Create Grok API Key');assert.equal(ui.t('options.dashboardUsage','en'),'View usage');
   assert.equal(ui.t('options.apiMeteredTitle','en'),'xAI Console · Pay as you go');assert.equal(ui.t('options.apiMeteredLink','en'),'Keys & billing');
   assert.equal(ui.t('options.apiAccountHelp','en'),'Check usage and charges at the site where you created your Key.');

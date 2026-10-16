@@ -308,6 +308,13 @@
     const interfaceLanguage = $("interface-language").value || currentSettings.interfaceLanguage;
     uiLanguage = ui.resolveLanguage(interfaceLanguage,observedUILanguage);
     ui.apply(document,uiLanguage);
+    // Keep a real, fixed-destination link inside localized plain text. Locale
+    // refreshes must neither parse HTML nor reset the user's details toggle.
+    const subscriptionName="The X Subscription",subscriptionHelp=ui.t("options.apiSubscriptionHelp",uiLanguage);
+    const subscriptionIndex=subscriptionHelp.indexOf(subscriptionName);
+    $("api-subscription-before").textContent=subscriptionIndex<0?subscriptionHelp:subscriptionHelp.slice(0,subscriptionIndex);
+    $("api-subscription-link").hidden=subscriptionIndex<0;
+    $("api-subscription-after").textContent=subscriptionIndex<0?"":subscriptionHelp.slice(subscriptionIndex+subscriptionName.length);
     setHistoryStatus(historyStatusKey);
     document.title = `SuperX · ${ui.t("common.settings",uiLanguage)}`;
     $("extension-version").textContent = ui.t("options.version",uiLanguage,{version:chrome.runtime.getManifest().version});

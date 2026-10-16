@@ -54,12 +54,12 @@
               <input id="api-key" type="password" maxlength="500" data-i18n-placeholder="options.keyPlaceholder" placeholder="Paste your Grok API Key" autocomplete="off" spellcheck="false" dir="ltr" aria-describedby="key-help key-security-state">
               <p id="key-help" class="help" data-i18n="options.apiKeyHint">Keys from grok.com and xAI Console both work here.</p>
             </div>
-            <details id="api-access-guide" class="api-access-guide">
+            <details id="api-access-guide" class="api-access-guide" open>
               <summary data-i18n="options.apiAccess">Get a Grok API Key or check usage</summary>
               <div class="api-access-options">
                 <div>
-                  <h3 data-i18n="options.apiSubscriptionTitle">grok.com · Subscription</h3>
-                  <p class="help" data-i18n="options.apiSubscriptionHelp">Use eligible API access from The X Subscription. Check your allowance and limits in Grok Dashboard.</p>
+                  <h3 class="api-source-heading"><span data-i18n="options.apiSubscriptionTitle" dir="ltr">grok.com · The X Subscription</span><span class="recommendation-badge" data-i18n="options.recommended">Recommended</span></h3>
+                  <p id="api-subscription-help" class="help"><span id="api-subscription-before">Use eligible API allowance from </span><a id="api-subscription-link" href="https://docs.x.ai/x-subscription/overview" target="_blank" rel="noopener noreferrer" dir="ltr">The X Subscription</a><span id="api-subscription-after">. Check your Grok Dashboard account for availability and limits.</span></p>
                   <p class="help" data-i18n="options.apiSubscriptionSetup">Choose Grok Inference (not Cursor) and allow Chat and your chosen model.</p>
                   <div class="api-access-links">
                     <a href="https://grok.com/dashboard/api-keys" target="_blank" rel="noopener noreferrer" data-i18n="options.apiSubscriptionLink">Create Grok API Key</a>
