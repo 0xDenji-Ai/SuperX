@@ -46,7 +46,7 @@
             <label for="provider" data-i18n="options.providerChoice">Connect with</label>
             <select id="provider" required aria-describedby="source-description">
               <option value="api" data-i18n="options.providerKey">API Key</option>
-              <option value="build" data-i18n="options.providerBuild">Grok Build · Official login</option>
+              <option value="build" data-i18n="options.providerBuild">Grok CLI / ACP · Official local connection</option>
             </select>
           </div>
           <label class="switch-label"><span data-i18n="options.enable">Enable</span><input id="enabled" type="checkbox" role="switch"><span class="switch-track" aria-hidden="true"></span></label>
@@ -97,27 +97,33 @@
             <div class="onboarding" aria-labelledby="build-setup-heading">
               <h3 id="build-setup-heading" data-i18n="options.buildSetup">Connect Grok Build</h3>
               <ol>
-                <li data-i18n="options.buildStep1">Install the SuperX connector for Windows or macOS.</li>
-                <li data-i18n="options.buildStep2">Install official Grok Build and sign in with your account.</li>
-                <li data-i18n="options.buildStep3">Check the connection below, then save settings.</li>
+                <li data-i18n="options.buildStep1">Install official Grok for Windows or macOS and sign in.</li>
+                <li data-i18n="options.buildStep2">Generate a local launch command below and run it in your terminal.</li>
+                <li data-i18n="options.buildStep3">Keep the terminal open, check the connection, then save.</li>
               </ol>
               <div class="onboarding-actions">
-                <button id="connector-guide" class="secondary-button" type="button" data-i18n="options.connectorGuide">Install connector · Windows / macOS</button>
-                <a href="https://x.ai/cli" target="_blank" rel="noopener noreferrer" data-i18n="options.officialBuild">Official Grok Build setup</a>
+                <button id="build-guide" class="secondary-button" type="button" data-i18n="options.connectorGuide">Step-by-step guide · Windows / macOS</button>
+                <a href="https://github.com/xai-org/grok-build" target="_blank" rel="noopener noreferrer" data-i18n="options.officialBuild">Official Grok installation</a>
               </div>
             </div>
             <div class="field">
-              <label for="build-transport" data-i18n="options.buildTransport">Connection mode</label>
-              <select id="build-transport" required aria-describedby="build-transport-help">
-                <option value="acp" data-i18n="options.transportACP">ACP · Recommended</option>
-                <option value="cli" data-i18n="options.transportCLI">CLI · Compatibility</option>
-              </select>
-              <p id="build-transport-help" class="help" data-i18n="options.transportHelp">ACP reuses a local process; CLI runs a separate command for each task. Both use the same official account.</p>
+              <label for="build-platform" data-i18n="build.platform">Your computer</label>
+              <select id="build-platform"><option value="windows">Windows</option><option value="macos">macOS</option></select>
+              <div class="launch-actions"><button id="generate-build-command" class="secondary-button" type="button" data-i18n="build.generate">Generate launch command</button></div>
+              <div id="build-launch" hidden><div class="launch-command"><code id="build-command" dir="ltr" tabindex="0"></code><button id="copy-build-command" class="secondary-button" type="button" data-i18n="common.copy">Copy</button></div><p class="help" data-i18n="build.commandPrivate"></p></div>
+              <p class="help" data-i18n="build.commandHelp">Run the command in PowerShell (Windows) or Terminal (macOS). Close that window to stop the local service.</p>
+              <p class="help" data-i18n="build.localPrivacy">The service listens only on this computer. SuperX connects directly to official Grok; no SuperX relay or additional SuperX software is installed.</p>
+            </div>
+            <details class="connection-details"><summary data-i18n="build.details">Connection details (optional)</summary><div class="field connection-fields">
+              <div><label for="build-port" data-i18n="build.port">Local port</label><input id="build-port" type="number" min="1024" max="65535" step="1" value="2419" required aria-describedby="build-address"><p id="build-address" class="help" dir="ltr"></p></div>
+              <div><label for="build-secret" data-i18n="build.code">Local connection code</label><input id="build-secret" type="password" maxlength="256" autocomplete="off" spellcheck="false" dir="ltr" aria-describedby="build-secret-help"><p id="build-secret-help" class="help" data-i18n="build.codeHelp">Generated automatically with the command, or paste the code of an existing local service. This is not your Grok account password.</p></div>
+            </div></details>
+            <div class="connection-actions"><button id="clear-build-connection" class="text-button" type="button" data-i18n="build.clear">Forget local connection</button></div>
             </div>
             <div class="field">
               <label for="build-model" data-i18n="options.model">Model</label>
               <select id="build-model" required aria-describedby="build-model-help build-fast-help"></select>
-              <p id="build-model-help" class="help" data-i18n="options.buildModelHelp">Model and reasoning availability depends on your Grok Build version and account. The connector checks support when connecting.</p>
+              <p id="build-model-help" class="help" data-i18n="options.buildModelHelp">Available models and reasoning levels are checked with official Grok when connecting.</p>
               <p id="build-fast-help" class="help" hidden></p>
               <p id="build-model-status" class="help" role="status" aria-live="polite"></p>
             </div>

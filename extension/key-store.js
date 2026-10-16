@@ -52,6 +52,8 @@
   }
 
   function create(options = {}) {
+    const record = options.purpose === 'build-connection' ? 'build-connection-aes-gcm-v1' : RECORD;
+    const context = options.purpose === 'build-connection' ? 'SuperX local connection storage/v1 AES-256-GCM' : CONTEXT;
     const idb = options.indexedDB || root.indexedDB;
     const crypto = options.crypto || root.crypto;
     const setTimer = options.setTimeout || root.setTimeout.bind(root);
@@ -144,7 +146,7 @@
       });
     }
     async function readKey(allowRepair = false) {
-      const key = await transaction('readonly', (store, request, result) => request(store.get(RECORD), result));
+      const key = await transaction('readonly', (store, request, result) => request(store.get(record), result));
       if (key === undefined) return null;
       if (!validCryptoKey(key)) { if (allowRepair) return null; throw unavailable(); }
       return key;
@@ -159,10 +161,10 @@
       // Re-read inside the writer transaction: another worker may have stored a
       // Key between the first read and generation. Never overwrite that Key.
       const committed = await transaction('readwrite', (store, request, result) => {
-        request(store.get(RECORD), stored => {
+        request(store.get(record), stored => {
           if (validCryptoKey(stored)) {
             result(stored);
-          } else request(store.put(candidate, RECORD), () => result(candidate));
+          } else request(store.put(candidate, record), () => result(candidate));
         });
       });
       // Read the structured-cloned durable record, not merely the generated
@@ -175,7 +177,7 @@
       if (!isEnvelope(envelope) || !validCryptoKey(key)) throw unavailable();
       const iv = base64ToBytes(envelope.iv, 12);
       const ciphertext = base64ToBytes(envelope.ciphertext, MAX_CIPHERTEXT_BYTES);
-      const plaintext = await crypto.subtle.decrypt({ name: 'AES-GCM', iv, additionalData: new TextEncoder().encode(CONTEXT), tagLength: 128 }, key, ciphertext);
+      const plaintext = await crypto.subtle.decrypt({ name: 'AES-GCM', iv, additionalData: new TextEncoder().encode(context), tagLength: 128 }, key, ciphertext);
       const raw = new TextDecoder('utf-8', { fatal: true }).decode(plaintext);
       if (!validRaw(raw) || raw !== raw.trim()) throw unavailable();
       return raw;
@@ -187,7 +189,7 @@
         try {
           const key = await keyForSealing();
           const iv = crypto.getRandomValues(new Uint8Array(12));
-          const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv, additionalData: new TextEncoder().encode(CONTEXT), tagLength: 128 }, key, new TextEncoder().encode(raw));
+          const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv, additionalData: new TextEncoder().encode(context), tagLength: 128 }, key, new TextEncoder().encode(raw));
           const envelope = { version: 1, algorithm: 'AES-GCM', iv: bytesToBase64(iv), ciphertext: bytesToBase64(new Uint8Array(ciphertext)) };
           if (await decrypt(envelope, key) !== raw) throw unavailable();
           return envelope;
@@ -206,7 +208,7 @@
     }
     function clear() {
       return serialize(async () => {
-        try { await transaction('readwrite', (store, request) => request(store.delete(RECORD), () => {})); }
+        try { await transaction('readwrite', (store, request) => request(store.delete(record), () => {})); }
         catch { throw unavailable(); }
       });
     }
@@ -214,5 +216,6 @@
   }
   const api = Object.freeze({ ...create(), create });
   root.SuperXKeyStore = api;
+  root.SuperXBuildConnectionStore = create({purpose:'build-connection'});
   if (typeof module === 'object' && module.exports) module.exports = api;
 })(globalThis);

@@ -1,8 +1,9 @@
 /* SuperX: credentials and provider calls stay in the extension worker. */
-importScripts('feed-core.js', 'api-provider.js', 'build-provider.js', 'ui-i18n.js', 'key-store.js', 'history-store.js');
+importScripts('feed-core.js', 'api-provider.js', 'build-acp.js', 'build-transport.js', 'build-provider.js', 'build-setup.js', 'ui-i18n.js', 'key-store.js', 'history-store.js');
 const Core = XGrokCore;
 const UI = GrokFirstUI;
 const KeyStore = SuperXKeyStore;
+const BuildKeyStore = SuperXBuildConnectionStore;
 const history = SuperXHistoryStore.create(chrome.storage.local);
 const HISTORY_ALARM = 'SUPERX_HISTORY_CLEANUP';
 const clients = new Set();
@@ -15,15 +16,19 @@ let quotaWrites = Promise.resolve(), cacheWrites = Promise.resolve(), railStateW
 let securityWrites = Promise.resolve(), securityPending = 0, securityGeneration = 0;
 let hasSavedKey = false, rememberApiKey = true, credentialReady = false, securityFault = false, sealAttempted = false;
 let buildStatus = {connected:false,installed:false,available:false,errorCode:'BUILD_NOT_CONNECTED'}, buildStatusAt = 0, buildStatusPending;
+let buildSecret='',buildConnectionGeneration=0,buildConnectionPending=0;
 const CACHE_TTL = 24 * 60 * 60 * 1000;
 const ready = initialize();
 
 async function initialize() {
   await chrome.storage.local.setAccessLevel({accessLevel:'TRUSTED_CONTEXTS'});
   await chrome.storage.session.setAccessLevel({accessLevel:'TRUSTED_CONTEXTS'});
-  const local = await chrome.storage.local.get(['settings','uiLanguage','apiKey','apiKeyEncrypted','apiKeyVault','rememberApiKey']);
+  const local = await chrome.storage.local.get(['settings','uiLanguage','apiKey','apiKeyEncrypted','apiKeyVault','rememberApiKey','buildConnectionEncrypted']);
   const session = await chrome.storage.session.get(['quotas','railStates','uiLanguage','apiKey','cache','securityFault']);
   settings = Core.normalizeSettings(local.settings);
+  if(BuildKeyStore.envelopePresent(local.buildConnectionEncrypted)){
+    try{const secret=await BuildKeyStore.open(local.buildConnectionEncrypted);if(validBuildSecret(secret))buildSecret=secret;}catch{/* Reconnect locally; API Key remains independent. */}
+  }
   securityFault = session.securityFault === true;
   const storedCredential=KeyStore.envelopePresent(local.apiKeyEncrypted)||validKey(local.apiKey)||local.apiKeyVault!==undefined;
   rememberApiKey = typeof local.rememberApiKey === 'boolean' ? local.rememberApiKey : Boolean(storedCredential) || !validKey(session.apiKey);
@@ -72,21 +77,81 @@ async function initialize() {
 }
 function validKey(value) { return typeof value==='string' && Boolean(value.trim()) && value.length<=500 && !/[\r\n]/.test(value); }
 function securityAllowsCalls() { return !securityFault && credentialReady && securityPending===0; }
-function buildReady() { return buildStatus.connected===true&&buildStatus.installed===true&&buildStatus.available===true&&buildStatus.authenticated===true&&buildStatus.permission!==false; }
+function buildReady() { return buildConnectionPending===0&&validBuildSecret(buildSecret)&&buildStatus.connected===true&&buildStatus.installed===true&&buildStatus.available===true&&buildStatus.authenticated===true&&buildStatus.permission!==false; }
 function providerAllowsCalls(s=settings) { return s?.provider==='build'?buildReady():securityAllowsCalls(); }
+function validBuildSecret(value){return typeof value==='string'&&/^[A-Za-z0-9_-]{24,256}$/.test(value)&&! /^(?:xai|sk)-/i.test(value);}
+function buildConnection(input={}){
+  const port=input.port===undefined?settings.buildPort:input.port,secret=input.secret===undefined?buildSecret:input.secret;
+  if(!Number.isInteger(port)||port<1024||port>65535||!validBuildSecret(secret))throw Object.assign(new Error('Invalid local connection settings.'),{code:'BUILD_CONNECTION_REQUIRED'});
+  return {port,secret};
+}
+async function probeBuild(connection){
+  if(chrome.permissions?.contains&&!await chrome.permissions.contains({origins:['http://127.0.0.1/*']}))return {connected:false,installed:false,available:false,errorCode:'BUILD_PERMISSION_REQUIRED'};
+  return SuperXBuild.status({connection});
+}
+function sameBuildConnection(value){return value.port===settings.buildPort&&value.secret===buildSecret;}
+async function checkBuildDraft(message){
+  let connection;
+  try{connection=buildConnection(message);}catch(error){return {ok:true,connected:false,available:false,ready:false,errorCode:error.code};}
+  if([...runningJobs].some(job=>job.settings.provider==='build')){
+    if(sameBuildConnection(connection))return {ok:true,...buildStatus,ready:buildReady(),busy:true};
+    return {ok:true,connected:false,available:false,ready:false,errorCode:'BUILD_BUSY'};
+  }
+  if(sameBuildConnection(connection)){const status=await refreshBuildStatus(true);void broadcastConfig();return {ok:true,...status,ready:buildReady()};}
+  const status=await probeBuild(connection);
+  return {ok:true,...status,ready:status.available===true&&status.authenticated===true&&status.connected===true};
+}
+function newBuildSecret(){const bytes=new Uint8Array(32);crypto.getRandomValues(bytes);return 'superx_'+[...bytes].map(value=>value.toString(16).padStart(2,'0')).join('');}
+function buildStorageError(){return {ok:false,errorKey:'build.storageError'};}
+function queueBuildConnection(message,clear=false){
+  let connection;
+  try{if(!clear)connection=buildConnection(message);}catch{return Promise.resolve({ok:false,errorKey:'build.codeRequired'});}
+  const next=message.settings===undefined?undefined:Core.normalizeSettings({...message.settings,buildPort:connection?.port??settings.buildPort});
+  if(next&&!next.webSearch&&!next.xSearch)return Promise.resolve({ok:false,errorKey:'options.urlSearchRequired'});
+  if(!clear&&sameBuildConnection(connection))return queueSettingsMutation(next??settings);
+  const generation=++buildConnectionGeneration;buildConnectionPending++;
+  for(const job of [...jobs.values()].filter(job=>job.settings.provider==='build'))abortJob(job);
+  buildStatusAt=0;buildStatus={connected:false,available:false,installed:false,errorCode:'BUILD_CONNECTION_REQUIRED'};
+  void broadcastConfig();
+  const operation=securityWrites.catch(()=>{}).then(async()=>{
+    let failure;
+    try{
+      await SuperXBuild.close?.();
+      if(clear){await chrome.storage.local.remove('buildConnectionEncrypted');await BuildKeyStore.clear();buildSecret='';}
+      else{
+        const envelope=await BuildKeyStore.seal(connection.secret);
+        if(!BuildKeyStore.isEnvelope(envelope)||await BuildKeyStore.open(envelope)!==connection.secret)throw 0;
+        await chrome.storage.local.set({buildConnectionEncrypted:envelope});
+        const saved=await chrome.storage.local.get('buildConnectionEncrypted');
+        if(!BuildKeyStore.isEnvelope(saved.buildConnectionEncrypted)||await BuildKeyStore.open(saved.buildConnectionEncrypted)!==connection.secret)throw 0;
+        buildSecret=connection.secret;
+        await saveSettings(next??{...settings,buildPort:connection.port});
+      }
+      cache=Object.fromEntries(Object.entries(cache).filter(([key])=>{try{return JSON.parse(key)[1]!=='build';}catch{return true;}}));cacheEpoch++;await persistCache(cacheEpoch);
+    }catch{failure=buildStorageError();buildSecret='';}
+    finally{buildConnectionPending--;}
+    if(generation===buildConnectionGeneration){buildStatusAt=0;buildStatus={connected:false,installed:false,available:false,errorCode:'BUILD_CONNECTION_REQUIRED'};}
+    await broadcastConfig();return failure??{ok:true,configured:validBuildSecret(buildSecret),port:settings.buildPort};
+  });securityWrites=operation;return operation;
+}
 async function refreshBuildStatus(force=false) {
-  // A STATUS queued behind a long native task would hit its short probe
+  // A second WebSocket would steal official streaming notifications. Reuse
   // timeout. Reuse the last authenticated status while this worker has an
   // accepted Build task; probing must not cancel or hide paid work.
   if(buildReady()&&[...runningJobs].some(job=>job.settings.provider==='build')){buildStatusAt=Date.now();return {...buildStatus,busy:true};}
+  if(buildConnectionPending)return buildStatus;
   if(buildStatusPending)return buildStatusPending;
   if(!force&&Date.now()-buildStatusAt<10000)return buildStatus;
-  buildStatusPending=(async()=>{
-    try {buildStatus=await SuperXBuild.status();}
-    catch(error){buildStatus={connected:false,installed:false,available:false,errorCode:SuperXBuild.publicError(error).code};}
-    buildStatusAt=Date.now();return buildStatus;
+  const generation=buildConnectionGeneration;
+  const pending=(async()=>{
+    try {const status=await probeBuild(buildConnection());if(generation===buildConnectionGeneration)buildStatus=status;}
+    catch(error){if(generation===buildConnectionGeneration)buildStatus={connected:false,installed:false,available:false,errorCode:SuperXBuild.publicError(error).code};}
+    if(generation===buildConnectionGeneration)buildStatusAt=Date.now();return buildStatus;
   })();
-  try{return await buildStatusPending;}finally{buildStatusPending=undefined;}
+  buildStatusPending=pending;
+  try{await pending;}finally{if(buildStatusPending===pending)buildStatusPending=undefined;}
+  if(generation!==buildConnectionGeneration&&!buildConnectionPending)return refreshBuildStatus(force);
+  return buildStatus;
 }
 function ensureBuildStatus(){
   if(!buildStatusPending&&(!buildStatusAt||Date.now()-buildStatusAt>10000))void refreshBuildStatus().then(()=>broadcastConfig()).then(()=>pump()).catch(()=>{});
@@ -109,7 +174,7 @@ async function publicConfig() {
   const status=securityStatus();
   const historyConfig=history.config();
   if(settings.provider==='build')ensureBuildStatus();
-  return {settings,ready:providerAllowsCalls(),keyState:status.keyState,...(settings.provider==='build'?{buildStatus:{...buildStatus,ready:buildReady()}}:{}),historyEnabled:historyConfig.enabled,historyEpoch:historyConfig.epoch};
+  return {settings,ready:providerAllowsCalls(),keyState:status.keyState,...(settings.provider==='build'?{buildStatus:{...buildStatus,ready:buildReady()}}:{}),buildConnection:{configured:validBuildSecret(buildSecret),port:settings.buildPort},historyEnabled:historyConfig.enabled,historyEpoch:historyConfig.epoch};
 }
 async function notifyHistoryChanged(){await chrome.runtime.sendMessage({type:'HISTORY_CHANGED',...history.config()}).catch(()=>{});}
 async function broadcastHistoryConfig(){
@@ -159,7 +224,7 @@ function sanitizePost(raw) {
 function cacheKey(post, s, inputFingerprint) {
   const mode=Core.explanationMode(s);
   const prompts=['fact-check-prompts-v1',mode==='preset'?Core.DEFAULT_PROMPTS.verify:s.verifyPrompt];
-  return JSON.stringify(['GrokFirst-v1',s.provider,s.provider==='build'?[s.buildTransport,s.buildModel]:s.apiModel,s.language,s.webSearch,s.xSearch,
+  return JSON.stringify(['GrokFirst-v1',s.provider,s.provider==='build'?['official-ws-v1',s.buildPort,s.buildModel]:s.apiModel,s.language,s.webSearch,s.xSearch,
     'api-v10-model-reasoning',mode,'only',
     Core.apiPostIdentity(post,s),...prompts,s.provider==='build'?s.buildReasoningEffort:Core.reasoningEffort(s.apiModel,s.apiReasoningEffort)]);
 }
@@ -172,7 +237,7 @@ function sanitizeAnalysis(raw) {
 }
 function commentCacheKey(post,s,inputFingerprint,analysis) {
   const prompts=['comments-prompt-v1',s.commentsPrompt];
-  return JSON.stringify(['GrokFirst-comments-v2-language',s.provider,s.provider==='build'?[s.buildTransport,s.buildModel]:s.apiModel,s.language,Core.postFingerprint(post),analysis,...prompts,s.provider==='build'?s.buildReasoningEffort:Core.reasoningEffort(s.apiModel,s.apiReasoningEffort)]);
+  return JSON.stringify(['GrokFirst-comments-v2-language',s.provider,s.provider==='build'?['official-ws-v1',s.buildPort,s.buildModel]:s.apiModel,s.language,Core.postFingerprint(post),analysis,...prompts,s.provider==='build'?s.buildReasoningEffort:Core.reasoningEffort(s.apiModel,s.apiReasoningEffort)]);
 }
 function commentsJob(job) { return job.settings.task==='comments'; }
 function billingMetadata(value,provider) { return ['api','build'].includes(provider)?GrokFirstAPI.sanitizedMetadata(value):{}; }
@@ -254,7 +319,7 @@ chrome.runtime.onConnect.addListener(port => {
   const client = {port,tabId:port.sender.tab.id,cancelEpoch:0,uiLanguage:null,requestCancellations:new Map()}; clients.add(client);
   ready.then(async()=>{client.uiLanguage=UI.normalizeLanguage(client.uiLanguage || uiLanguage);send(port,{type:'CONFIG',...await publicConfig(),used:quotas[client.tabId] || 0,collapsed:Boolean(railStates[client.tabId]),uiLanguage:client.uiLanguage});}).catch(()=>send(port,{type:'FATAL',error:'扩展初始化失败，请重新加载扩展。'}));
   port.onMessage.addListener(message=>{
-    const receivedEpoch=client.cancelEpoch,receivedRevision=revision;
+    const receivedEpoch=client.cancelEpoch,receivedRevision=revision,receivedCredentialGeneration=securityGeneration,receivedBuildGeneration=buildConnectionGeneration;
     const messageRequestId=String(message.requestId || '').slice(0,80);
     // Cancellation can arrive before an asynchronous readiness lookup has
     // created a job. Capture a receipt generation so it cannot dispatch later;
@@ -303,7 +368,7 @@ chrome.runtime.onConnect.addListener(port => {
       const requestId=messageRequestId;
       if(!requestId) return;
       if(client.requestCancellations.get(requestId)!==receivedCancellation)return;
-      if(client.cancelEpoch!==receivedEpoch || receivedRevision!==revision){report('任务已取消。','CANCELLED');return;}
+      if(client.cancelEpoch!==receivedEpoch || receivedRevision!==revision||(settings.provider==='build'?receivedBuildGeneration!==buildConnectionGeneration:receivedCredentialGeneration!==securityGeneration)){report('任务已取消。','CANCELLED');return;}
       if(settings.provider!=='build'&&(securityPending || securityFault)) { report('API Key 设置需要重新确认，请在设置中重试。','NEEDS_KEY');return; }
       const snapshot={...settings,...(comments?{task:'comments'}:{})};
       if(!settings.enabled&&!comments) { report('已暂停自动分析。','PAUSED'); return; }
@@ -317,7 +382,7 @@ chrome.runtime.onConnect.addListener(port => {
       const cached=message.force ? null : cachedResult(fingerprint);
       if(cached) { rememberHistoryResult(ticket,cached,comments,historyLanguage);send(port,comments?{type:'COMMENT_RESULT',requestId,comments:cached.comments,cached:true,...billingMetadata(cached,snapshot.provider)}:{type:'RESULT',requestId,result:withBillingMetadata(cached,snapshot.provider,snapshot.apiVerification),cached:true}); return; }
       const config=await publicConfig();
-      if(!clients.has(client)||client.cancelEpoch!==receivedEpoch||receivedRevision!==revision||client.requestCancellations.get(requestId)!==receivedCancellation)return;
+      if(!clients.has(client)||client.cancelEpoch!==receivedEpoch||receivedRevision!==revision||client.requestCancellations.get(requestId)!==receivedCancellation||(snapshot.provider==='build'?receivedBuildGeneration!==buildConnectionGeneration:receivedCredentialGeneration!==securityGeneration))return;
       if(railStates[client.tabId]){report('右栏已收起。','RAIL_COLLAPSED');return;}
       if(!config.ready) { report(settings.provider==='build'?'请在设置中连接 Grok Build。':'请打开设置并输入 xAI API Key。',settings.provider==='build'?(buildStatus.errorCode||'BUILD_NOT_CONNECTED'):'NEEDS_KEY'); return; }
       const key=`${client.tabId}:${requestId}`;
@@ -357,8 +422,8 @@ function pauseWaitingJobs() {
 }
 function stopUnavailableBuild(code) {
   buildStatus={...buildStatus,available:false,errorCode:code};buildStatusAt=Date.now();
-  for(const waiting of [...queue]){jobError(waiting,SuperXBuild.publicError({code}).error,code);removeJob(waiting);}
-  queue=[];void broadcastConfig();
+  for(const waiting of [...queue].filter(job=>job.settings.provider==='build')){jobError(waiting,SuperXBuild.publicError({code}).error,code);removeJob(waiting);}
+  queue=queue.filter(job=>job.settings.provider!=='build');void broadcastConfig();
 }
 function pump() {
   if(pumping || !providerAllowsCalls())return;
@@ -398,7 +463,7 @@ async function executeJob(job) {
       if(liveJob(job)&&!commentsJob(job))send(client.port,{type:'UPDATE',requestId,...(hasText?{text}:{}),phase:update.phase,
         verificationStatus:update.verificationStatus,warning:update.warning,sources:update.sources,...job.billing,...verificationMetadata(update,job.settings.apiVerification,text||'')});
     };
-    const result=withBillingMetadata(await waitForAbort(runAPI(job,onUpdate),signal),job.settings.provider,commentsJob(job)?undefined:job.settings.apiVerification);
+    const result=withBillingMetadata(await (job.settings.provider==='build'?runAPI(job,onUpdate):waitForAbort(runAPI(job,onUpdate),signal)),job.settings.provider,commentsJob(job)?undefined:job.settings.apiVerification);
     if(!liveJob(job))return;
     job.billing=billingMetadata(result,job.settings.provider);
     releaseAPISlot(job);pump();
@@ -421,6 +486,7 @@ async function executeJob(job) {
     }
     if(liveJob(job))send(client.port,commentsJob(job)?{type:'COMMENT_RESULT',requestId,comments:result.comments,cached:false,...job.billing}:{type:'RESULT',requestId,result,cached:false});
   } catch(e) {
+    if(job.settings.provider==='build'&&e.code==='BUILD_CANCEL_UNCONFIRMED'){stopUnavailableBuild(e.code);if(!liveJob(job)&&clients.has(client))jobError(job,SuperXBuild.publicError(e).error,e.code);}
     if(liveJob(job)) {
       const errorBilling={...job.billing,...billingMetadata(e.partialResult,job.settings.provider),...billingMetadata(e,job.settings.provider)};
       const partialText=Core.readerOutput(e.partialResult?.text,{final:true}).text.slice(0,30000);
@@ -429,7 +495,7 @@ async function executeJob(job) {
       if(partialResult)rememberHistoryResult(job.historyTicket,{...partialResult,completedAt:Date.now()},false,job.historyLanguage);
       jobError(job,safeError.error,safeError.code,{...errorBilling,...(commentsJob(job)?{}:{...verificationMetadata({verificationFailure:e.verificationFailure||partialResult?.verificationFailure},job.settings.apiVerification),partialResult})});
       if(e.code==='RATE_LIMIT')pauseWaitingJobs();
-      if(job.settings.provider==='build'&&['BUILD_NATIVE_MISSING','BUILD_PERMISSION_REQUIRED','BUILD_LOGIN_REQUIRED','BUILD_VERSION_UNSUPPORTED','BUILD_CONFIG_UNSUPPORTED','BUILD_TOOL_POLICY','BUILD_DISCONNECTED','BUILD_UNAVAILABLE'].includes(safeError.code))stopUnavailableBuild(safeError.code);
+      if(job.settings.provider==='build'&&['BUILD_CONNECTION_REQUIRED','BUILD_CANCEL_UNCONFIRMED','BUILD_PERMISSION_REQUIRED','BUILD_LOGIN_REQUIRED','BUILD_VERSION_UNSUPPORTED','BUILD_CONFIG_UNSUPPORTED','BUILD_TOOL_POLICY','BUILD_DISCONNECTED','BUILD_UNAVAILABLE'].includes(safeError.code))stopUnavailableBuild(safeError.code);
     } else if(signal.aborted && clients.has(client) && job.revision===revision && (!jobs.has(job.key)||jobs.get(job.key)===job)) {
       const reason=signal.reason;
       const timedOut=reason?.code==='TIMEOUT';
@@ -448,8 +514,11 @@ async function executeJob(job) {
 async function runAPI(job,onUpdate) {
   const signal=job.controller.signal;
   if(job.settings.provider==='build'){
-    if(commentsJob(job))return SuperXBuild.generateComments(job.post,job.settings,{analysis:job.analysis,signal});
-    return SuperXBuild.run(job.post,job.settings,{signal,onUpdate});
+    const connection=buildConnection({port:job.settings.buildPort});
+    if(chrome.permissions?.contains&&!await chrome.permissions.contains({origins:['http://127.0.0.1/*']}))throw Object.assign(new Error('Local connection access was removed.'),{code:'BUILD_PERMISSION_REQUIRED'});
+    if(!liveJob(job))throw signal.reason||new DOMException('Cancelled','AbortError');
+    if(commentsJob(job))return SuperXBuild.generateComments(job.post,job.settings,{analysis:job.analysis,signal,connection});
+    return SuperXBuild.run(job.post,job.settings,{signal,onUpdate,connection});
   }
   const session=await waitForAbort(chrome.storage.session.get('apiKey'),signal);
   const key=session.apiKey;
@@ -524,7 +593,8 @@ async function mutateSecurity(message,generation) {
 function queueSecurityMutation(message) {
   const generation=++securityGeneration;
   securityPending++;
-  invalidateSecurityJobs();
+  if(message.settings&&JSON.stringify(message.settings)!==JSON.stringify(settings))invalidateSecurityJobs();
+  else for(const job of [...jobs.values()].filter(job=>job.settings.provider!=='build'))abortJob(job);
   cache={};cacheEpoch++;
   // Invalidate at receipt, before asynchronous storage or settings changes.
   void ready.then(()=>broadcastConfig()).catch(()=>{});
@@ -614,7 +684,15 @@ chrome.runtime.onMessage.addListener((message,sender,respond)=>{
     if(message.type==='GET_UI_LANGUAGE')return {ok:true,language:await currentUILanguage()};
     if(message.type==='GET_SECURITY_STATUS')return {ok:true,...securityStatus()};
     if(message.type==='OPEN_CONNECTOR_GUIDE'){await chrome.tabs.create({url:chrome.runtime.getURL('setup.html')});return {ok:true};}
-    if(message.type==='GET_BUILD_STATUS'){const status=await refreshBuildStatus(true);void broadcastConfig();return {ok:true,...status,ready:buildReady()};}
+    if(message.type==='GET_BUILD_CONNECTION')return {ok:true,configured:validBuildSecret(buildSecret),port:settings.buildPort};
+    if(message.type==='GET_BUILD_LAUNCH'){
+      if(!['/options.html','/setup.html'].includes(new URL(sender.url).pathname))return {ok:false,errorKey:'build.codeRequired'};
+      const port=message.port??settings.buildPort,secret=validBuildSecret(buildSecret)?buildSecret:newBuildSecret();
+      try{return {ok:true,command:SuperXBuildSetup.command({platform:message.platform,port,secret}),port,secret};}catch{return {ok:false,errorKey:'build.codeRequired'};}
+    }
+    if(message.type==='SAVE_BUILD_CONNECTION')return queueBuildConnection(message);
+    if(message.type==='CLEAR_BUILD_CONNECTION')return queueBuildConnection(message,true);
+    if(message.type==='GET_BUILD_STATUS')return checkBuildDraft(message);
     if(message.type==='GET_CONFIG'){if(settings.provider==='build')await refreshBuildStatus();return {ok:true,...await publicConfig()};}
     if(message.type==='GET_HISTORY'||message.type==='GET_HISTORY_STATUS'){
       try{return {ok:true,...await history[message.type==='GET_HISTORY'?'get':'status']()};}
@@ -634,6 +712,14 @@ chrome.runtime.onMessage.addListener((message,sender,respond)=>{
 });
 chrome.alarms?.onAlarm.addListener(alarm=>{
   if(alarm.name===HISTORY_ALARM)void ready.then(()=>history.prune()).then(()=>notifyHistoryChanged()).catch(()=>{});
+});
+chrome.permissions?.onRemoved?.addListener(removed=>{
+  if(!removed.origins?.includes('http://127.0.0.1/*'))return;
+  void ready.then(async()=>{
+    buildConnectionGeneration++;stopUnavailableBuild('BUILD_PERMISSION_REQUIRED');
+    for(const job of [...jobs.values()].filter(job=>job.settings.provider==='build'))abortJob(job);
+    await SuperXBuild.close?.();
+  }).catch(()=>{});
 });
 chrome.tabs.onRemoved.addListener(tabId=>{
   ready.then(async()=>{delete quotas[tabId];delete railStates[tabId];await Promise.all([persistQuotas(),persistRailStates()]);});

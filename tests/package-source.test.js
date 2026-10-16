@@ -36,9 +36,7 @@ async function fixture(t) {
   for (const directory of PUBLIC_SOURCE_DIRECTORIES) await mkdir(join(root, directory), { recursive: true });
   await put(root, 'LICENSE', license);
   await put(root, 'package.json', JSON.stringify({ version: '1.2.3', license: 'MIT' }));
-  const {CONNECTOR_FILES}=await import('../connector/install.mjs');
-  for(const name of CONNECTOR_FILES)await put(root,`connector/${name}`,await readFile(join(sourceRoot,'connector',name)));
-  for(const name of ['config.json','auth.json','runtime/private.cjs','private-review.md'])await put(root,`connector/${name}`,'PRIVATE_CONNECTOR_DO_NOT_EXPORT');
+  for(const name of ['host.cjs','install-macos.command','config.json','auth.json','runtime/private.cjs','private-review.md'])await put(root,`connector/${name}`,'PRIVATE_CONNECTOR_DO_NOT_EXPORT');
   for (const name of PRODUCTION_FILES) {
     await put(root, `extension/${name}`, name === 'LICENSE.txt' ? license : await readFile(join(sourceRoot, 'extension', name)));
   }
@@ -57,6 +55,8 @@ async function fixture(t) {
   await put(root, 'demo/index.html', '<html>Public preview</html>\r\n');
   await put(root, 'tools/package-release.mjs', '// Public release helper\r\n');
   await put(root, 'tests/example.test.js', '// Public fixture\r\n');
+  await put(root, 'tests/build-ws-fixture.js', '// Shared synthetic WebSocket fixture\r\n');
+  await put(root, 'tests/private-helper.js', '// PRIVATE_TEST_HELPER_DO_NOT_EXPORT');
   await put(root, 'chrome-web-store/site/index.html', '<html>PRIVATE_STORE_DO_NOT_EXPORT</html>\r\n');
   await put(root, 'chrome-web-store/site/.nojekyll', '');
   await put(root, 'chrome-web-store/assets/screenshot.png', Buffer.from([0x89, 0x50, 0x4e, 0x47, 0xff, 0x0d, 0x0a]));
@@ -105,7 +105,9 @@ test('public source keeps both README PNGs unchanged and excludes private output
   }
   assert.ok(names.includes('SuperX-1.2.3/docs/RELEASE_CHANNELS.md'));
   assert.ok(names.includes('SuperX-1.2.3/tools/package-release.mjs'));
-  assert.ok(names.includes('SuperX-1.2.3/connector/host.cjs'));assert.ok(names.includes('SuperX-1.2.3/connector/install-macos.command'));
+  assert.ok(names.includes('SuperX-1.2.3/tests/build-ws-fixture.js'));
+  assert.equal(names.includes('SuperX-1.2.3/tests/private-helper.js'),false);
+  assert.equal(names.some(name=>name.startsWith('SuperX-1.2.3/connector/')),false);
   assert.equal(archive.includes(Buffer.from('PRIVATE_CONNECTOR_DO_NOT_EXPORT')),false);
   assert.equal(names.some(name => /\/(?:website|chrome-web-store)\//.test(name)),false);
   assert.equal(names.some(name => /docs\/SuperX-private-review|tools\/(?:check-privacy-site|render-store-assets)\.mjs/.test(name)),false);

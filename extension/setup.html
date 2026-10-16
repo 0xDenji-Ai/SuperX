@@ -2,25 +2,29 @@
 <html lang="en">
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>SuperX · Grok Build setup</title><link rel="icon" href="assets/icon-32.png"><link rel="stylesheet" href="setup.css">
+  <title>SuperX · Grok setup</title><link rel="icon" href="assets/icon-32.png"><link rel="stylesheet" href="setup.css">
 </head>
 <body>
   <main>
-    <header><img src="assets/superx-logo.svg" alt="SuperX"><button id="settings" type="button"></button></header>
-    <h1 id="title"></h1><p id="intro" class="muted"></p>
-    <section><h2 id="download-title"></h2><p id="download-text"></p>
-      <a id="download" href="https://github.com/bwjoke/SuperX/releases" target="_blank" rel="noopener noreferrer"></a>
-      <p id="candidate" class="muted"></p>
-      <label id="id-label" for="extension-id"></label><div class="copy-row"><input id="extension-id" readonly spellcheck="false"><button id="copy-id" type="button"></button></div>
+    <header><img src="assets/superx-logo.svg" alt="SuperX"><button id="settings" type="button" data-i18n="common.settings">Settings</button></header>
+    <h1 data-i18n="options.buildSetup">Connect official Grok</h1><p class="muted" data-i18n="build.setupIntro"></p>
+    <section><span class="step" aria-hidden="true">1</span><h2 data-i18n="options.buildStep1"></h2>
+      <p><a href="https://github.com/xai-org/grok-build" target="_blank" rel="noopener noreferrer" data-i18n="options.officialBuild">Official Grok installation</a></p>
+      <p class="muted" data-i18n="build.loginCommand">After installation, run:</p><code class="login-command" dir="ltr">grok login</code>
     </section>
-    <section><h2 id="install-title"></h2><div class="tabs" role="group" aria-label="Operating system"><button id="windows" type="button">Windows</button><button id="macos" type="button">macOS</button></div>
-      <p id="install-text"></p><div class="command"><code id="install-command"></code><button id="copy-command" type="button"></button></div>
-      <p id="install-note" class="muted"></p>
+    <section><span class="step" aria-hidden="true">2</span><h2 data-i18n="options.buildStep2"></h2>
+      <label for="platform" data-i18n="build.platform">Your computer</label><select id="platform"><option value="windows">Windows</option><option value="macos">macOS</option></select>
+      <div class="launch-actions"><button id="generate" type="button" data-i18n="build.generate">Generate launch command</button></div>
+      <details class="connection-details"><summary data-i18n="build.details">Connection details (optional)</summary><div class="connection-fields"><div><label for="port" data-i18n="build.port">Local port</label><input id="port" type="number" min="1024" max="65535" step="1" value="2419"><p id="address" dir="ltr" class="muted"></p></div><div><label for="secret" data-i18n="build.code">Local connection code</label><input id="secret" type="password" maxlength="256" autocomplete="off" spellcheck="false" dir="ltr"><p class="muted" data-i18n="build.codeHelp"></p></div></div></details>
+      <div id="launch" hidden><div class="command"><code id="command" dir="ltr" tabindex="0"></code><button id="copy" type="button" data-i18n="common.copy">Copy</button></div><p class="muted" data-i18n="build.commandPrivate"></p></div>
+      <p class="muted" data-i18n="build.commandHelp"></p>
     </section>
-    <section><h2 id="login-title"></h2><p id="login-text"></p><div class="command"><code id="login-command"></code><button id="copy-login" type="button"></button></div><p id="login-note" class="muted"></p></section>
-    <section><h2 id="connect-title"></h2><p id="connect-text"></p><button id="check" type="button" class="primary"></button><p id="status" role="status" aria-live="polite" class="muted"></p></section>
-    <section><h2 id="notes-title"></h2><ul><li id="note-data"></li><li id="note-usage"></li><li id="note-model"></li><li id="note-error"></li></ul>
-      <p><a id="docs" href="https://github.com/bwjoke/SuperX/blob/main/docs/CONNECTIONS.md" target="_blank" rel="noopener noreferrer"></a> · <a id="official" href="https://github.com/xai-org/grok-build" target="_blank" rel="noopener noreferrer"></a></p>
+    <section><span class="step" aria-hidden="true">3</span><h2 data-i18n="options.buildStep3"></h2>
+      <button id="check" type="button" data-i18n="options.checkBuild">Check connection</button>
+      <p id="status" role="status" aria-live="polite" class="muted"></p>
+      <div id="model-choices" hidden><label for="model" data-i18n="options.model">Model</label><select id="model" required></select><label for="reasoning" data-i18n="options.reasoning">Reasoning effort</label><select id="reasoning" required></select><p class="muted" data-i18n="build.chooseModel"></p></div>
+      <div class="actions"><button id="save" type="button" class="primary" data-i18n="build.saveConnection">Save connection</button></div><p class="muted" data-i18n="build.setupCheckHelp"></p>
     </section>
-  </main><script src="ui-i18n.js"></script><script src="setup.js"></script>
+    <footer><p data-i18n="build.localPrivacy"></p><p class="muted" data-i18n="options.usageRules"></p><a href="https://grok.com/dashboard/usage" target="_blank" rel="noopener noreferrer" data-i18n="options.dashboardUsage"></a></footer>
+  </main><script src="feed-core.js"></script><script src="ui-i18n.js"></script><script src="setup.js"></script>
 </body></html>

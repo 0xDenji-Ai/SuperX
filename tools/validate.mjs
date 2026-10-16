@@ -96,7 +96,7 @@ try {
 
 let scripts = [];
 try {
-  scripts = (await Promise.all(['extension', 'tests', 'tools', 'connector'].map(directory => filesIn(resolve(root, directory)))))
+  scripts = (await Promise.all(['extension', 'tests', 'tools'].map(directory => filesIn(resolve(root, directory)))))
     .flat().filter(path => /\.(?:js|cjs|mjs)$/.test(path)).sort();
   let invalid = false;
   for (const script of scripts) {

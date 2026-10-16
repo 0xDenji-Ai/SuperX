@@ -64,6 +64,7 @@ h2 { margin: 0 0 20px; font-size: 20px; line-height: 1.35; font-weight: 700; scr
 .onboarding-actions .secondary-button { width: auto; }
 .connection-check, .shared-search { margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--line); }
 .connection-check .key-state { margin-top: 12px; }
+.launch-actions{margin-top:14px}.launch-command{display:flex;align-items:flex-start;gap:12px;margin-top:14px;padding:14px;border:1px solid var(--line);background:var(--background);min-width:0}.launch-command code{flex:1;min-width:0;white-space:pre-wrap;overflow-wrap:anywhere;font:12px/1.6 monospace}.launch-command button{flex:0 0 auto}.connection-fields{display:grid;grid-template-columns:minmax(95px,.3fr) minmax(0,1fr);gap:18px}.connection-fields label{display:block;margin-bottom:8px;font-size:14px}.connection-actions{margin-top:4px}
 #build-status[data-state="unknown"] { color: var(--muted); }
 .field > label, .prompt-label > label { display: block; margin-bottom: 8px; color: var(--foreground); font-size: 14px; line-height: 1.4; font-weight: 500; }
 input[type="text"], input[type="password"], input[type="number"], select, textarea { display: block; width: 100%; min-width: 0; max-width: 100%; min-height: 48px; padding: 12px; border: 1px solid var(--field-line); border-radius: 4px; background: var(--background); color: var(--foreground); font-size: 15px; }
@@ -138,7 +139,10 @@ button:disabled, input:disabled, select:disabled, textarea:disabled { opacity: .
   .settings-footer { padding-inline: 16px; }
 }
 @media (max-width: 430px) {
+  .connection-fields{grid-template-columns:minmax(0,1fr)}.launch-command{flex-direction:column}
   .field-grid { grid-template-columns: minmax(0, 1fr); gap: 0; }
   .checkbox-row { flex-direction: column; }
   .page-header .primary-button { max-width: 56%; padding-inline: 13px; }
 }
+.connection-details{margin-top:20px}.connection-details summary{color:var(--muted);font-size:13px;cursor:pointer}.connection-details summary:focus-visible{outline:2px solid var(--accent);outline-offset:4px}
+.launch-command code{max-height:240px;overflow-y:auto;overflow-x:hidden;display:block}

@@ -39,10 +39,9 @@
     return profile?(profile.efforts.includes(value)?value:profile.defaultEffort):'auto';
   }
   function buildReasoningEffort(model,value) {
-    if(modelProfile(model))return reasoningEffort(model,value);
-    // Build advertises additional model IDs at runtime. Keep the selected
-    // concrete effort for that negotiation; the host must confirm support.
-    return ['low','medium','high','xhigh'].includes(value)?value:'low';
+    // ACP negotiates concrete runtime levels independently of the API model
+    // catalog. Never translate its minimum setting into API 'none'.
+    return ['minimal','low','medium','high','xhigh'].includes(value)?value:'low';
   }
 
   const MAX_PROMPT_LENGTH = 12000;
@@ -149,6 +148,7 @@
     apiModel: 'grok-4.3',
     apiReasoningEffort: 'none',
     buildTransport: 'acp',
+    buildPort: 2419,
     buildModel: 'grok-4.7',
     buildReasoningEffort: 'low',
     apiConcurrency: 4,
@@ -238,7 +238,8 @@
       interfaceLanguage: LANGUAGES.find(item => item.value.toLowerCase() === interfaceLanguage)?.value || DEFAULT_SETTINGS.interfaceLanguage,
       apiModel: normalizedModel,
       apiReasoningEffort: reasoningEffort(normalizedModel,value.apiReasoningEffort),
-      buildTransport: value.buildTransport === 'cli' ? 'cli' : DEFAULT_SETTINGS.buildTransport,
+      buildTransport: DEFAULT_SETTINGS.buildTransport,
+      buildPort: boundedNumber(value.buildPort, DEFAULT_SETTINGS.buildPort, 1024, 65535),
       buildModel: normalizedBuildModel,
       buildReasoningEffort: buildReasoningEffort(normalizedBuildModel,value.buildReasoningEffort),
       apiConcurrency: boundedNumber(value.apiConcurrency, DEFAULT_SETTINGS.apiConcurrency, 1, 8),

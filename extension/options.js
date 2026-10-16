@@ -24,25 +24,33 @@
   let lastOptionsFocusNonce;
   let historyReady=false, historyBusy=false,historyStatusKey=null;
   let buildStatus = null, buildChecking = false, buildCheckRevision = 0;
+  let buildConnection={configured:false,port:2419},buildSecretChanged=false,buildGenerating=false;
   const advertisedBuildModels = new Set();
   const apiControlIds = ["api-key","remember-key","api-model","api-reasoning-effort","fast-preset","api-concurrency","clear-key"];
-  const buildControlIds = ["build-transport","build-model","build-reasoning-effort","check-build","connector-guide"];
+  const buildControlIds = ["build-platform","build-port","build-secret","generate-build-command","copy-build-command","clear-build-connection","build-model","build-reasoning-effort","check-build","build-guide"];
   const isBuild = () => $("provider").value === "build";
   function buildStateKey() {
     if (buildChecking) return "build.checking";
     if (!buildStatus) return "build.unknown";
-    if (buildStatus.permission === "denied" || buildStatus.errorCode === "BUILD_PERMISSION_REQUIRED") return "build.permission";
+    if (buildStatus.errorCode === "BUILD_PERMISSION_REQUIRED") return "build.permission";
     if (buildStatus.ready === true) return "build.ready";
-    if (buildStatus.installed === false && buildStatus.connected === true) return "options.buildStep2";
-    if (buildStatus.installed === false || ["BUILD_HOST_MISSING","BUILD_NATIVE_MISSING"].includes(buildStatus.errorCode)) return "build.missing";
+    if (buildStatus.errorCode === "BUILD_CANCEL_UNCONFIRMED") return "build.cancelUnconfirmed";
+    if (["BUILD_CONNECTION_REQUIRED","BUILD_NOT_CONFIGURED","BUILD_SECRET_REQUIRED"].includes(buildStatus.errorCode)) return "build.codeRequired";
+    if (["BUILD_AUTH_FAILED","BUILD_INVALID_SECRET"].includes(buildStatus.errorCode)) return "build.codeInvalid";
+    if (["BUILD_NOT_CONNECTED","BUILD_CONNECTION_FAILED","BUILD_UNAVAILABLE","BUILD_DISCONNECTED"].includes(buildStatus.errorCode)) return "build.missing";
     if (buildStatus.authenticated === false || ["BUILD_AUTH_REQUIRED","BUILD_LOGIN_REQUIRED"].includes(buildStatus.errorCode)) return "build.login";
-    if (["BUILD_VERSION_UNSUPPORTED","BUILD_UNSUPPORTED_VERSION","BUILD_PROTOCOL_UNSUPPORTED"].includes(buildStatus.errorCode)) return "build.unsupported";
+    if (["BUILD_VERSION_UNSUPPORTED","BUILD_UNSUPPORTED_VERSION","BUILD_PROTOCOL_UNSUPPORTED","BUILD_TOOL_POLICY","BUILD_CONFIG_UNSUPPORTED"].includes(buildStatus.errorCode)) return "build.unsupported";
     return "build.unavailable";
   }
   function renderBuildStatus() {
     $("build-status").textContent = ui.t(buildStateKey(),uiLanguage);
     $("build-status").dataset.state = buildStatus?.ready === true ? "ready" : "unknown";
-    $("check-build").disabled = busy || buildChecking || !isBuild();
+    $("check-build").disabled = busy || buildChecking || buildGenerating || !isBuild();
+    $("generate-build-command").disabled=busy||buildGenerating||buildChecking||!isBuild();
+    if(isBuild())$("save").disabled=busy||buildChecking||buildGenerating;
+    $("clear-build-connection").hidden=!buildConnection.configured;
+    $("build-secret").placeholder=ui.t(buildConnection.configured ? "build.savedCode" : "build.codePlaceholder",uiLanguage);
+    $("build-address").textContent=`ws://127.0.0.1:${$("build-port").value || 2419}`;
     const catalog = buildStatus?.modelCatalog;
     const selected = $("build-model").value;
     const unavailable = Array.isArray(catalog) && !catalog.some(item => (typeof item === "string" ? item : item.id) === selected && item.available !== false);
@@ -59,6 +67,7 @@
     $("save").disabled = busy || (!build && !securityLoaded);
     renderBuildStatus();
   }
+  function requestLocalAccess(){try{return chrome.permissions?.request({origins:["http://127.0.0.1/*"]}) || Promise.resolve(false);}catch{return Promise.resolve(false);}}
 
   function setHistoryStatus(key) {historyStatusKey=key;$("history-status").textContent=key?ui.t(key,uiLanguage):"";}
 
@@ -110,7 +119,7 @@
     if (busy || (!isBuild() && !securityLoaded)) return;
     const changed = keyChanged || rememberChanged
       || $("provider").value !== currentSettings.provider
-      || $("build-transport").value !== currentSettings.buildTransport
+      || buildSecretChanged || Number($("build-port").value) !== currentSettings.buildPort
       || $("build-model").value !== currentSettings.buildModel
       || $("build-reasoning-effort").value !== currentSettings.buildReasoningEffort
       || $("enabled").checked !== currentSettings.enabled
@@ -236,12 +245,13 @@
   function populateBuildReasoning(model,effort) {
     const select = $("build-reasoning-effort");select.replaceChildren();
     const entry = buildStatus?.modelCatalog?.find(item => typeof item === "object" && item.id === model);
-    const supported = core.modelProfile(model)?.efforts || ["low","medium","high","xhigh"];
+    // Grok Build negotiates ACP levels independently of API model profiles.
+    const supported = ["minimal","low","medium","high","xhigh"];
     const efforts = Array.isArray(entry?.efforts) ? supported.filter(value => entry.efforts.includes(value)) : supported;
     for (const value of efforts) {
       const option=document.createElement("option");option.value=value;option.textContent=ui.t("options.reasoning."+value,uiLanguage);select.append(option);
     }
-    select.value=efforts.includes(effort) ? effort : efforts[0] || "";
+    select.value=efforts.includes(effort) ? effort : efforts.includes("low") ? "low" : efforts[0] || "";
   }
   function renderLanguage() {
     const interfaceLanguage = $("interface-language").value || currentSettings.interfaceLanguage;
@@ -266,7 +276,7 @@
   function populate(settings) {
     $("enabled").checked = settings.enabled;
     $("provider").value = settings.provider;
-    $("build-transport").value = settings.buildTransport;
+    $("build-port").value = settings.buildPort;
     populateBuildModels(settings.buildModel);populateBuildReasoning(settings.buildModel,settings.buildReasoningEffort);
     $("explanation-mode").value = settings.explanationMode === "custom" ? "custom" : "preset";
     populateModels(settings.apiModel);
@@ -297,6 +307,7 @@
       // session mirror only afterwards so a browser restart cannot look empty.
       currentSettings = core.normalizeSettings(local.settings);
       populate(currentSettings);
+      try {const connection=await send({type:"GET_BUILD_CONNECTION"});buildConnection={configured:connection.configured===true,port:connection.port||currentSettings.buildPort};$("build-port").value=buildConnection.port;}catch{/* Existing API setup stays usable if the local connection is unavailable. */}
       try {await refreshSecurity(true);} catch(error) {if(currentSettings.provider!=="build")throw error;}
       $("remember-key").checked = security.remember;
       if (localeRevision === revision) applyLanguage(locale?.language || local.uiLanguage || observedUILanguage);
@@ -312,30 +323,51 @@
     if (busy || buildChecking || !isBuild()) return;
     const revision=++buildCheckRevision;
     buildChecking=true;renderBuildStatus();
-    let permissionGranted=false;
+    // Optional loopback access is requested only from this explicit gesture.
+    const permission=requestLocalAccess();
     try {
-      // Request directly in this click's user gesture, before any awaited work.
-      const permissionRequest=chrome.permissions?.request({permissions:["nativeMessaging"]});
-      permissionGranted=await permissionRequest;
-      if (revision!==buildCheckRevision) return;
-      if(permissionGranted!==true){buildStatus={ready:false,permission:"denied",errorCode:"BUILD_PERMISSION_REQUIRED"};return;}
-      const result=await send({type:"GET_BUILD_STATUS",transport:$("build-transport").value});
+      if(await permission!==true){if(revision===buildCheckRevision)buildStatus={ready:false,errorCode:"BUILD_PERMISSION_REQUIRED"};return;}
+      if(revision!==buildCheckRevision)return;
+      const result=await send({type:"GET_BUILD_STATUS",port:Number($("build-port").value),...(buildSecretChanged?{secret:$("build-secret").value.trim()}: {})});
       if (revision!==buildCheckRevision) return;
       buildStatus=result;
       const model=$("build-model").value,effort=$("build-reasoning-effort").value;
       populateBuildModels(model);populateBuildReasoning(model,effort);
       markDraft();
-    } catch {if(revision===buildCheckRevision)buildStatus={ready:false,errorCode:permissionGranted ? "BUILD_STATUS_UNKNOWN" : "BUILD_PERMISSION_REQUIRED"};}
+    } catch {if(revision===buildCheckRevision)buildStatus={ready:false,errorCode:"BUILD_STATUS_UNKNOWN"};}
     finally {if(revision===buildCheckRevision){buildChecking=false;renderBuildStatus();}}
   });
-  $("connector-guide").addEventListener("click",async () => {
+  $("build-guide").addEventListener("click",async () => {
     try {await send({type:"OPEN_CONNECTOR_GUIDE"});}
     catch(error){setStatus("errors.operation","error",{error:error.message});}
   });
-  $("build-transport").addEventListener("change",() => {
+  function resetBuildCheck() {
     buildCheckRevision++;buildChecking=false;buildStatus=null;
     const model=$("build-model").value,effort=$("build-reasoning-effort").value;
     populateBuildModels(model);populateBuildReasoning(model,effort);renderBuildStatus();markDraft();
+  }
+  $("build-platform").value=/Mac/i.test(navigator.userAgentData?.platform||navigator.platform||"")?"macos":"windows";
+  for(const id of ["build-port","build-secret"]){$(id).addEventListener("input",()=>{if(id==="build-secret")buildSecretChanged=!buildConnection.configured||Boolean($(id).value.trim());$("build-launch").hidden=true;$("build-command").textContent="";resetBuildCheck();});}
+  $("build-platform").addEventListener("change",()=>{$("build-launch").hidden=true;});
+  $("generate-build-command").addEventListener("click",async()=>{
+    if(busy||buildGenerating||!isBuild())return;
+    buildGenerating=true;renderBuildStatus();
+    try{
+      const launch=await send({type:"GET_BUILD_LAUNCH",platform:$("build-platform").value,port:Number($("build-port").value)});
+      if(typeof launch.command!=="string"||typeof launch.secret!=="string"||!launch.secret)throw new Error(ui.t("errors.noResponse",uiLanguage));
+      $("build-command").textContent=launch.command;$("build-secret").value=launch.secret;$("build-port").value=launch.port;buildSecretChanged=true;
+      $("build-launch").hidden=false;resetBuildCheck();setStatus("build.commandReady");
+    }catch(error){setStatus("errors.operation","error",{error:error.message});}
+    finally{buildGenerating=false;renderBuildStatus();}
+  });
+  $("copy-build-command").addEventListener("click",async()=>{
+    try{await navigator.clipboard.writeText($("build-command").textContent);setStatus("build.commandCopied");}
+    catch{setStatus("common.copyFailed","error");}
+  });
+  $("clear-build-connection").addEventListener("click",async()=>{
+    if(busy||!isBuild())return;setBusy(true);
+    try{await send({type:"CLEAR_BUILD_CONNECTION"});buildConnection={configured:false,port:currentSettings.buildPort};$("build-secret").value="";buildSecretChanged=false;$("build-launch").hidden=true;$("build-command").textContent="";resetBuildCheck();setStatus("build.cleared");}
+    catch(error){setStatus("errors.operation","error",{error:error.message});}finally{setBusy(false);}
   });
   $("interface-language").addEventListener("change",() => { renderLanguage();markDraft(); });
   $("api-model").addEventListener("change",() => { populateReasoning($("api-model").value,$("api-reasoning-effort").value);markDraft(); });
@@ -391,7 +423,8 @@
       ...currentSettings,
       enabled:$("enabled").checked,
       provider:$("provider").value,
-      buildTransport:$("build-transport").value,
+      buildTransport:"acp",
+      buildPort:Number($("build-port").value),
       buildModel:$("build-model").value,
       buildReasoningEffort:$("build-reasoning-effort").value,
       explanationMode:$("explanation-mode").value,
@@ -409,6 +442,9 @@
     const apiKey = $("api-key").value.trim();
     const saveKey = !isBuild() && keyNeedsSave();
     const remember = $("remember-key").checked;
+    if(isBuild()&&!buildConnection.configured&&!$("build-secret").value.trim()){
+      setStatus("build.codeRequired","error");$("generate-build-command").focus();return;
+    }
     if (saveKey && !apiKey) {
       setStatus("options.keyRequired","error");$("api-key").focus();return;
     }
@@ -433,13 +469,18 @@
       setStatus("options.urlSearchRequired","error");$("x-search").focus();return;
     }
     setBusy(true);setStatus("options.saving");
+    const localPermission=isBuild()?requestLocalAccess():null;
     try {
+      if(localPermission&&await localPermission!==true){setStatus("build.permission","error");return;}
       // Apply a replacement Key and its settings in one worker transaction.
       // A settings-only save never erases or replaces an untouched credential.
       if (saveKey) {
         await send({type:"SAVE_KEY",apiKey,remember,settings});
         keyChanged = false;rememberChanged = false;
         originalKey = apiKey;
+      } else if(isBuild()) {
+        await send({type:"SAVE_BUILD_CONNECTION",port:settings.buildPort,settings,...(buildSecretChanged?{secret:$("build-secret").value.trim()}: {})});
+        buildConnection={configured:true,port:settings.buildPort};buildSecretChanged=false;$("build-secret").value="";$("build-launch").hidden=true;$("build-command").textContent="";
       } else await send({type:"SAVE_SETTINGS",settings});
       currentSettings = settings;
       if (!isBuild()) await refreshSecurity();
@@ -491,6 +532,9 @@
     if (message?.type === "UI_LANGUAGE_CHANGED") { localeRevision++;applyLanguage(message.language); }
   });
   chrome.storage.onChanged.addListener((changes,area) => {
+    if(area==="local"&&changes.buildConnectionEncrypted&&!busy&&!buildSecretChanged&&Number($("build-port").value)===buildConnection.port){
+      send({type:"GET_BUILD_CONNECTION"}).then(connection=>{if(!busy&&!buildSecretChanged&&Number($("build-port").value)===buildConnection.port){buildConnection={configured:connection.configured===true,port:connection.port||currentSettings.buildPort};$("build-port").value=buildConnection.port;currentSettings={...currentSettings,buildPort:buildConnection.port};resetBuildCheck();}}).catch(()=>{});
+    }
     if (area === "local" && changes.uiLanguage) { localeRevision++;applyLanguage(changes.uiLanguage.newValue); }
     if(area==="local"&&changes.superxHistoryEnabled&&!historyBusy){$("history-enabled").checked=changes.superxHistoryEnabled.newValue!==false;historyReady=true;$("history-enabled").disabled=busy;}
     if (area === "local" && changes.settings && !busy) {

@@ -16,11 +16,11 @@
     .filter(key => Object.hasOwn(state,key)).map(key => [key,state[key]]));
   window.chrome = {
     runtime: {
-      getManifest: () => ({version:'0.9.0-preview'}),
+      getManifest: () => ({version:'0.9.1-preview'}),
       onMessage: {addListener: fn => runtimeListeners.push(fn)},
       async sendMessage(message) {
         if (message.type === 'GET_UI_LANGUAGE') return {ok:true,language:state.uiLanguage};
-        if (message.type === 'GET_CONFIG') return {ok:true,settings:state.settings,keyState:query.get('security')==='migration'?'migration':query.get('security')==='missing'?'missing':'ready',ready:state.settings.provider==='build'?query.get('permission')!=='denied'&&query.get('build')==='ready':!['missing','migration'].includes(query.get('security')),buildStatus:{connected:query.get('build')!=='missing',permission:query.get('permission')==='denied'?'denied':'granted',...(query.get('permission')==='denied'?{errorCode:'BUILD_PERMISSION_REQUIRED'}:{}),installed:query.get('build')!=='missing',available:query.get('build')==='ready',authenticated:query.get('build')==='ready'?true:query.get('build')==='login'?false:undefined}};
+        if (message.type === 'GET_CONFIG') return {ok:true,settings:state.settings,keyState:query.get('security')==='migration'?'migration':query.get('security')==='missing'?'missing':'ready',ready:state.settings.provider==='build'?query.get('build')==='ready':!['missing','migration'].includes(query.get('security')),buildStatus:{connected:query.get('build')==='ready',errorCode:query.get('build')==='login'?'BUILD_LOGIN_REQUIRED':query.get('build')==='ready'?undefined:'BUILD_UNAVAILABLE',available:query.get('build')==='ready',authenticated:query.get('build')==='ready'?true:query.get('build')==='login'?false:undefined}};
         if (message.type === 'OPEN_SETTINGS') { await this.openOptionsPage(message.focus);return {ok:true}; }
         if (message.type === 'OPEN_HISTORY') {location.assign('/demo/history.html?lang='+encodeURIComponent(state.uiLanguage));return {ok:true};}
         if (message.type === 'SAVE_SETTINGS') {

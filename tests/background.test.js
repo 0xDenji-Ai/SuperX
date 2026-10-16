@@ -10,6 +10,9 @@ const provider = require('../extension/api-provider.js');
 const buildProvider = require('../extension/build-provider.js');
 const ui = require('../extension/ui-i18n.js');
 const historyStore = require('../extension/history-store.js');
+const setup = require('../extension/build-setup.js');
+const BUILD_SECRET='superx_'+'e'.repeat(64);
+const buildStoreProfiles=new WeakMap();
 const source = fs.readFileSync(path.join(__dirname, '../extension/background.js'), 'utf8');
 const clone = value => value === undefined ? undefined : structuredClone(value);
 const keyStoreProfiles = new WeakMap();
@@ -69,6 +72,14 @@ function createBackground(options = {}) {
     },
     async clear() {keyStoreCalls.push('clear');if(options.keyClear)await options.keyClear(keyStoreState);keyStoreState.key=null;}
   };
+  const buildState=options.buildStoreState||buildStoreProfiles.get(options.local)||{key:null};
+  const buildStoreCalls=[];
+  const buildStore={envelopePresent:value=>value!==undefined,isEnvelope:keyStore.isEnvelope,
+    async seal(raw){buildStoreCalls.push('seal');if(options.buildSeal)await options.buildSeal(raw);buildState.key||=crypto.randomBytes(32);const iv=crypto.randomBytes(12),cipher=crypto.createCipheriv('aes-256-gcm',buildState.key,iv);return {version:1,algorithm:'AES-GCM',iv:iv.toString('base64'),ciphertext:Buffer.concat([cipher.update(raw),cipher.final(),cipher.getAuthTag()]).toString('base64')};},
+    async open(value){buildStoreCalls.push('open');if(options.buildOpen)await options.buildOpen(value);if(!buildStore.isEnvelope(value)||!buildState.key)throw Error('Invalid local code');const buffer=Buffer.from(value.ciphertext,'base64'),decipher=crypto.createDecipheriv('aes-256-gcm',buildState.key,Buffer.from(value.iv,'base64'));decipher.setAuthTag(buffer.subarray(-16));return Buffer.concat([decipher.update(buffer.subarray(0,-16)),decipher.final()]).toString();},
+    async clear(){buildStoreCalls.push('clear');if(options.buildClear)await options.buildClear();buildState.key=null;}
+  };
+  buildStoreProfiles.set(local.data,buildState);
   const cacheFixture=Object.hasOwn(options,'cache')?{cache:options.cache}:{};
   const session = storage(options.session === null ? cacheFixture : { apiKey: 'session-secret', ...cacheFixture, ...options.session }, { get: options.sessionGet, set: options.sessionSet, remove: options.sessionRemove });
   const apiCalls = [], commentCalls = [], buildCalls=[], buildCommentCalls=[], buildStatusCalls=[], runtimeMessages = [], createdTabs = [], removedTabs = [], tabMessages = [], deadlines = [], createdWindows = [], removedWindows = [];
@@ -82,7 +93,9 @@ function createBackground(options = {}) {
     async openOptionsPage() { if(options.openOptionsPage)await options.openOptionsPage(harness); }
   };
   const alarmCalls=[];
-  const chrome = { runtime, alarms:{onAlarm:event(),async create(name,options){alarmCalls.push({name,...options});}}, storage: { local, session }, tabs: {
+  const permissionState={granted:options.localPermission!==false};
+  const permissions={onRemoved:event(),async contains(){if(options.permissionContains)await options.permissionContains(permissionState);return permissionState.granted;}};
+  const chrome = { runtime, permissions, alarms:{onAlarm:event(),async create(name,options){alarmCalls.push({name,...options});}}, storage: { local, session }, tabs: {
     onRemoved: event(), onUpdated: event(),
     async create(input) {
       if (options.tabCreate) await options.tabCreate(input, harness);
@@ -117,9 +130,9 @@ function createBackground(options = {}) {
   let now = 1800000000000;
   class ClockDate extends Date { static now() { return now; } }
   const context = vm.createContext({
-    chrome, XGrokCore: core, GrokFirstUI:ui, SuperXKeyStore:options.keyStore||keyStore, SuperXHistoryStore:{...historyStore,create(area){return historyStore.create(area,{now:()=>now});}}, importScripts() {}, URL, AbortController, DOMException, crypto, Date: ClockDate, TextEncoder, TextDecoder,
+    chrome, XGrokCore: core, GrokFirstUI:ui, SuperXKeyStore:options.keyStore||keyStore,SuperXBuildConnectionStore:buildStore,SuperXBuildSetup:setup, SuperXHistoryStore:{...historyStore,create(area){return historyStore.create(area,{now:()=>now});}}, importScripts() {}, URL, AbortController, DOMException, crypto, Date: ClockDate, TextEncoder, TextDecoder,
     navigator: Object.hasOwn(options, 'navigator') ? options.navigator : { language: 'en-US' },
-    SuperXBuild:{publicError:buildProvider.publicError,async status(){buildStatusCalls.push({});return options.buildStatus?options.buildStatus():{connected:true,installed:true,available:true,authenticated:true,version:'1.0.60'};},
+    SuperXBuild:{publicError:buildProvider.publicError,async close(){if(options.buildClose)await options.buildClose();},async status(input){buildStatusCalls.push(clone(input));return options.buildStatus?options.buildStatus(input):{connected:true,installed:true,available:true,authenticated:true,version:'1.0.60'};},
       async run(post,settings,callbacks){const call={post,settings,...callbacks};buildCalls.push(call);return options.buildRun?options.buildRun(call,harness):{text:'Checked '+post.id,provider:'build',searched:true,verificationStatus:'completed',model:'grok-4.7',usage:{total_tokens:17}};},
       async generateComments(post,settings,callbacks){const call={post,settings,...callbacks};buildCommentCalls.push(call);return options.buildCommentRun?options.buildCommentRun(call,harness):{comments:['One '+post.id,'Two '+post.id,'Three '+post.id],provider:'build',model:'grok-4.7'};}
     },
@@ -138,7 +151,7 @@ function createBackground(options = {}) {
     clearTimeout(timer) { if (timer?.immediate) clearImmediate(timer.immediate); if (timer?.deadline) timer.cancelled = true; }
   });
   const harness = {
-    chrome, local, session, alarmCalls, keyStore:options.keyStore||keyStore, keyStoreState, keyStoreCalls, apiCalls, commentCalls, buildCalls,buildCommentCalls,buildStatusCalls,runtimeMessages, createdTabs, removedTabs, tabMessages, tabs, windows, createdWindows, removedWindows, deadlines,
+    chrome, permissionState, local, session, alarmCalls, buildStore,buildState,buildStoreCalls, keyStore:options.keyStore||keyStore, keyStoreState, keyStoreCalls, apiCalls, commentCalls, buildCalls,buildCommentCalls,buildStatusCalls,runtimeMessages, createdTabs, removedTabs, tabMessages, tabs, windows, createdWindows, removedWindows, deadlines,
     now() { return now; },
     advance(ms) { now += ms; },
     expireDeadline(delay) {
@@ -147,6 +160,7 @@ function createBackground(options = {}) {
       timer.cancelled = true; now += timer.delay; timer.deadline();
     },
     async ready() { await vm.runInContext('ready', context); },
+    async configureBuild(){return this.message({type:'SAVE_BUILD_CONNECTION',secret:BUILD_SECRET,port:2419});},
     connect(overrides = {}) {
       const port = {
         name: 'GROKFIRST_FEED', sender: { id: runtime.id, frameId: 0, url: 'https://x.com/home', tab: { id: 7 } },
@@ -167,21 +181,84 @@ function createBackground(options = {}) {
   return harness;
 }
 const post = id => ({ id: String(id), url: `https://x.com/author/status/${id}`, text: `Claim ${id}`, quotedContext: [], images: [] });
-test('Build cold-start config confirms connector without reading an API Key or generating',async()=>{
+test('local launch is a draft, uses a random connection code, and never saves or starts inference',async()=>{
+  const bg=createBackground();await bg.ready();
+  const launch=await bg.message({type:'GET_BUILD_LAUNCH',platform:'windows',port:2419});
+  assert.equal(launch.ok,true);assert.match(launch.secret,/^superx_[a-f0-9]{64}$/);assert.ok(launch.command.includes('GROK_AGENT_SECRET'));
+  assert.equal(bg.local.data.buildConnectionEncrypted,undefined);assert.equal((await bg.message({type:'GET_BUILD_CONNECTION'})).configured,false);assert.equal(bg.buildCalls.length,0);assert.equal(bg.buildStatusCalls.length,0);
+  const other=await bg.message({type:'GET_BUILD_LAUNCH',platform:'macos'});assert.notEqual(other.secret,launch.secret);
+  assert.equal((await bg.message({type:'GET_BUILD_LAUNCH',platform:'windows'},{id:bg.chrome.runtime.id,url:bg.chrome.runtime.getURL('history.html')})).ok,false);
+});
+test('local connection is encrypted independently, restores after worker restart, and never enters public config',async()=>{
+  const bg=createBackground();await bg.ready();assert.equal((await bg.configureBuild()).ok,true);
+  assert.equal(JSON.stringify(bg.local.data).includes(BUILD_SECRET),false);assert.equal(JSON.stringify(await bg.message({type:'GET_CONFIG'})).includes(BUILD_SECRET),false);
+  assert.equal(await bg.buildStore.open(bg.local.data.buildConnectionEncrypted),BUILD_SECRET);
+  const restarted=createBackground({local:bg.local.data,session:null});await restarted.ready();assert.equal((await restarted.message({type:'GET_BUILD_CONNECTION'})).configured,true);
+  const savedLaunch=await restarted.message({type:'GET_BUILD_LAUNCH',platform:'macos'});assert.equal(savedLaunch.secret,BUILD_SECRET);assert.equal(restarted.apiCalls.length,0);
+});
+test('draft local checks neither persist a code nor make saved configuration ready',async()=>{
   const bg=createBackground({settings:{provider:'build'},session:null});await bg.ready();
+  const draft=await bg.message({type:'GET_BUILD_STATUS',port:2419,secret:BUILD_SECRET});assert.equal(draft.ready,true);
+  assert.equal(bg.buildStatusCalls[0].connection.secret,BUILD_SECRET);assert.equal(bg.local.data.buildConnectionEncrypted,undefined);
+  const config=await bg.message({type:'GET_CONFIG'});assert.equal(config.ready,false);assert.equal(config.buildConnection.configured,false);assert.equal(bg.buildCalls.length,0);
+});
+test('clearing either credential preserves the other saved credential across restart',async()=>{
+  const bg=createBackground();await bg.ready();await bg.message({type:'SAVE_KEY',apiKey:'synthetic-api-key',remember:true});await bg.configureBuild();
+  const apiEnvelope=clone(bg.local.data.apiKeyEncrypted),buildEnvelope=clone(bg.local.data.buildConnectionEncrypted);
+  assert.equal((await bg.message({type:'CLEAR_BUILD_CONNECTION'})).ok,true);assert.equal(await bg.keyStore.open(apiEnvelope),'synthetic-api-key');assert.equal(bg.session.data.apiKey,'synthetic-api-key');
+  await bg.configureBuild();await bg.message({type:'SAVE_KEY',apiKey:'',remember:true});assert.equal(await bg.buildStore.open(bg.local.data.buildConnectionEncrypted),BUILD_SECRET);
+  assert.equal(bg.buildStoreCalls.filter(value=>value==='clear').length,1);assert.equal(bg.local.data.apiKeyEncrypted,undefined);assert.ok(buildEnvelope.ciphertext);
+});
+test('invalid local credentials and untrusted pages cannot mutate connections or generate launch commands',async()=>{
+  const bg=createBackground();await bg.ready();
+  for(const value of [{secret:'xai-'+ 'a'.repeat(40),port:2419},{secret:BUILD_SECRET,port:80},{secret:BUILD_SECRET,port:'2419'},{secret:'bad\ncode',port:2419}])assert.equal((await bg.message({type:'SAVE_BUILD_CONNECTION',...value})).ok,false);
+  const sender={id:bg.chrome.runtime.id,url:'https://x.com/home',tab:{id:7}};
+  for(const type of ['GET_BUILD_CONNECTION','GET_BUILD_LAUNCH','SAVE_BUILD_CONNECTION','CLEAR_BUILD_CONNECTION','GET_BUILD_STATUS'])assert.equal((await bg.message({type,secret:BUILD_SECRET,port:2419},sender)).ok,false);
+  assert.equal(bg.buildStoreCalls.length,0);assert.equal(bg.buildStatusCalls.length,0);
+});
+test('local encryption failure closes only Build readiness and keeps API Key usable',async()=>{
+  const bg=createBackground({buildSeal:()=>{throw Error('synthetic storage failure');}});await bg.ready();
+  const saved=await bg.configureBuild();assert.equal(saved.ok,false);assert.equal(saved.errorKey,'build.storageError');assert.equal((await bg.message({type:'GET_CONFIG'})).ready,true);
+  const port=bg.connect();await until(()=>port.messages.some(m=>m.type==='CONFIG'));assert.equal((await analyze(bg,port,'api-survives-build-storage')).type,'RESULT');assert.equal(bg.apiCalls.length,1);
+});
+test('a stale connection probe cannot delay or authorize a newly saved connection',async()=>{
+  const old=deferred();let checks=0;const bg=createBackground({settings:{provider:'build'},buildStatus:()=>++checks===1?old.promise:{connected:true,installed:true,available:true,authenticated:true}});await bg.ready();await bg.configureBuild();
+  const previous=bg.message({type:'GET_CONFIG'});await until(()=>checks===1);
+  await bg.message({type:'SAVE_BUILD_CONNECTION',secret:'n'.repeat(64),port:2420});old.resolve({connected:true,installed:true,available:true,authenticated:true});await previous;
+  const current=await bg.message({type:'GET_CONFIG'});assert.equal(current.ready,true);assert.equal(checks,2);assert.equal(bg.buildStatusCalls[1].connection.port,2420);assert.equal(bg.buildStatusCalls[1].connection.secret,'n'.repeat(64));assert.equal(bg.buildCalls.length,0);
+});
+test('cached local readiness cannot authorize a paid prompt after local access is revoked',async()=>{
+  const bg=createBackground({settings:{provider:'build'}});await bg.ready();await bg.configureBuild();await bg.message({type:'GET_CONFIG'});const port=bg.connect();await until(()=>port.messages.some(value=>value.type==='CONFIG'&&value.ready));
+  bg.permissionState.granted=false;const result=await analyze(bg,port,'revoked-before-dispatch');assert.equal(result.code,'BUILD_PERMISSION_REQUIRED');assert.equal(bg.buildCalls.length,0);assert.equal(bg.apiCalls.length,0);
+});
+test('revoking local access immediately cancels only Build work and stops queued tasks',async()=>{
+  const task=deferred(),bg=createBackground({settings:{provider:'build'},buildRun:()=>task.promise});await bg.ready();await bg.configureBuild();await bg.message({type:'GET_CONFIG'});const port=bg.connect();await until(()=>port.messages.some(value=>value.type==='CONFIG'&&value.ready));
+  port.send({type:'ANALYZE',requestId:'revoked-active',post:post(100)});await until(()=>bg.buildCalls.length===1);port.send({type:'ANALYZE',requestId:'revoked-waiting',post:post(101)});await until(()=>port.messages.some(value=>value.type==='QUEUED'&&value.requestId==='revoked-waiting'));
+  bg.permissionState.granted=false;bg.chrome.permissions.onRemoved.emit({origins:['http://127.0.0.1/*']});await until(()=>bg.buildCalls[0].signal.aborted);assert.equal(bg.buildCalls.length,1);assert.equal(bg.session.data.apiKey,'session-secret');assert.equal((await bg.message({type:'GET_CONFIG'})).ready,false);assert.equal(port.messages.find(value=>value.requestId==='revoked-waiting'&&value.type==='ERROR').code,'BUILD_PERMISSION_REQUIRED');task.resolve({text:'Late finding.',provider:'build'});
+});
+test('clearing the API Key and saving unchanged Build settings preserve an active official task',async()=>{
+  const task=deferred(),bg=createBackground({settings:{provider:'build'},buildRun:()=>task.promise});await bg.ready();await bg.configureBuild();await bg.message({type:'GET_CONFIG'});
+  const port=bg.connect();await until(()=>port.messages.some(m=>m.type==='CONFIG'&&m.ready));port.send({type:'ANALYZE',requestId:'active-official',post:post(100)});await until(()=>bg.buildCalls.length===1);
+  await bg.message({type:'SAVE_KEY',apiKey:'',remember:true});assert.equal(bg.buildCalls[0].signal.aborted,false);
+  await bg.message({type:'SAVE_BUILD_CONNECTION',settings:{...bg.local.data.settings,interfaceLanguage:'ja'}});assert.equal(bg.buildCalls[0].signal.aborted,false);
+  const changed=await bg.message({type:'GET_BUILD_STATUS',secret:'b'.repeat(64),port:2419});assert.equal(changed.errorCode,'BUILD_BUSY');
+  task.resolve({text:'The claim is not supported.',provider:'build',searched:true});await until(()=>port.messages.some(m=>m.type==='RESULT'&&m.requestId==='active-official'));
+});
+test('Build cold-start config confirms official connection without reading an API Key or generating',async()=>{
+  const bg=createBackground({settings:{provider:'build'},session:null});await bg.ready();await bg.configureBuild();
   const config=await bg.message({type:'GET_CONFIG'});assert.equal(config.ready,true);assert.equal(config.buildStatus.authenticated,true);
   assert.equal(bg.buildStatusCalls.length,1);assert.equal(bg.buildCalls.length,0);assert.equal(bg.apiCalls.length,0);
   assert.equal(JSON.stringify(config).includes('session-secret'),false);
 });
 test('Build analysis and comments work without Key and never fall back to API',async()=>{
-  const bg=createBackground({settings:{provider:'build'},session:null});await bg.ready();await bg.message({type:'GET_CONFIG'});
+  const bg=createBackground({settings:{provider:'build'},session:null});await bg.ready();await bg.configureBuild();await bg.message({type:'GET_CONFIG'});
   const port=bg.connect();await until(()=>port.messages.some(m=>m.type==='CONFIG'&&m.ready));
   const result=await analyze(bg,port,'build-post');assert.equal(result.type,'RESULT');assert.equal(result.result.provider,'build');assert.equal(result.result.model,'grok-4.7');assert.equal(result.result.usage.total_tokens,17);
   assert.equal((await draftComments(bg,port,'build-comments')).type,'COMMENT_RESULT');assert.equal(bg.buildCommentCalls.length,1);assert.equal(bg.buildCalls.length,1);assert.equal(bg.apiCalls.length,0);assert.equal(bg.commentCalls.length,0);
 });
 test('Build login and missing-host failures never start inference and guide opens locally',async()=>{
-  for(const code of ['BUILD_LOGIN_REQUIRED','BUILD_NATIVE_MISSING','BUILD_PERMISSION_REQUIRED']){
-    const bg=createBackground({settings:{provider:'build'},session:null,buildStatus:()=>({connected:code==='BUILD_LOGIN_REQUIRED',installed:code==='BUILD_LOGIN_REQUIRED',available:false,errorCode:code})});await bg.ready();assert.equal((await bg.message({type:'GET_CONFIG'})).ready,false);
+  for(const code of ['BUILD_LOGIN_REQUIRED','BUILD_UNAVAILABLE','BUILD_PERMISSION_REQUIRED']){
+    const bg=createBackground({settings:{provider:'build'},session:null,buildStatus:()=>({connected:code==='BUILD_LOGIN_REQUIRED',installed:code==='BUILD_LOGIN_REQUIRED',available:false,errorCode:code})});await bg.ready();await bg.configureBuild();assert.equal((await bg.message({type:'GET_CONFIG'})).ready,false);
     const port=bg.connect();await until(()=>port.messages.some(m=>m.type==='CONFIG'));assert.equal((await analyze(bg,port,code)).code,code);assert.equal(bg.buildCalls.length,0);assert.equal(bg.apiCalls.length,0);
     assert.equal((await bg.message({type:'OPEN_CONNECTOR_GUIDE'})).ok,true);assert.equal(bg.createdTabs[0].url,bg.chrome.runtime.getURL('setup.html'));
   }
@@ -190,18 +267,18 @@ test('API Key mode does not probe or use Build, even with no Key',async()=>{
   const bg=createBackground({session:null});await bg.ready();const port=bg.connect();await until(()=>port.messages.some(m=>m.type==='CONFIG'));
   assert.equal((await analyze(bg,port,'missing-api')).code,'NEEDS_KEY');assert.equal(bg.buildStatusCalls.length,0);assert.equal(bg.buildCalls.length,0);
 });
-test('provider, Build transport, model and effort produce separate answer caches',async()=>{
+test('provider, Build port, model and effort produce separate answer caches',async()=>{
   const bg=createBackground();await bg.ready();const port=bg.connect();await until(()=>port.messages.some(m=>m.type==='CONFIG'));
   await analyze(bg,port,'cache-api');const change=async fields=>{await bg.message({type:'SAVE_SETTINGS',settings:{...bg.local.data.settings,...fields}});await bg.message({type:'GET_CONFIG'});};
-  await change({provider:'build'});assert.equal((await analyze(bg,port,'cache-build')).cached,false);
+  await bg.configureBuild();await change({provider:'build'});assert.equal((await analyze(bg,port,'cache-build')).cached,false);
   assert.equal((await analyze(bg,port,'cache-build-hit')).cached,true);
-  await change({buildTransport:'cli'});assert.equal((await analyze(bg,port,'cache-cli')).cached,false);
+  await change({buildPort:2420});assert.equal((await analyze(bg,port,'cache-cli')).cached,false);
   await change({buildModel:'grok-4.6'});assert.equal((await analyze(bg,port,'cache-46')).cached,false);
   await change({buildReasoningEffort:'high'});assert.equal((await analyze(bg,port,'cache-high')).cached,false);
   await change({provider:'api'});assert.equal((await analyze(bg,port,'cache-api-hit')).cached,true);assert.equal(bg.apiCalls.length,1);assert.equal(bg.buildCalls.length,4);
 });
 test('Build disconnect stops queued tasks, retains actual billed usage and does not auto-retry',async()=>{
-  const task=deferred();const bg=createBackground({settings:{provider:'build'},buildRun:()=>task.promise});await bg.ready();await bg.message({type:'GET_CONFIG'});
+  const task=deferred();const bg=createBackground({settings:{provider:'build'},buildRun:()=>task.promise});await bg.ready();await bg.configureBuild();await bg.message({type:'GET_CONFIG'});
   const port=bg.connect();await until(()=>port.messages.some(m=>m.type==='CONFIG'&&m.ready));
   port.send({type:'ANALYZE',requestId:'running-build',post:post(100)});await until(()=>bg.buildCalls.length===1);
   port.send({type:'ANALYZE',requestId:'waiting-build',post:post(101)});await until(()=>port.messages.some(m=>m.type==='QUEUED'&&m.requestId==='waiting-build'));
@@ -210,14 +287,14 @@ test('Build disconnect stops queued tasks, retains actual billed usage and does 
   const failed=port.messages.find(m=>m.type==='ERROR'&&m.requestId==='running-build');assert.equal(failed.code,'BUILD_DISCONNECTED');assert.equal(failed.usage.total_tokens,42);
   assert.equal(bg.buildCalls.length,1);assert.equal(bg.apiCalls.length,0);assert.equal(port.messages.findLast(m=>m.type==='CONFIG').ready,false);
 });
-test('only trusted extension UI can inspect native status or open its guide',async()=>{
-  const bg=createBackground();await bg.ready();
+test('only trusted extension UI can inspect official status or open its guide',async()=>{
+  const bg=createBackground();await bg.ready();await bg.configureBuild();
   const feed={id:bg.chrome.runtime.id,frameId:0,tab:{id:7},url:'https://x.com/home'};
   for(const type of ['GET_BUILD_STATUS','OPEN_CONNECTOR_GUIDE'])assert.equal((await bg.message({type},feed)).ok,false);
   assert.equal(bg.buildStatusCalls.length,0);assert.equal((await bg.message({type:'GET_BUILD_STATUS'}, {id:bg.chrome.runtime.id,url:bg.chrome.runtime.getURL('setup.html')})).ready,true);assert.equal(bg.buildCalls.length,0);
 });
 test('checking native status during a long Build task reuses confirmed status and preserves its result',async()=>{
-  const task=deferred();const bg=createBackground({settings:{provider:'build'},buildRun:()=>task.promise});await bg.ready();await bg.message({type:'GET_CONFIG'});const port=bg.connect();await until(()=>port.messages.some(m=>m.type==='CONFIG'&&m.ready));
+  const task=deferred();const bg=createBackground({settings:{provider:'build'},buildRun:()=>task.promise});await bg.ready();await bg.configureBuild();await bg.message({type:'GET_CONFIG'});const port=bg.connect();await until(()=>port.messages.some(m=>m.type==='CONFIG'&&m.ready));
   port.send({type:'ANALYZE',requestId:'long-build',post:post(100)});await until(()=>bg.buildCalls.length===1);bg.advance(30000);
   const status=await bg.message({type:'GET_BUILD_STATUS'});assert.equal(status.ready,true);assert.equal(status.busy,true);assert.equal(bg.buildStatusCalls.length,1);assert.equal((await bg.message({type:'GET_CONFIG'})).ready,true);
   task.resolve({text:'Completed evidence',provider:'build',searched:true,model:'grok-4.7',usage:{total_tokens:77}});await until(()=>port.messages.some(m=>m.type==='RESULT'&&m.requestId==='long-build'));

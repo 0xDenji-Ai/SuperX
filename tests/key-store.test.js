@@ -7,6 +7,13 @@ const tick = () => new Promise(resolve => setImmediate(resolve));
 const clone = value => structuredClone(value);
 const safeFailure = { code: 'KEY_STORE_UNAVAILABLE', message: 'API Key storage is unavailable.' };
 const RECORD = 'api-key-aes-gcm-v1';
+test('local connection encryption is independent of API Key encryption and deletion',async()=>{
+  const indexedDB=memoryIDB(),api=KeyStore.create({indexedDB,crypto:webcrypto}),build=KeyStore.create({indexedDB,crypto:webcrypto,purpose:'build-connection'});
+  const a=await api.seal('api-fixture-value'),b=await build.seal('local-connection-fixture-value');
+  assert.equal(await api.open(a),'api-fixture-value');assert.equal(await build.open(b),'local-connection-fixture-value');
+  await assert.rejects(api.open(b),safeFailure);await assert.rejects(build.open(a),safeFailure);
+  await api.clear();assert.equal(await build.open(b),'local-connection-fixture-value');await build.clear();await assert.rejects(build.open(b),safeFailure);
+});
 
 async function until(predicate, label) {
   for (let i = 0; i < 100; i += 1) { if (predicate()) return; await tick(); }

@@ -2,16 +2,16 @@
 
 This checklist separates reproducible checks from manual browser and service checks. A passing mock test suite is not evidence that a particular X account, browser installation, or paid API request works.
 
-## 0.9.0 local candidate — dual provider, Windows and macOS
+## 0.9.1 local candidate — official connection, Windows and macOS
 
-- [x] Implement independent API Key and Grok Build (ACP / CLI) routes, preserve API defaults and credential drafts, and avoid automatic paid retries / provider fallback.
-- [x] Add Dashboard Key setup, optional native-messaging permission, connection diagnostics, host-advertised model choices and separate per-provider reasoning settings.
-- [x] Provide per-user Windows x64 / macOS arm64 / macOS x64 connector installers and uninstall commands with pinned official runtime integrity checks. No real account credential is included in packages.
-- [x] Exercise framing, model/effort negotiation, login-required states, tool policy, cancellation, usage retention, provider cache separation and status checks during long tasks with controlled fixtures. UI previews use isolated browser contexts and mocks.
-- [ ] Install candidate and connector on Windows Chrome / Edge; verify official login, Fact Check, comments, model/effort choices, language following, cancellation and browser restart.
-- [ ] Repeat installed-browser acceptance on Apple silicon and Intel Macs; check OS approval prompts, executable permissions, login/restart and clean uninstall. Simulated Mac paths are not a live-device pass.
+- [x] Implement independent API Key and direct official Grok CLI / ACP modes; preserve API defaults and avoid automatic provider fallback or paid retry.
+- [x] Provide Dashboard Key setup and a built-in Windows/macOS official-install, login, generated-command and connection-check guide. No extra SuperX program or downloaded profile file is required.
+- [x] Remove native-messaging permission and obsolete local-program packaging. Scope optional local access to 127.0.0.1; encrypt the local connection code and exclude it from public configuration and diagnostics.
+- [x] Exercise model/effort negotiation, login-required states, actual tool-count gates, reverse-RPC denial, hosted search events, usage retention, per-post sessions, cancellation and unconfirmed cleanup with controlled fixtures.
+- [ ] Install the candidate on Windows Chrome / Edge with official Grok and a real account; verify guided setup, Fact Check, comments, language following, model/effort choices, cancellation, restart and recovery.
+- [ ] Repeat installed-browser acceptance on Apple silicon and Intel Macs, including official installation, terminal startup, local permission, login/restart and stopping the service. Simulated Mac paths are not a live-device pass.
 - [ ] Review managed-device limitations with actual device policy before claiming support there; do not remove or bypass company policy.
-- [ ] Accept the candidate, then explicitly publish Preview and its connector. Store submission, website update and Stable promotion remain separate. Preserve all published 0.7.26 artifacts.
+- [ ] Accept the candidate, then explicitly publish Preview. Store submission, website update and Stable promotion remain separate. Preserve all published 0.7.26 artifacts and earlier local snapshots.
 
 ## 0.8.2 local candidate — Model and reasoning selectors
 

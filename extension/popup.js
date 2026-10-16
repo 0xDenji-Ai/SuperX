@@ -14,10 +14,11 @@
   let config = {ready:false,keyState:"missing"};
   function buildBlockedReason() {
     const status=config.buildStatus || {};
-    if (status.errorCode==="BUILD_NOT_CONNECTED") return "build.unknown";
-    if(status.permission==="denied"||status.errorCode==="BUILD_PERMISSION_REQUIRED")return "build.permission";
-    if (status.installed===false && status.connected===true) return "options.buildStep2";
-    if (status.installed===false || ["BUILD_HOST_MISSING","BUILD_NATIVE_MISSING"].includes(status.errorCode)) return "build.missing";
+    if(status.errorCode==='BUILD_CANCEL_UNCONFIRMED')return 'build.cancelUnconfirmed';
+    if(status.errorCode==='BUILD_PERMISSION_REQUIRED')return 'build.permission';
+    if (["BUILD_CONNECTION_REQUIRED","BUILD_NOT_CONFIGURED","BUILD_SECRET_REQUIRED"].includes(status.errorCode)) return "build.codeRequired";
+    if (["BUILD_AUTH_FAILED","BUILD_INVALID_SECRET"].includes(status.errorCode)) return "build.codeInvalid";
+    if (["BUILD_NOT_CONNECTED","BUILD_CONNECTION_FAILED","BUILD_UNAVAILABLE","BUILD_DISCONNECTED"].includes(status.errorCode)) return "build.missing";
     if (status.authenticated===false || ["BUILD_AUTH_REQUIRED","BUILD_LOGIN_REQUIRED"].includes(status.errorCode)) return "build.login";
     if (["BUILD_VERSION_UNSUPPORTED","BUILD_UNSUPPORTED_VERSION","BUILD_PROTOCOL_UNSUPPORTED"].includes(status.errorCode)) return "build.unsupported";
     return "build.unknown";

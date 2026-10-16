@@ -2,14 +2,19 @@
 
 SuperX release history. The extension's `manifest.json` is the authoritative installed version. Test counts below describe those releases' recorded checks, not live provider or browser-store certification.
 
-## 0.9.0 — API Key and local Grok Build (unreleased candidate)
+## 0.9.1 — Direct official Grok connection (unreleased candidate)
 
-- Keep API Key as the default and add an independent official Grok Build login route with ACP or CLI. Both routes use the same concise Fact Check and comment rules, current displayed-post language, model/effort selectors, Markdown, usage metadata and local history. Provider, transport, model and effort partition result caches. No automatic paid retries or provider fallback.
-- Add first-use API Key guidance for The X Subscription: Grok Dashboard, Grok Inference Key type, Chat/model access and account usage. Existing xAI Console Keys remain supported. Subscription entitlement and billing follow the account and provider; no free/unlimited claim is made.
-- Add a separate per-user native connector for Windows x64 and macOS Apple silicon / Intel, with pinned, integrity-checked official Node and Grok Build runtimes. The browser requests optional native-messaging permission only when checking Build. API-only users do not need it.
-- Isolate the official runtime's temporary configuration/working directory, preserve its existing official login without reading/copying credentials, restrict local tools, validate model/effort selections, handle cancellation/timeouts and use actual hosted search events as retrieval evidence. These application restrictions are not an OS sandbox. Build tasks queue immediately and execute serially.
-- Include a built-in Windows/macOS connection guide, a connector ZIP, uninstall commands and provider-specific privacy disclosures. Connection checks send no Fact Check prompt and do not interrupt an active task.
-- This is a local candidate. Mock tests and Windows-local runtime/archive checks do not establish macOS or authenticated browser end-to-end acceptance. Published Stable remains 0.7.26.
+- Keep API Key as the default and add a direct official Grok CLI / ACP connection. Windows and macOS users install and sign in through official Grok, then copy a generated launch command; no additional SuperX program, Node runtime or browser host registration is required.
+- Add first-use API Key guidance for The X Subscription: Grok Dashboard, Grok Inference Key type, Chat/model access and account usage. Existing xAI Console Keys remain supported. Entitlement and billing follow the account and provider; no free/unlimited claim is made.
+- Request optional access to the loopback address only for the local mode. Generate a random local connection code, encrypt its saved copy and keep credentials out of feed configuration and diagnostics. No automatic provider fallback or paid retry.
+- Isolate the official service's temporary configuration/working directory and disable imported coding/MCP integrations. Supply an inline restricted profile, confirm the actual local-function count is zero, and verify model/effort selections before a prompt. These application checks are not an OS sandbox.
+- Use one fresh ACP session per post, serial task execution, actual hosted search events, provider-reported Token metadata and explicit cancel/close requests. Surface unconfirmed cleanup; a disconnected browser alone does not imply the official task stopped.
+- Preserve concise Fact Check, language following, custom prompts, comments, Markdown and local history. Include Windows/macOS setup and provider-specific privacy guidance. Connection checks send no Fact Check or comment prompt.
+- This is a local candidate. Mock and isolated-runtime checks do not establish real-account Windows/macOS installed-browser acceptance. Published Stable remains 0.7.26.
+
+## 0.9.0 — Earlier local prototype
+
+- Superseded by the direct official-service setup in 0.9.1 before public release. Its existing local artifacts remain historical snapshots and are not the current installation guide.
 
 ## 0.8.2 — Model and reasoning selectors (unreleased candidate)
 

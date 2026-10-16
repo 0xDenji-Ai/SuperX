@@ -2405,8 +2405,8 @@ test('Build onboarding shows a clickable provider-specific setup action without 
   status.querySelector('.status-settings').emit('click');await new Promise(resolve=>setImmediate(resolve));assert.equal(page.runtimeMessages.findLast(m=>m.type==='OPEN_SETTINGS').focus,'build');
   assert.equal(page.port.sent.some(m=>m.type==='ANALYZE'),false);assert.equal(card.testShadow.querySelector('.generate-comments').hidden,true);
 });
-test('Build transport, model and effort changes clear prior answers and reject stale replies',()=>{
-  const fields=[{provider:'build'},{provider:'build',buildTransport:'cli'},{provider:'build',buildTransport:'cli',buildModel:'grok-4.6'},{provider:'build',buildTransport:'cli',buildModel:'grok-4.6',buildReasoningEffort:'high'}];
+test('Build port, model and effort changes clear prior answers and reject stale replies',()=>{
+  const fields=[{provider:'build'},{provider:'build',buildPort:2420},{provider:'build',buildPort:2420,buildModel:'grok-4.6'},{provider:'build',buildPort:2420,buildModel:'grok-4.6',buildReasoningEffort:'high'}];
   const page=fixture({postCount:1});page.configure();
   for(const settings of fields){
     const old=page.port.sent.findLast(m=>m.type==='ANALYZE');page.port.onMessage.emit({type:'RESULT',requestId:old.requestId,result:{text:'Old provider finding.',provider:'api',usage:{total_tokens:7}}});page.flush();

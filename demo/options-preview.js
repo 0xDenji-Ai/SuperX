@@ -14,8 +14,9 @@
   if(query.get('security')==='saved'){state.hasSavedKey=true;state.migration=false;}
   let previewKey=state.hasSavedKey&&!state.migration?'preview-test-key-not-real':'';
   const previewSession={};
+  let buildConfigured=query.get('saved')==='0'?false:query.get('build')==='ready',buildPort=2419;
   if(query.has('focus'))previewSession.superxOptionsFocus={id:query.get('focus')==='build'?'build':'api-key',nonce:'local-preview-focus'};
-  const buildStatus=()=>query.get('permission')==='denied'?{connected:false,permission:'denied',installed:false,available:false,ready:false,errorCode:'BUILD_PERMISSION_REQUIRED'}:{connected:true,permission:'granted',installed:query.get('build')!=='missing',available:query.get('build')==='ready',authenticated:query.get('build')==='ready'?true:query.get('build')==='login'?false:undefined,ready:query.get('build')==='ready',version:'preview',...(query.get('build')==='models'?{modelCatalog:[{id:'grok-4.7',available:true,efforts:['low','high']},{id:'grok-preview-fast',available:true,efforts:['low','high']}]}:{})};
+  const buildStatus=()=>({connected:query.get('build')==='ready',available:query.get('build')==='ready',authenticated:query.get('build')==='ready'?true:query.get('build')==='login'?false:undefined,ready:query.get('build')==='ready',errorCode:query.get('build')==='login'?'BUILD_LOGIN_REQUIRED':query.get('build')==='ready'?undefined:'BUILD_UNAVAILABLE',version:'preview',...(query.get('build')==='models'?{modelCatalog:[{id:'grok-4.7',available:true,efforts:['low','high']},{id:'grok-preview-fast',available:true,efforts:['low','high']}]}:{})});
   const security=()=>({keyState:previewKey?'ready':state.migration?'migration':'missing',remember:state.rememberApiKey,hasSavedKey:state.hasSavedKey});
   const banner=document.createElement('div');banner.id='preview-note';
   banner.style.cssText='display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:8px 16px;margin:0;padding:8px 16px;font:12px/1.5 system-ui;color:var(--muted,#71767b);background:var(--background,#000);border-bottom:1px solid var(--line,#2f3336)';
@@ -39,15 +40,19 @@
   const persist=()=>sessionStorage.setItem('grokfirst-options-preview',JSON.stringify({settings:state.settings,rememberApiKey:state.rememberApiKey,hasSavedKey:state.hasSavedKey,migration:state.migration}));
   const pick=keys=>Object.fromEntries((Array.isArray(keys)?keys:[keys]).filter(key=>Object.hasOwn(state,key)).map(key=>[key,state[key]]));
   window.chrome={
-    permissions:{request(request){receipt.textContent=JSON.stringify({type:'PERMISSION_REQUEST',...request});return Promise.resolve(query.get('permission')!=='denied');}},
+    permissions:{request:()=>Promise.resolve(query.get('permission')!=='denied')},
     runtime:{
-      getManifest:()=>({version:'0.9.0-preview'}),reload:()=>location.reload(),
+      getManifest:()=>({version:'0.9.1-preview'}),reload:()=>location.reload(),
       onMessage:{addListener:fn=>runtimeListeners.push(fn)},
       async sendMessage(message){
         if(message.type==='GET_UI_LANGUAGE')return {ok:true,language:state.uiLanguage};
         if(message.type==='GET_SECURITY_STATUS')return {ok:true,...security()};
         if(message.type==='GET_CONFIG')return {ok:true,...state,ready:state.settings.provider==='build'?buildStatus().ready:Boolean(previewKey),buildStatus:buildStatus(),...security()};
         if(message.type==='GET_BUILD_STATUS'){receipt.textContent=JSON.stringify({type:message.type});return {ok:true,...buildStatus()};}
+        if(message.type==='GET_BUILD_CONNECTION')return {ok:true,configured:buildConfigured,port:buildPort};
+        if(message.type==='GET_BUILD_LAUNCH'){await import('/extension/build-setup.js');receipt.textContent=JSON.stringify({type:message.type,platform:message.platform});const secret='preview-local-code-not-real';return {ok:true,command:SuperXBuildSetup.command({platform:message.platform,port:message.port,secret}),port:message.port,secret};}
+        if(message.type==='SAVE_BUILD_CONNECTION'){buildConfigured=true;buildPort=message.port;const previous=state.settings;state.settings=XGrokCore.normalizeSettings(message.settings||state.settings);persist();receipt.textContent=JSON.stringify({type:message.type,port:message.port,settings:state.settings,codePresent:typeof message.secret==='string'});for(const listener of storageListeners)listener({settings:{oldValue:previous,newValue:state.settings}},'local');return {ok:true};}
+        if(message.type==='CLEAR_BUILD_CONNECTION'){buildConfigured=false;receipt.textContent=JSON.stringify({type:message.type});return {ok:true};}
         if(message.type==='OPEN_CONNECTOR_GUIDE'){receipt.textContent=JSON.stringify({type:message.type});location.assign('/extension/setup.html');return {ok:true};}
         if(message.type==='SAVE_SETTINGS'){
           const previous=state.settings;state.settings=XGrokCore.normalizeSettings(message.settings);persist();

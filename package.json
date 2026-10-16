@@ -1,6 +1,6 @@
 {
   "name": "superx",
-  "version": "0.9.0",
+  "version": "0.9.1",
   "private": true,
   "license": "MIT",
   "description": "A Chrome/Edge extension for concise fact-checks beside X posts, using your own API Key or local Grok Build login.",
@@ -13,8 +13,7 @@
     "package": "node tools/package-extension.mjs",
     "package:release": "node tools/package-release.mjs",
     "package:check": "node tools/package-extension.mjs --check",
-    "package:source": "node tools/package-source.mjs",
-    "package:connector": "node tools/package-connector.mjs"
+    "package:source": "node tools/package-source.mjs"
   },
   "engines": {
     "node": ">=22"

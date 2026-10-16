@@ -9,11 +9,13 @@ const server=http.createServer(async(req,res)=>{
     const previewURL=new URL(req.url,'http://localhost');
     let pathname=decodeURIComponent(previewURL.pathname);
     if(pathname==='/'||pathname==='/home')pathname='/demo/index.html';
-    if(['/demo/options.html','/demo/popup.html','/demo/history.html'].includes(pathname)){
-      const surface=pathname.endsWith('/popup.html')?'popup':pathname.endsWith('/history.html')?'history':'options';
+    if(['/demo/options.html','/demo/popup.html','/demo/history.html','/demo/setup.html'].includes(pathname)){
+      const surface=pathname.endsWith('/popup.html')?'popup':pathname.endsWith('/history.html')?'history':pathname.endsWith('/setup.html')?'setup':'options';
       let html=(await readFile(path.join(root,`extension/${surface}.html`),'utf8'))
         .replace(/(src|href)="([A-Za-z][\w.-]*\.(?:js|css|html))"/g,'$1="/extension/$2"')
-        .replace(`<script src="/extension/${surface}.js" defer></script>`,`<script src="/demo/${surface}-preview.js" defer></script><script src="/extension/${surface}.js" defer></script>`);
+        .replace(/(src|href)="assets\//g,'$1="/extension/assets/')
+        .replace(`<script src="/extension/${surface}.js" defer></script>`,`<script src="/demo/${surface}-preview.js" defer></script><script src="/extension/${surface}.js" defer></script>`)
+        .replace(`<script src="/extension/${surface}.js"></script>`,`<script src="/demo/${surface}-preview.js"></script><script src="/extension/${surface}.js"></script>`);
       // QA only: exercise the production light-mode rules without changing the
       // user's browser/OS appearance. The installed extension keeps its media query.
       if(previewURL.searchParams.get('scheme')==='light')html=html.replace(`/extension/${surface}.css`,`/extension/${surface}.css?scheme=light`);

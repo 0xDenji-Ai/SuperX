@@ -5,20 +5,18 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { packageExtension } from './package-extension.mjs';
 import { packageSource } from './package-source.mjs';
-import { packageConnector } from './package-connector.mjs';
 
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
 export async function packageRelease({ root = projectRoot, outputDir = resolve(root, 'artifacts'), expectedVersion } = {}) {
   const source = await packageSource({ root, outputDir, expectedVersion });
   const installation = await packageExtension({ root, outputDir, expectedVersion });
-  const connector = await packageConnector({ root, outputDir, expectedVersion });
   const aliasName = 'SuperX.zip';
   await copyFile(resolve(installation.outputDir, installation.archiveName), resolve(installation.outputDir, aliasName));
   const sumsPath = resolve(installation.outputDir, installation.sumsName);
   const sums = await readFile(sumsPath, 'utf8');
   await writeFile(sumsPath, `${sums}${installation.sha256}  ${aliasName}\n`);
-  return { version: installation.version, installation, source, connector, aliasName };
+  return { version: installation.version, installation, source, aliasName };
 }
 
 async function main(args) {
@@ -34,7 +32,6 @@ async function main(args) {
   const result = await packageRelease({ expectedVersion, outputDir });
   console.log(`Release candidate: ${result.installation.archiveName} / ${result.aliasName} (identical SHA256 ${result.installation.sha256})`);
   console.log(`Public source: ${result.source.archiveName}`);
-  console.log(`Optional local connector: ${result.connector.archiveName}`);
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

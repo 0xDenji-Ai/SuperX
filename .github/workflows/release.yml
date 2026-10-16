@@ -56,13 +56,13 @@ jobs:
             '',
             '1. Extract the installation ZIP into a permanent folder.',
             '2. Open Chrome or Edge Extensions, enable Developer mode, and load that folder as an unpacked extension.',
-            '3. Open SuperX settings and choose API Key or Grok Build. API Key is the default; The X Subscription users can follow the Dashboard setup guide. Grok Build requires the separate Windows/macOS connector and official login. Usage follows the account and provider rules.',
+            '3. Open SuperX settings and choose API Key or Grok CLI / ACP. API Key is the default; The X Subscription users can follow the Dashboard setup guide. The local mode uses the official Grok installation and login, with a generated Windows/macOS launch command. Usage follows the account and provider rules.',
             '',
             'Preview installations update manually: replace the files in the same folder, reload the extension, then refresh X. Installing a separate Chrome Web Store copy does not automatically migrate an unpacked copy\'s settings or Key.',
             '',
             `Installation files: [versioned ZIP](${download}/SuperX-${version}.zip), [SHA256 checksums](${download}/SuperX-${version}-SHA256SUMS.txt), [file inventory](${download}/SuperX-${version}-files.json). SuperX.zip contains the identical ZIP bytes.`,
             `Source files: [SHA256 checksums](${download}/SuperX-${version}-source-SHA256SUMS.txt), [file inventory](${download}/SuperX-${version}-source-files.json).`,
-            `Optional Grok Build: [Windows / macOS connector ZIP](${download}/SuperX-Connector-${version}.zip), [checksums](${download}/SuperX-Connector-${version}-SHA256SUMS.txt), [setup guide](${project}/blob/${tag}/docs/CONNECTIONS.md). API mode does not need the connector.`,
+            `Optional local mode: [Windows / macOS setup guide](${project}/blob/${tag}/docs/CONNECTIONS.md). Install Grok from the official provider, sign in and follow the built-in guide; no separate SuperX program or Node installation is required.`,
             '',
             `**Support:** [Report a bug or suggest a feature](${project}/issues/new/choose) · [Installation guide](${project}/blob/${tag}/README.md) · [中文说明](${project}/blob/${tag}/README.zh-CN.md)`,
             '',
@@ -82,7 +82,7 @@ jobs:
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
           version="${RELEASE_TAG#v}"
-          assets=("artifacts/SuperX-$version.zip" "artifacts/SuperX.zip" "artifacts/SuperX-$version-files.json" "artifacts/SuperX-$version-SHA256SUMS.txt" "artifacts/SuperX-$version-source.zip" "artifacts/SuperX-$version-source-files.json" "artifacts/SuperX-$version-source-SHA256SUMS.txt" "artifacts/SuperX-Connector-$version.zip" "artifacts/SuperX-Connector-$version-SHA256SUMS.txt")
+          assets=("artifacts/SuperX-$version.zip" "artifacts/SuperX.zip" "artifacts/SuperX-$version-files.json" "artifacts/SuperX-$version-SHA256SUMS.txt" "artifacts/SuperX-$version-source.zip" "artifacts/SuperX-$version-source-files.json" "artifacts/SuperX-$version-source-SHA256SUMS.txt")
           # Existing published releases are immutable for this workflow.
           if gh release view "$RELEASE_TAG" --json isDraft --jq '.isDraft' > "$RUNNER_TEMP/superx-release-state" 2>/dev/null; then
             if [ "$(cat "$RUNNER_TEMP/superx-release-state")" != "true" ]; then

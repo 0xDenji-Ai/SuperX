@@ -7,7 +7,7 @@ export const PRODUCTION_FILES = Object.freeze([
   'api-provider.js',
   'assets/icon-128.png', 'assets/icon-16.png', 'assets/icon-32.png', 'assets/icon-48.png',
   'assets/superx-logo.svg', 'assets/superx-symbol.svg',
-  'background.js', 'build-provider.js', 'content.js', 'feed-core.js', 'history-store.js', 'history.css', 'history.html', 'history.js', 'key-store.js', 'LICENSE.txt', 'manifest.json',
+  'background.js', 'build-acp.js', 'build-transport.js', 'build-provider.js', 'build-setup.js', 'content.js', 'feed-core.js', 'history-store.js', 'history.css', 'history.html', 'history.js', 'key-store.js', 'LICENSE.txt', 'manifest.json',
   'markdown-renderer.js', 'marked-LICENSE.txt', 'marked.umd.js',
   'options.css', 'options.html', 'options.js', 'overlay-layout.js',
   'popup.css', 'popup.html', 'popup.js', 'privacy.html', 'setup.css', 'setup.html', 'setup.js', 'ui-i18n.js',

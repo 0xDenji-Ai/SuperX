@@ -10,6 +10,14 @@ const sourceRoot = resolve(__dirname, '..');
 const packager = import('../tools/package-extension.mjs');
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 
+test('official local mode adds only optional loopback access and no native program permission',async()=>{
+  const manifest=JSON.parse(await readFile(join(sourceRoot,'extension','manifest.json'),'utf8'));
+  assert.deepEqual(manifest.optional_host_permissions,['http://127.0.0.1/*']);
+  assert.equal([...(manifest.permissions??[]),...(manifest.optional_permissions??[])].includes('nativeMessaging'),false);
+  assert.equal([...(manifest.host_permissions??[]),...(manifest.optional_host_permissions??[])].includes('<all_urls>'),false);
+  const {PRODUCTION_FILES}=await packager;for(const file of ['build-acp.js','build-transport.js','build-setup.js'])assert.ok(PRODUCTION_FILES.includes(file));
+});
+
 async function fixture(t) {
   const root = await mkdtemp(join(tmpdir(), 'superx-package-test-'));
   t.after(() => rm(root, { recursive: true, force: true }));
