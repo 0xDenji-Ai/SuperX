@@ -1847,6 +1847,7 @@ test('provider switching preserves credential drafts and Build saves without sen
   ids.get('api-model').value='grok-4.6';ids.get('api-model').listeners.change();ids.get('api-reasoning-effort').value='xhigh';
   ids.get('provider').value='build';ids.get('provider').listeners.change();
   assert.equal(ids.get('api-fields').hidden,true);assert.equal(ids.get('build-fields').hidden,false);
+  assert.equal(ids.get('source-description').hidden,false);assert.equal(ids.get('source-description').textContent,ui.t('options.buildDescription','en'));
   for(const id of ['api-key','remember-key','clear-key'])assert.equal(ids.get(id).disabled,true,id);
   assert.equal(ids.get('build-model').value,'grok-4.7');assert.equal(ids.get('build-reasoning-effort').value,'low');
   ids.get('build-port').value='2420';ids.get('build-port').listeners.input();
@@ -1858,6 +1859,7 @@ test('provider switching preserves credential drafts and Build saves without sen
   assert.equal(fixture.local.settings.buildTransport,'acp');assert.equal(fixture.local.settings.buildPort,2420);assert.equal(fixture.local.settings.apiModel,'grok-4.6');
   assert.equal(fixture.local.settings.apiReasoningEffort,'xhigh');
   ids.get('provider').value='api';ids.get('provider').listeners.change();
+  assert.equal(ids.get('source-description').hidden,true);assert.equal(ids.get('source-description').textContent,'');
   assert.equal(ids.get('api-key').value,'replacement-api-fixture');assert.equal(ids.get('remember-key').checked,true);
   await form.listeners.submit({preventDefault(){},currentTarget:form});
   const saves=fixture.messages.filter(message=>message.type==='SAVE_KEY');assert.equal(saves.length,1);
@@ -1936,10 +1938,10 @@ test('Build popup setup and toggling use official login and never require API cr
 test('provider onboarding links and all twelve locales explain Grok Inference and account usage',()=>{
   const html=fs.readFileSync(path.join(__dirname,'../extension/options.html'),'utf8');
   for(const href of ['https://grok.com/dashboard/api-keys','https://grok.com/dashboard/usage','https://console.x.ai/','https://github.com/xai-org/grok-build'])assert.ok(html.includes(`href="${href}"`),href);
-  assert.match(ui.t('options.apiStep2','en'),/Grok Inference.*Cursor.*Chat.*Models/);
-  assert.match(ui.t('options.apiStep3','en'),/xAI Console/);assert.match(ui.t('options.usageRules','en'),/account and provider rules/);
+  assert.match(ui.t('options.apiSubscriptionSetup','en'),/Grok Inference.*Cursor.*Chat.*model/);
+  assert.match(ui.t('options.apiKeyHint','en'),/grok.com.*xAI Console/);assert.match(ui.t('options.apiAccountHelp','en'),/site where you created/);
   assert.match(ui.t('options.connectorGuide','en'),/Windows \/ macOS/);
-  for(const locale of ui.SUPPORTED_LANGUAGES)for(const key of ['options.providerIntro','options.apiStep2','options.buildStep2','build.unknown','popup.setupBuild']){
+  for(const locale of ui.SUPPORTED_LANGUAGES)for(const key of ['options.apiKeyHint','options.apiSubscriptionSetup','options.apiAccountHelp','options.buildStep2','build.unknown','popup.setupBuild']){
     assert.ok(ui.catalog[locale][key]);if(locale!=='en')assert.notEqual(ui.catalog[locale][key],ui.catalog.en[key],`${locale}: ${key}`);
   }
 });
@@ -2175,15 +2177,17 @@ test('Settings viewing-time control saves seconds as milliseconds and keeps expl
   }
 });
 
-test('Settings exposes subscription and metered API guidance without an automatic priority setting',async()=>{
+test('Settings uses one Key flow with optional account-specific help and the existing reading controls',async()=>{
   const fixture=uiPageFixture('options');await settleUI();await settleUI();
   for(const [id,min,max,step]of [['api-concurrency','1','8','1'],['analysis-dwell','0','30','any']]){
     const input=fixture.ids.get(id);assert.equal(input.getAttribute('min'),min);assert.equal(input.getAttribute('max'),max);assert.equal(input.getAttribute('step'),step);
   }
   const html=fs.readFileSync(path.join(__dirname,'../extension/options.html'),'utf8');
-  for(const [key,url]of [['options.apiSubscriptionLink','https://grok.com/dashboard/api-keys'],['options.apiMeteredLink','https://console.x.ai/'],['options.apiPriorityLink','https://docs.x.ai/developers/advanced-api-usage/priority-processing']]){
-    assert.ok(html.includes('href="'+url+'"'));assert.ok(html.includes('data-i18n="'+key+'"'));
+  for(const [key,url]of [['options.apiSubscriptionLink','https://grok.com/dashboard/api-keys'],['options.dashboardUsage','https://grok.com/dashboard/usage'],['options.apiMeteredLink','https://console.x.ai/']]){
+    assert.equal(html.split('href="'+url+'"').length-1,1);assert.ok(html.includes('data-i18n="'+key+'"'));
   }
-  assert.match(ui.t('options.apiSubscriptionHelp','en'),/weekly allowance/);assert.match(ui.t('options.apiPriorityHelp','en'),/standard/);
+  assert.doesNotMatch(html,/<details[^>]*id="api-access-guide"[^>]*\bopen\b|options\.(?:providerIntro|uiHint|apiPriorityHelp|apiPriorityLink|apiDirectHint|keyStorageHelp|console|apiStep[123])/);
+  assert.ok(html.indexOf('id="api-key"')<html.indexOf('id="api-access-guide"'));assert.ok(html.indexOf('id="clear-key"')<html.indexOf('id="api-model"'));
+  assert.equal(fixture.ids.get('source-description').hidden,true);assert.equal(fixture.ids.get('source-description').textContent,'');
   assert.equal(fixture.messages.some(message=>/PRIORITY|TIER|UPGRADE|BILLING/.test(message.type)),false);
 });

@@ -145,9 +145,10 @@ test('all UI locales describe separate language controls and saved versus sessio
     assert.notEqual(ui.t('options.keyReadySaved',language),ui.t('options.keyReady',language));
     assert.notEqual(ui.t('options.answerLanguage',language),ui.t('options.interfaceLanguage',language));
   }
-  assert.equal(ui.t('options.keyReadySaved','zh-CN'),'已保存在本机，重启浏览器后可继续使用。');
-  assert.match(ui.t('options.keyReady','en'),/only for this browser session.*not saved.*again after restarting/);
-  assert.match(ui.t('options.keyReadySaved','en'),/Saved on this device.*restart/);
+  assert.equal(ui.t('options.keyReadySaved','zh-CN'),'已保存在本机。');
+  assert.equal(ui.t('options.keyReady','en'),'Available until the browser closes.');
+  assert.equal(ui.t('options.keyReadySaved','en'),'Saved on this device.');
+  assert.match(ui.t('options.rememberHelp','en'),/Encrypted locally.*restored after restart.*Uncheck.*only until the browser closes/);
 });
 
 test('analysis timing, shared concurrency and API access guidance are complete in all twelve languages',()=>{
@@ -197,8 +198,8 @@ test('dwell help explains scroll resets, excludes sidebar scrolling and preserve
 });
 
 test('API access copy separates subscription allowance, metered billing and optional paid priority without performance promises',()=>{
-  assert.match(ui.t('options.apiSubscriptionHelp','en'),/eligible API usage.*shared weekly allowance.*models, limits and extra charges/);
-  assert.match(ui.t('options.apiMeteredHelp','en'),/Key.*credits.*tokens and tools.*billing/);
+  assert.match(ui.t('options.apiSubscriptionHelp','en'),/eligible API allowance.*The X Subscription.*Grok Dashboard account.*availability and limits/);
+  assert.match(ui.t('options.apiMeteredHelp','en'),/API credits.*Tokens and tools.*usage and billing in xAI Console/);
   assert.match(ui.t('options.apiPriorityHelp','en'),/standard API credits does not enable Priority Processing.*SuperX uses standard requests.*explicit opt-in at an extra cost.*may reduce peak-time latency.*does not guarantee availability/);
   assert.match(ui.t('options.apiPriorityHelp','zh-CN'),/标准 API credits 不会开启.*SuperX 使用标准请求.*明确选择并额外付费.*可能降低高峰期延迟.*不保证/);
   assert.doesNotMatch([ui.t('options.apiSubscriptionHelp','en'),ui.t('options.apiMeteredHelp','en')].join(' '),/faster|more stable|priority|unlimited|free/i);
@@ -206,4 +207,39 @@ test('API access copy separates subscription allowance, metered billing and opti
     assert.match(ui.t('options.apiSubscriptionHelp',language),/Grok Dashboard/);assert.match(ui.t('options.apiMeteredHelp',language),/xAI Console/);
     assert.match(ui.t('options.apiPriorityHelp',language),/Priority/);assert.match(ui.t('options.apiPriorityHelp',language),/SuperX/);
   }
+});
+
+test('compact connection and Key guidance is translated without guessing account type or claiming authentication',()=>{
+  const keys=['options.source','options.enable','options.apiKeyLabel','options.keyPlaceholder','options.apiKeyHint','options.apiAccess',
+    'options.apiSubscriptionTitle','options.apiSubscriptionHelp','options.apiSubscriptionSetup','options.apiSubscriptionLink','options.dashboardUsage',
+    'options.apiMeteredTitle','options.apiMeteredHelp','options.apiMeteredLink','options.apiAccountHelp','options.rememberHelp',
+    'options.keyReadySaved','options.keyReady','options.keyMissing','options.keyMigration','options.modelHelp','options.reasoningHelp'];
+  for(const language of ui.SUPPORTED_LANGUAGES){
+    for(const key of keys){
+      const value=ui.catalog[language][key];assert.equal(typeof value,'string',`${language}: ${key}`);assert.ok(value.trim(),`${language}: ${key}`);
+      assert.equal(ui.t(key,language),value);assert.doesNotMatch(value,/<\/?[A-Za-z][^>]*>|\{[A-Za-z][A-Za-z0-9_]*\}/,`${language}: ${key}`);
+      if(language!=='en'&&key!=='options.apiKeyLabel')assert.notEqual(value,ui.catalog.en[key],`${language}: ${key} is translated`);
+    }
+    assert.match(ui.t('options.enable',language),/SuperX/);
+    assert.equal(ui.t('options.apiKeyLabel',language),'API Key');
+    assert.match(ui.t('options.apiKeyHint',language),/grok\.com/);assert.match(ui.t('options.apiKeyHint',language),/xAI Console/);
+    assert.match(ui.t('options.apiSubscriptionSetup',language),/Grok Inference/);assert.match(ui.t('options.apiSubscriptionSetup',language),/Cursor/);assert.match(ui.t('options.apiSubscriptionSetup',language),/Chat/);
+    assert.match(ui.t('options.modelHelp',language),/grok-4\.3/);assert.doesNotMatch(ui.t('options.modelHelp',language),/grok-4\.[567]/);
+    assert.doesNotMatch(ui.t('options.reasoningHelp',language),/Fast|Priority/);
+    for(const key of ['options.keyReadySaved','options.keyReady','options.keyMissing','options.keyMigration']){
+      assert.ok(Array.from(ui.t(key,language)).length<95,`${language}: ${key} stays concise`);
+      assert.doesNotMatch(ui.t(key,language),/authenticat|validat|verif|account confirmed|认证成功|验证成功|帳戶驗證/i);
+    }
+  }
+  assert.equal(ui.t('options.source','en'),'Connection');assert.equal(ui.t('options.source','zh-CN'),'连接');
+  assert.equal(ui.t('options.enable','en'),'Enable SuperX');assert.equal(ui.t('options.enable','zh-CN'),'启用 SuperX');
+  assert.equal(ui.t('options.keyPlaceholder','en'),'Paste your API Key');
+  assert.equal(ui.t('options.apiKeyHint','en'),'Keys from grok.com and xAI Console both work here.');
+  assert.equal(ui.t('options.apiAccess','en'),'Get an API Key or check usage');
+  assert.equal(ui.t('options.apiSubscriptionTitle','en'),'grok.com · Subscription');
+  assert.equal(ui.t('options.apiSubscriptionLink','en'),'Create API Key');assert.equal(ui.t('options.dashboardUsage','en'),'View usage');
+  assert.equal(ui.t('options.apiMeteredTitle','en'),'xAI Console · Pay as you go');assert.equal(ui.t('options.apiMeteredLink','en'),'Keys & billing');
+  assert.equal(ui.t('options.apiAccountHelp','en'),'Check usage and charges at the site where you created your Key.');
+  assert.equal(ui.t('options.keyMissing','en'),'Paste an API Key above and save settings.');
+  assert.equal(ui.t('options.keyMigration','en'),'Paste your API Key again and save settings.');
 });

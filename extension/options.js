@@ -64,7 +64,8 @@
     $("api-fields").hidden = build;$("build-fields").hidden = !build;
     for (const id of apiControlIds) $(id).disabled = busy || build;
     for (const id of buildControlIds) $(id).disabled = busy || !build;
-    $("source-description").textContent = ui.t(build ? "options.buildDescription" : "options.providerAPI",uiLanguage);
+    $("source-description").textContent = build ? ui.t("options.buildDescription",uiLanguage) : "";
+    $("source-description").hidden = !build;
     $("save").disabled = busy || (!build && !securityLoaded);
     renderBuildStatus();
   }

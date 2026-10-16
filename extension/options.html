@@ -16,7 +16,7 @@
         <p class="brand-tagline" data-i18n="options.tagline">Understand X. Fact-check as you scroll.</p>
         <h2 class="sidebar-title" data-i18n="common.settings">Settings</h2>
         <nav class="section-nav" data-i18n-aria="common.settings" aria-label="Settings">
-          <a href="#source-heading" data-i18n="options.source">Answer source</a>
+          <a href="#source-heading" data-i18n="options.source">Connection</a>
           <a href="#language-heading" data-i18n="options.languageTitle">Language</a>
           <a href="#prompts-heading" data-i18n="options.promptsTitle">Prompts</a>
           <a href="#history-heading" data-i18n="common.history">Browsing history</a>
@@ -32,15 +32,14 @@
           </div>
           <p id="status" role="status" aria-live="polite"></p>
         </header>
-        <div class="page-intro">
-          <p class="subtitle" data-i18n="options.providerIntro">Choose an answer source. After scrolling stops, visible posts queue after the configured viewing time.</p>
-          <p class="help" data-i18n="options.uiHint">Interface labels follow X. Answer language is configured separately.</p>
-        </div>
       <form id="settings-form" autocomplete="off">
+        <div class="settings-overview">
+          <label class="switch-label"><span data-i18n="options.enable">Enable SuperX</span><input id="enabled" type="checkbox" role="switch"><span class="switch-track" aria-hidden="true"></span></label>
+        </div>
         <section class="settings-section" aria-labelledby="source-heading">
           <div class="section-heading">
-            <h2 id="source-heading" data-i18n="options.source">Answer source</h2>
-            <p id="source-description" class="section-description"></p>
+            <h2 id="source-heading" data-i18n="options.source">Connection</h2>
+            <p id="source-description" class="section-description" hidden></p>
           </div>
           <div class="field provider-field">
             <label for="provider" data-i18n="options.providerChoice">Connect with</label>
@@ -49,51 +48,44 @@
               <option value="build" data-i18n="options.providerBuild">Grok CLI / ACP · Official local connection</option>
             </select>
           </div>
-          <label class="switch-label"><span data-i18n="options.enable">Enable</span><input id="enabled" type="checkbox" role="switch"><span class="switch-track" aria-hidden="true"></span></label>
           <div id="api-fields">
-            <div class="onboarding" aria-labelledby="api-setup-heading">
-              <h3 id="api-setup-heading" data-i18n="options.apiSetup">Connect your API Key</h3>
-              <details id="api-access-guide" class="connection-details" open>
-                <summary data-i18n="options.apiAccess">Subscription or pay-as-you-go API</summary>
-                <div class="api-access-options">
-                  <div>
-                    <h4 data-i18n="options.apiSubscriptionTitle">The X Subscription</h4>
-                    <p class="help" data-i18n="options.apiSubscriptionHelp">Create a Key in Grok Dashboard to use eligible API usage from your plan's shared weekly allowance. Check your account for models, limits and extra charges.</p>
-                    <a href="https://grok.com/dashboard/api-keys" target="_blank" rel="noopener noreferrer" data-i18n="options.apiSubscriptionLink">Grok API Keys</a>
-                  </div>
-                  <div>
-                    <h4 data-i18n="options.apiMeteredTitle">Pay-as-you-go xAI API</h4>
-                    <p class="help" data-i18n="options.apiMeteredHelp">Create a Key and add credits in xAI Console. Pay for the tokens and tools you use, and manage API usage and billing there.</p>
-                    <a href="https://console.x.ai/" target="_blank" rel="noopener noreferrer" data-i18n="options.apiMeteredLink">xAI Console</a>
+            <div class="field api-key-field">
+              <label for="api-key" data-i18n="options.apiKeyLabel">API Key</label>
+              <input id="api-key" type="password" maxlength="500" data-i18n-placeholder="options.keyPlaceholder" placeholder="Paste your API Key" autocomplete="off" spellcheck="false" dir="ltr" aria-describedby="key-help key-security-state">
+              <p id="key-help" class="help" data-i18n="options.apiKeyHint">Keys from grok.com and xAI Console both work here.</p>
+            </div>
+            <details id="api-access-guide" class="api-access-guide">
+              <summary data-i18n="options.apiAccess">Get an API Key or check usage</summary>
+              <div class="api-access-options">
+                <div>
+                  <h3 data-i18n="options.apiSubscriptionTitle">grok.com · Subscription</h3>
+                  <p class="help" data-i18n="options.apiSubscriptionHelp">Use eligible API access from The X Subscription. Check your allowance and limits in Grok Dashboard.</p>
+                  <p class="help" data-i18n="options.apiSubscriptionSetup">Choose Grok Inference (not Cursor) and allow Chat and your chosen model.</p>
+                  <div class="api-access-links">
+                    <a href="https://grok.com/dashboard/api-keys" target="_blank" rel="noopener noreferrer" data-i18n="options.apiSubscriptionLink">Create API Key</a>
+                    <a href="https://grok.com/dashboard/usage" target="_blank" rel="noopener noreferrer" data-i18n="options.dashboardUsage">View usage</a>
                   </div>
                 </div>
-                <p class="help" data-i18n="options.apiPriorityHelp">Priority Processing is separately priced and must be explicitly enabled. Buying standard credits does not enable it; SuperX currently uses standard processing.</p>
-                <a href="https://docs.x.ai/developers/advanced-api-usage/priority-processing" target="_blank" rel="noopener noreferrer" data-i18n="options.apiPriorityLink">About Priority Processing</a>
-              </details>
-              <ol>
-                <li><a href="https://grok.com/dashboard/api-keys" target="_blank" rel="noopener noreferrer" data-i18n="options.apiStep1">Open Grok Dashboard → API Keys.</a></li>
-                <li data-i18n="options.apiStep2">Choose Grok Inference as the Key type (the default Cursor type will not work). Allow Chat and, if needed, Models for your chosen model.</li>
-                <li data-i18n="options.apiStep3">Create the Key, paste it below and save. Existing xAI Console Keys also work.</li>
-              </ol>
-            </div>
-            <div class="field api-key-field">
-              <label for="api-key">xAI API Key</label>
-              <input id="api-key" type="password" maxlength="500" data-i18n-placeholder="options.keyPlaceholder" placeholder="Enter your xAI API Key" autocomplete="off" spellcheck="false" dir="ltr" aria-describedby="key-help key-security-state">
-              <p id="key-help" class="help" data-i18n="options.keyStorageHelp">Remember Key encrypts it on this device automatically; uncheck it for session-only storage.</p>
-              <p class="help" data-i18n="options.apiDirectHint">API requests go directly from this browser to xAI.</p>
-              <a class="help" href="https://console.x.ai/" target="_blank" rel="noopener noreferrer" data-i18n="options.console">xAI console</a>
-            </div>
+                <div>
+                  <h3 data-i18n="options.apiMeteredTitle">xAI Console · Pay as you go</h3>
+                  <p class="help" data-i18n="options.apiMeteredHelp">Add API credits and pay for the Tokens and tools you use. Manage usage and billing in xAI Console.</p>
+                  <div class="api-access-links"><a href="https://console.x.ai/" target="_blank" rel="noopener noreferrer" data-i18n="options.apiMeteredLink">Keys &amp; billing</a></div>
+                </div>
+              </div>
+              <p class="help api-account-help" data-i18n="options.apiAccountHelp">Check usage and charges at the site where you created your Key.</p>
+            </details>
             <label class="checkbox-label"><input id="remember-key" type="checkbox" checked><span data-i18n="options.remember">Remember Key on this device</span></label>
-            <p class="help indented" data-i18n="options.rememberHelp">Encrypted automatically on this device and restored after browser restart.</p>
+            <p class="help indented" data-i18n="options.rememberHelp">Encrypted locally and restored after restart. Uncheck to keep the Key only until the browser closes.</p>
             <p id="key-security-state" class="key-state" role="status" aria-live="polite"></p>
+            <div class="credential-actions"><button id="clear-key" class="text-button" type="button" data-i18n="common.clearKey">Clear saved Key</button></div>
             <div class="field model-field">
               <label for="api-model" data-i18n="options.model">Model</label>
               <select id="api-model" required dir="ltr" aria-describedby="model-help"></select>
-              <p id="model-help" class="help" data-i18n="options.modelHelp">Recommended: grok-4.3 is fast and has the lowest Token prices among these models. You can also use grok-4.5, grok-4.6 or grok-4.7, which have higher Token prices than grok-4.3.</p>
+              <p id="model-help" class="help" data-i18n="options.modelHelp">Grok 4.3 is a fast, lower-cost starting point. Check pricing and model access for your account.</p>
               <div class="field reasoning-field">
                 <label for="api-reasoning-effort" data-i18n="options.reasoning">Reasoning effort</label>
                 <select id="api-reasoning-effort" required aria-describedby="reasoning-help"></select>
-                <p id="reasoning-help" class="help" data-i18n="options.reasoningHelp">Only levels supported by the selected model are shown. Higher levels may take longer and use more Tokens. This does not enable Fast or Priority processing.</p>
+                <p id="reasoning-help" class="help" data-i18n="options.reasoningHelp">Only supported levels are shown. Higher effort may take longer and use more Tokens.</p>
               </div>
               <div class="model-actions">
                 <button id="fast-preset" class="text-button" type="button" data-i18n="options.fastPreset">Use fast defaults</button>
@@ -104,11 +96,6 @@
               <label for="api-concurrency" data-i18n="options.concurrency">Maximum concurrent API requests</label>
               <input id="api-concurrency" type="number" min="1" max="8" step="1" value="3" required aria-describedby="api-concurrency-help">
               <p id="api-concurrency-help" class="help" data-i18n="options.concurrencyHelp">Default: 3. All X tabs and comment requests share this limit.</p>
-            </div>
-            <p class="help" data-i18n="options.usageRules">Usage depends on your account and provider rules. View usage in Grok Dashboard.</p>
-            <div class="credential-actions">
-              <a class="help" href="https://grok.com/dashboard/usage" target="_blank" rel="noopener noreferrer" data-i18n="options.dashboardUsage">View Grok Dashboard usage</a>
-              <button id="clear-key" class="text-button" type="button" data-i18n="common.clearKey">Clear saved Key</button>
             </div>
           </div>
           <div id="build-fields" hidden>

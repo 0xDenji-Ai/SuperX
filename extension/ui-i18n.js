@@ -943,6 +943,143 @@
     ru:['Публикации попадают в очередь после остановки прокрутки и непрерывной видимости заданное время; локальное подключение Grok Build выполняет одну задачу за раз.'],
     hi:['स्क्रॉलिंग रुकने और पोस्ट तय समय तक लगातार दिखने के बाद कतार में जुड़ती हैं; स्थानीय Grok Build कनेक्शन एक समय में एक कार्य करता है।']
   });
+  section(['options.source','options.enable','options.apiKeyLabel','options.keyPlaceholder','options.apiKeyHint','options.apiAccess',
+    'options.apiSubscriptionTitle','options.apiSubscriptionHelp','options.apiSubscriptionSetup','options.apiSubscriptionLink','options.dashboardUsage',
+    'options.apiMeteredTitle','options.apiMeteredHelp','options.apiMeteredLink','options.apiAccountHelp',
+    'options.rememberHelp','options.keyReadySaved','options.keyReady','options.keyMissing','options.keyMigration','options.modelHelp','options.reasoningHelp'],{
+    en:[
+      'Connection','Enable SuperX','API Key','Paste your API Key','Keys from grok.com and xAI Console both work here.','Get an API Key or check usage',
+      'grok.com · Subscription','Use eligible API allowance from The X Subscription. Check your Grok Dashboard account for availability and limits.',
+      'Choose Grok Inference (not Cursor) and allow Chat and your chosen model.','Create API Key','View usage',
+      'xAI Console · Pay as you go','Add API credits and pay for the Tokens and tools you use. Manage usage and billing in xAI Console.','Keys & billing',
+      'Check usage and charges at the site where you created your Key.',
+      'Encrypted locally and restored after restart. Uncheck to keep the Key only until the browser closes.',
+      'Saved on this device.','Available until the browser closes.','Paste an API Key above and save settings.','Paste your API Key again and save settings.',
+      'Recommended: grok-4.3 for fast responses and low Token prices.',
+      'Only levels supported by the selected model are shown. Higher levels may take longer and use more Tokens.'
+    ],
+    'zh-CN':[
+      '连接','启用 SuperX','API Key','粘贴你的 API Key','grok.com 和 xAI Console 创建的 Key 均可使用。','获取 API Key 或查看用量',
+      'grok.com · 订阅','使用 The X Subscription 支持的 API 额度，具体资格与限制以你的 Grok Dashboard 账户页面为准。',
+      '选择 Grok Inference（不是 Cursor），并允许 Chat 和所选模型。','创建 API Key','查看用量',
+      'xAI Console · 按量付费','购买 API credits，按实际使用的 Token 和工具计费。在 xAI Console 管理用量和账单。','Key 与账单',
+      '请在创建 Key 的网站查看用量和费用。',
+      '在本机加密保存，重启后自动恢复。取消勾选则仅保留至浏览器关闭。',
+      '已保存在本机。','可用至浏览器关闭。','请在上方粘贴 API Key 并保存设置。','请重新粘贴 API Key 并保存设置。',
+      '推荐 grok-4.3，响应较快、Token 价格较低。',
+      '仅显示所选模型支持的档位。更高档位可能耗时更长、使用更多 Token。'
+    ],
+    'zh-TW':[
+      '連線','啟用 SuperX','API Key','貼上你的 API Key','grok.com 和 xAI Console 建立的 Key 均可使用。','取得 API Key 或查看用量',
+      'grok.com · 訂閱','使用 The X Subscription 支援的 API 額度，具體資格與限制以你的 Grok Dashboard 帳戶頁面為準。',
+      '選擇 Grok Inference（不是 Cursor），並允許 Chat 和所選模型。','建立 API Key','查看用量',
+      'xAI Console · 按用量付費','購買 API credits，依實際使用的 Token 和工具計費。在 xAI Console 管理用量與帳單。','Key 與帳單',
+      '請在建立 Key 的網站查看用量與費用。',
+      '在本機加密儲存，重新啟動後自動還原。取消勾選則僅保留至瀏覽器關閉。',
+      '已儲存在本機。','可用至瀏覽器關閉。','請在上方貼上 API Key 並儲存設定。','請重新貼上 API Key 並儲存設定。',
+      '推薦 grok-4.3，回應較快、Token 價格較低。',
+      '僅顯示所選模型支援的等級。較高等級可能耗時更長、使用更多 Token。'
+    ],
+    ja:[
+      '接続','SuperX を有効にする','API Key','API Key を貼り付け','grok.com と xAI Console のどちらで作成した Key も使えます。','API Key の取得・利用量の確認',
+      'grok.com · サブスクリプション','The X Subscription の対象 API 利用枠を使用します。利用資格と上限は Grok Dashboard のアカウントで確認してください。',
+      'Grok Inference（Cursor ではありません）を選択し、Chat と選択したモデルを許可してください。','API Key を作成','利用量を確認',
+      'xAI Console · 従量課金','API クレジットを購入し、使用したトークンとツールの料金を支払います。利用量と請求は xAI Console で管理します。','Key と請求',
+      'Key を作成したサイトで利用量と料金を確認してください。',
+      '端末で暗号化し、再起動後に復元します。チェックを外すとブラウザーを閉じるまでのみ保持します。',
+      'この端末に保存済み。','ブラウザーを閉じるまで利用可能。','上に API Key を貼り付けて設定を保存してください。','API Key をもう一度貼り付けて設定を保存してください。',
+      '高速な応答と低いトークン料金には grok-4.3 を推奨します。',
+      '選択したモデルが対応するレベルのみ表示します。高いレベルでは時間とトークン消費が増える場合があります。'
+    ],
+    ko:[
+      '연결','SuperX 활성화','API Key','API Key 붙여넣기','grok.com과 xAI Console에서 만든 Key를 모두 사용할 수 있습니다.','API Key 발급 또는 사용량 확인',
+      'grok.com · 구독','The X Subscription에서 지원하는 API 한도를 사용합니다. 이용 자격과 제한은 Grok Dashboard 계정에서 확인하세요.',
+      'Grok Inference(Cursor 아님)를 선택하고 Chat과 선택한 모델을 허용하세요.','API Key 만들기','사용량 보기',
+      'xAI Console · 종량제','API 크레딧을 구매하고 사용한 토큰과 도구에 대해 결제하세요. 사용량과 청구는 xAI Console에서 관리합니다.','Key 및 청구',
+      'Key를 만든 사이트에서 사용량과 요금을 확인하세요.',
+      '기기에 암호화해 저장하고 재시작 후 복원합니다. 선택을 해제하면 브라우저를 닫을 때까지만 보관합니다.',
+      '이 기기에 저장됨.','브라우저를 닫을 때까지 사용 가능.','위에 API Key를 붙여넣고 설정을 저장하세요.','API Key를 다시 붙여넣고 설정을 저장하세요.',
+      '빠른 응답과 낮은 토큰 가격을 원하면 grok-4.3을 권장합니다.',
+      '선택한 모델이 지원하는 수준만 표시합니다. 높은 수준은 시간이 더 걸리고 토큰을 더 사용할 수 있습니다.'
+    ],
+    es:[
+      'Conexión','Activar SuperX','API Key','Pega tu API Key','Aquí funcionan las Keys de grok.com y de xAI Console.','Obtener una API Key o consultar el uso',
+      'grok.com · Suscripción','Usa la cuota de API elegible de The X Subscription. Consulta la disponibilidad y los límites en tu cuenta de Grok Dashboard.',
+      'Elige Grok Inference (no Cursor) y permite Chat y el modelo elegido.','Crear API Key','Ver uso',
+      'xAI Console · Pago por uso','Compra créditos de API y paga por los tokens y herramientas que uses. Gestiona el uso y la facturación en xAI Console.','Keys y facturación',
+      'Consulta el uso y los cargos en el sitio donde creaste tu Key.',
+      'Se cifra localmente y se restaura al reiniciar. Desmarca para guardar la Key solo hasta que se cierre el navegador.',
+      'Guardada en este dispositivo.','Disponible hasta cerrar el navegador.','Pega una API Key arriba y guarda los ajustes.','Vuelve a pegar tu API Key y guarda los ajustes.',
+      'Recomendado: grok-4.3 para respuestas rápidas y precios bajos por token.',
+      'Solo se muestran los niveles que admite el modelo elegido. Los niveles superiores pueden tardar más y consumir más tokens.'
+    ],
+    fr:[
+      'Connexion','Activer SuperX','API Key','Collez votre API Key','Les Keys de grok.com et de xAI Console fonctionnent ici.','Obtenir une API Key ou consulter l’utilisation',
+      'grok.com · Abonnement','Utilisez le quota API éligible de The X Subscription. Consultez la disponibilité et les limites de votre compte dans Grok Dashboard.',
+      'Choisissez Grok Inference (pas Cursor) et autorisez Chat et le modèle choisi.','Créer une API Key','Voir l’utilisation',
+      'xAI Console · Paiement à l’usage','Achetez des crédits API et payez les tokens et outils utilisés. Gérez l’utilisation et la facturation dans xAI Console.','Keys et facturation',
+      'Consultez l’utilisation et les frais sur le site où vous avez créé votre Key.',
+      'Chiffrée localement et restaurée au redémarrage. Décochez pour conserver la Key uniquement jusqu’à la fermeture du navigateur.',
+      'Enregistrée sur cet appareil.','Disponible jusqu’à la fermeture du navigateur.','Collez une API Key ci-dessus et enregistrez les paramètres.','Collez à nouveau votre API Key et enregistrez les paramètres.',
+      'Recommandé : grok-4.3 pour des réponses rapides et des tokens peu coûteux.',
+      'Seuls les niveaux pris en charge par le modèle choisi sont affichés. Les niveaux supérieurs peuvent prendre plus de temps et utiliser plus de tokens.'
+    ],
+    de:[
+      'Verbindung','SuperX aktivieren','API Key','API Key einfügen','Keys von grok.com und der xAI Console funktionieren hier.','API Key erstellen oder Nutzung prüfen',
+      'grok.com · Abo','Nutze das berechtigte API-Kontingent von The X Subscription. Verfügbarkeit und Limits findest du in deinem Konto im Grok Dashboard.',
+      'Wähle Grok Inference (nicht Cursor) und erlaube Chat und das gewählte Modell.','API Key erstellen','Nutzung ansehen',
+      'xAI Console · Nutzungsbasierte Abrechnung','Kaufe API-Guthaben und bezahle die verwendeten Tokens und Tools. Verwalte Nutzung und Abrechnung in der xAI Console.','Keys und Abrechnung',
+      'Prüfe Nutzung und Kosten auf der Website, auf der du den Key erstellt hast.',
+      'Lokal verschlüsselt und nach einem Neustart wiederhergestellt. Ohne Häkchen bleibt der Key nur bis zum Schließen des Browsers erhalten.',
+      'Auf diesem Gerät gespeichert.','Bis zum Schließen des Browsers verfügbar.','Füge oben einen API Key ein und speichere die Einstellungen.','Füge deinen API Key erneut ein und speichere die Einstellungen.',
+      'Empfohlen: grok-4.3 für schnelle Antworten und niedrige Token-Preise.',
+      'Es werden nur vom gewählten Modell unterstützte Stufen angezeigt. Höhere Stufen können länger dauern und mehr Tokens verbrauchen.'
+    ],
+    pt:[
+      'Conexão','Ativar SuperX','API Key','Cole sua API Key','Keys do grok.com e do xAI Console funcionam aqui.','Obter uma API Key ou consultar o uso',
+      'grok.com · Assinatura','Use a cota de API elegível do The X Subscription. Confira a disponibilidade e os limites na sua conta do Grok Dashboard.',
+      'Escolha Grok Inference (não Cursor) e permita Chat e o modelo escolhido.','Criar API Key','Ver uso',
+      'xAI Console · Pagamento por uso','Compre créditos de API e pague pelos tokens e ferramentas utilizados. Gerencie o uso e a cobrança no xAI Console.','Keys e cobrança',
+      'Confira o uso e as cobranças no site onde criou sua Key.',
+      'Criptografada localmente e restaurada ao reiniciar. Desmarque para manter a Key apenas até fechar o navegador.',
+      'Salva neste dispositivo.','Disponível até fechar o navegador.','Cole uma API Key acima e salve as configurações.','Cole sua API Key novamente e salve as configurações.',
+      'Recomendado: grok-4.3 para respostas rápidas e preços baixos por token.',
+      'Só aparecem níveis compatíveis com o modelo escolhido. Níveis maiores podem demorar mais e usar mais tokens.'
+    ],
+    ar:[
+      'الاتصال','تفعيل SuperX','API Key','الصق API Key','تعمل هنا مفاتيح grok.com وxAI Console.','الحصول على API Key أو مراجعة الاستخدام',
+      'grok.com · الاشتراك','استخدم حصة API المؤهلة ضمن The X Subscription. راجع التوافر والحدود في حسابك على Grok Dashboard.',
+      'اختر Grok Inference وليس Cursor، واسمح بـChat والنموذج المختار.','إنشاء API Key','عرض الاستخدام',
+      'xAI Console · الدفع حسب الاستخدام','اشترِ رصيد API وادفع مقابل الرموز والأدوات المستخدمة. أدر الاستخدام والفوترة في xAI Console.','المفاتيح والفوترة',
+      'راجع الاستخدام والرسوم في الموقع الذي أنشأت فيه المفتاح.',
+      'يُشفّر محليًا ويُستعاد بعد إعادة التشغيل. ألغِ التحديد للاحتفاظ بالمفتاح حتى إغلاق المتصفح فقط.',
+      'محفوظ على هذا الجهاز.','متاح حتى إغلاق المتصفح.','الصق API Key أعلاه واحفظ الإعدادات.','الصق API Key مجددًا واحفظ الإعدادات.',
+      'نوصي بـgrok-4.3 لاستجابات سريعة وأسعار رموز منخفضة.',
+      'تظهر فقط المستويات التي يدعمها النموذج المختار. قد تستغرق المستويات الأعلى وقتًا أطول وتستهلك رموزًا أكثر.'
+    ],
+    ru:[
+      'Подключение','Включить SuperX','API Key','Вставьте API Key','Здесь работают Keys из grok.com и xAI Console.','Получить API Key или проверить использование',
+      'grok.com · Подписка','Используйте доступный лимит API в The X Subscription. Доступность и ограничения указаны в вашем аккаунте Grok Dashboard.',
+      'Выберите Grok Inference (не Cursor) и разрешите Chat и выбранную модель.','Создать API Key','Посмотреть использование',
+      'xAI Console · Оплата за использование','Купите API-кредиты и платите за использованные токены и инструменты. Управляйте использованием и счетами в xAI Console.','Keys и счета',
+      'Проверяйте использование и расходы на сайте, где создали Key.',
+      'Шифруется локально и восстанавливается после перезапуска. Снимите флажок, чтобы хранить Key только до закрытия браузера.',
+      'Сохранён на этом устройстве.','Доступен до закрытия браузера.','Вставьте API Key выше и сохраните настройки.','Вставьте API Key повторно и сохраните настройки.',
+      'Рекомендуем grok-4.3 для быстрых ответов и низкой цены токенов.',
+      'Показаны только уровни, поддерживаемые выбранной моделью. Более высокие уровни могут требовать больше времени и токенов.'
+    ],
+    hi:[
+      'कनेक्शन','SuperX चालू करें','API Key','अपनी API Key पेस्ट करें','grok.com और xAI Console की Keys यहाँ काम करती हैं।','API Key लें या उपयोग देखें',
+      'grok.com · सदस्यता','The X Subscription की पात्र API सीमा का उपयोग करें। उपलब्धता और सीमाएँ अपने Grok Dashboard खाते में देखें।',
+      'Grok Inference चुनें (Cursor नहीं) और Chat व चुने गए मॉडल की अनुमति दें।','API Key बनाएँ','उपयोग देखें',
+      'xAI Console · उपयोग के अनुसार भुगतान','API क्रेडिट खरीदें और इस्तेमाल किए गए टोकन व टूल के लिए भुगतान करें। xAI Console में उपयोग और बिलिंग सँभालें।','Keys और बिलिंग',
+      'जिस साइट पर Key बनाई थी, वहीं उपयोग और शुल्क देखें।',
+      'स्थानीय रूप से एन्क्रिप्ट होती है और रीस्टार्ट के बाद वापस मिलती है। चयन हटाने पर Key केवल ब्राउज़र बंद होने तक रहेगी।',
+      'इस डिवाइस पर सहेजी गई।','ब्राउज़र बंद होने तक उपलब्ध।','ऊपर API Key पेस्ट करके सेटिंग सहेजें।','अपनी API Key दोबारा पेस्ट करके सेटिंग सहेजें।',
+      'तेज़ जवाब और कम टोकन कीमतों के लिए grok-4.3 सुझाया जाता है।',
+      'केवल चुने गए मॉडल के समर्थित स्तर दिखते हैं। ऊँचे स्तर अधिक समय और टोकन ले सकते हैं।'
+    ]
+  });
   const aliases = {'common.auto':'lang.auto','common.failed':'status.failed','tooltip.collapse':'common.collapse','tooltip.expand':'common.expand'};
   for (const language of SUPPORTED_LANGUAGES) {
     for (const [key, source] of Object.entries(aliases)) catalog[language][key] = catalog[language][source];

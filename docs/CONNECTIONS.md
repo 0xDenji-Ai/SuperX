@@ -1,17 +1,17 @@
 # Connect SuperX
 
-The unreleased **0.9.9** candidate offers two independent modes. **API Key** is the default. **Grok CLI / ACP** connects directly to the official Grok service on your computer. Neither mode automatically falls back to the other or resubmits a paid task. Published Stable remains **0.7.26**.
+The unreleased **0.9.10** candidate offers two independent modes. **API Key** is the default. **Grok CLI / ACP** connects directly to the official Grok service on your computer. Neither mode automatically falls back to the other or resubmits a paid task. Published Stable remains **0.7.26**.
 
 ## API Key
 
 This is the simplest setup on both Windows and macOS. No terminal or extra local software is required.
 
-1. Open SuperX **Settings → API Key**.
-2. If you use The X Subscription, open [Grok Dashboard → API Keys](https://grok.com/dashboard/api-keys). Choose **Grok Inference** as the Key type; the default **Cursor** type is not suitable. Enable **Chat** and the model permissions required by your account. Existing [xAI Console](https://console.x.ai/) Keys also work.
+1. Open SuperX **Settings → Connection**, select **API Key**, and expand **Get an API Key or check usage** if needed.
+2. Choose the appropriate account site: for eligible The X Subscription API allowance, use [Grok Dashboard → API Keys](https://grok.com/dashboard/api-keys), choose **Grok Inference** instead of **Cursor**, and enable **Chat** / the required model permissions. For pay-as-you-go API credits, create a Key and add credits in [xAI Console](https://console.x.ai/). Both Keys go in the same SuperX input; there is no additional provider or Key-source selection.
 3. Create a Key, paste it into SuperX, and save. **Remember Key on this device** is selected by default and restores it after browser restart without a SuperX password.
 4. Select an available model and reasoning effort. Enable SuperX and open X.
 
-Entitlement, usage limits and charges depend on your account and the provider's rules. Check [Grok Dashboard usage](https://grok.com/dashboard/usage); a subscription is not a promise of free or unlimited API usage. See [Privacy](../PRIVACY.md) for data and credential handling.
+Entitlement, usage limits and charges depend on your account and the provider's rules. Check [Grok Dashboard usage](https://grok.com/dashboard/usage) for subscription usage, or xAI Console for pay-as-you-go usage/billing. A subscription is not a promise of free or unlimited API usage, and saving a Key does not validate provider access or available allowance. See [Privacy](../PRIVACY.md) for data and credential handling.
 
 Eligible API use from The X Subscription shares the plan's weekly allowance. For pay-as-you-go API use, create a Key and add credits in [xAI Console](https://console.x.ai/); tokens and tool calls are billed there. Purchasing standard credits does not automatically improve processing priority. [Priority Processing](https://docs.x.ai/developers/advanced-api-usage/priority-processing) requires explicit opt-in and extra payment; SuperX currently uses standard requests. Priority can reduce peak-time latency but does not guarantee availability.
 
@@ -57,7 +57,7 @@ For API failures, open **Local diagnostic log** at the bottom of Settings. It ke
 
 ## 中文快速引导
 
-**API Key 模式**在 Windows 和 Mac 上都只需浏览器：设置中选择 API Key，打开 [Grok Dashboard → API Keys](https://grok.com/dashboard/api-keys)，创建 **Grok Inference** 类型而非 Cursor 类型的 Key，按账号要求授权 Chat／模型，粘贴并保存。已有 xAI 控制台 Key 可继续使用。默认在本机自动加密记住，无需 SuperX 密码。订阅权益、限额及费用以账号用量页和提供方规则为准。
+**API Key 模式**在 Windows 和 Mac 上都只需浏览器：打开「设置 → 连接 → API Key」，按需展开获取帮助。使用订阅 API 额度时，去 [Grok Dashboard → API Keys](https://grok.com/dashboard/api-keys) 创建 **Grok Inference** 类型而非 Cursor 类型的 Key，按账号要求授权 Chat／模型；使用按量付费 API 时，去 [xAI 控制台](https://console.x.ai/) 创建 Key、购买额度。两种来源均粘贴到同一个 API Key 输入框并保存，不另选来源。默认在本机自动加密记住，无需 SuperX 密码；保存不代表已验证 API 权限或剩余额度。用量和费用请到创建 Key 的账户查看。
 
 符合条件的订阅 API 使用计入共享周额度；也可在 [xAI 控制台](https://console.x.ai/) 购买按量付费额度。购买普通额度不等于启用额外收费的 Priority Processing，SuperX 当前使用标准处理。两种模式均默认在停止滚动、帖子连续可见满 1 秒后自动分析，设置可改为 0–30 秒，0 秒立即分析；API 默认并发 3（可设 1–8），本机模式逐项执行。手动重新分析、评论及浏览历史不受停留等待影响。
 

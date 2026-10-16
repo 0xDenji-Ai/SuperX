@@ -2,6 +2,14 @@
 
 SuperX release history. The extension's `manifest.json` is the authoritative installed version. Test counts below describe those releases' recorded checks, not live provider or browser-store certification.
 
+## 0.9.10 — Simplify connection setup and clarify Key sources (unreleased candidate)
+
+- Put the connection method, one neutral API Key field and model settings on the main setup path. Remove the global explanatory introduction, repeated API branding, duplicate console links and repeated storage/usage instructions. Keep Enable as a separate global control.
+- Offer Grok Dashboard subscription allowance and xAI Console pay-as-you-go credits as two sources of Keys for the same API Key mode, inside a collapsed help section. Keep Grok Inference / Cursor setup advice only with the Grok Dashboard path and show each account's own usage/billing entry. Do not add a Key-source setting or infer account entitlements from a Key.
+- Move credential clearing next to the Key, combine the remember/session explanation and shorten saved/session/missing/replacement states without implying provider authentication or available credit. Keep model, reasoning, scrolling, language and local Grok controls intact.
+- Remove Priority Processing guidance from the setup path because SuperX does not offer that setting. Retain the detailed API billing/processing explanation in the connection documentation. Update all twelve interface languages.
+- This is one combined settings candidate; published Stable remains 0.7.26.
+
 ## 0.9.9 — Go deeper into checkable details (unreleased candidate)
 
 - Remove the built-in and fixed application instructions that asked for a brief exit when there was no "meaningful checkable claim". Encourage investigating explicit claims, reasonably implied factual premises and checkable details, including relevant sources, context, numbers, comparisons and causal reasoning.
