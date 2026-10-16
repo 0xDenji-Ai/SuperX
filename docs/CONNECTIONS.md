@@ -1,12 +1,12 @@
 # Connect SuperX
 
-The unreleased **0.9.10** candidate offers two independent modes. **API Key** is the default. **Grok CLI / ACP** connects directly to the official Grok service on your computer. Neither mode automatically falls back to the other or resubmits a paid task. Published Stable remains **0.7.26**.
+The unreleased **0.9.10** candidate offers two independent modes. **Grok API Key** is the default. **Grok CLI / ACP** connects directly to the official Grok service on your computer. Neither mode automatically falls back to the other or resubmits a paid task. Published Stable remains **0.7.26**.
 
-## API Key
+## Grok API Key
 
 This is the simplest setup on both Windows and macOS. No terminal or extra local software is required.
 
-1. Open SuperX **Settings → Connection**, select **API Key**, and expand **Get an API Key or check usage** if needed.
+1. Open SuperX **Settings → Connection**, select **Grok API Key**, and expand **Get a Grok API Key or check usage** if needed.
 2. Choose the appropriate account site: for eligible The X Subscription API allowance, use [Grok Dashboard → API Keys](https://grok.com/dashboard/api-keys), choose **Grok Inference** instead of **Cursor**, and enable **Chat** / the required model permissions. For pay-as-you-go API credits, create a Key and add credits in [xAI Console](https://console.x.ai/). Both Keys go in the same SuperX input; there is no additional provider or Key-source selection.
 3. Create a Key, paste it into SuperX, and save. **Remember Key on this device** is selected by default and restores it after browser restart without a SuperX password.
 4. Select an available model and reasoning effort. Enable SuperX and open X.
@@ -25,7 +25,7 @@ The guide covers **Windows PowerShell** and **macOS Terminal**, including Apple 
 2. Open **SuperX Settings → Grok CLI / ACP → Step-by-step guide**. Select Windows or macOS, then **Generate launch command**. SuperX creates a random local connection code automatically; you do not need to invent a password or edit configuration files.
 3. Copy the generated command into that terminal and run it. It starts the official service on **127.0.0.1**, with an isolated temporary working/configuration directory and restricted discovery settings. Keep the terminal open while using this mode.
 4. Return to SuperX and select **Check connection**. Approve the browser's optional access to the local address if asked. The check confirms the official login, protocol, available models and restricted session without sending a Fact Check or comment prompt.
-5. **Save connection**, choose an available model and reasoning effort, and save settings. Enable SuperX and open X. The local mode uses its own selections; it does not use your extension API Key.
+5. **Save connection**, choose an available model and reasoning effort, and save settings. Enable SuperX and open X. The local mode uses its own selections; it does not use your extension API Key. SuperX initially selects **Grok 4.7 / Low** here and **Grok 4.3 / reasoning off** in API mode. Switching modes preserves both choices. After connecting, only models advertised by your official CLI are selectable.
 
 For daily use, start the generated command before opening X. After restarting your computer, start it again; SuperX cannot automatically launch the official CLI. If you generate a new connection code, run the new command and save the new connection together. To stop the service, press **Ctrl+C** in its terminal. You can switch back to API Key mode at any time.
 

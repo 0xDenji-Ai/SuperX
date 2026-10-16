@@ -44,25 +44,25 @@
           <div class="field provider-field">
             <label for="provider" data-i18n="options.providerChoice">Connect with</label>
             <select id="provider" required aria-describedby="source-description">
-              <option value="api" data-i18n="options.providerKey">API Key</option>
+              <option value="api" data-i18n="options.providerKey">Grok API Key</option>
               <option value="build" data-i18n="options.providerBuild">Grok CLI / ACP · Official local connection</option>
             </select>
           </div>
           <div id="api-fields">
             <div class="field api-key-field">
-              <label for="api-key" data-i18n="options.apiKeyLabel">API Key</label>
-              <input id="api-key" type="password" maxlength="500" data-i18n-placeholder="options.keyPlaceholder" placeholder="Paste your API Key" autocomplete="off" spellcheck="false" dir="ltr" aria-describedby="key-help key-security-state">
+              <label for="api-key" data-i18n="options.apiKeyLabel">Grok API Key</label>
+              <input id="api-key" type="password" maxlength="500" data-i18n-placeholder="options.keyPlaceholder" placeholder="Paste your Grok API Key" autocomplete="off" spellcheck="false" dir="ltr" aria-describedby="key-help key-security-state">
               <p id="key-help" class="help" data-i18n="options.apiKeyHint">Keys from grok.com and xAI Console both work here.</p>
             </div>
             <details id="api-access-guide" class="api-access-guide">
-              <summary data-i18n="options.apiAccess">Get an API Key or check usage</summary>
+              <summary data-i18n="options.apiAccess">Get a Grok API Key or check usage</summary>
               <div class="api-access-options">
                 <div>
                   <h3 data-i18n="options.apiSubscriptionTitle">grok.com · Subscription</h3>
                   <p class="help" data-i18n="options.apiSubscriptionHelp">Use eligible API access from The X Subscription. Check your allowance and limits in Grok Dashboard.</p>
                   <p class="help" data-i18n="options.apiSubscriptionSetup">Choose Grok Inference (not Cursor) and allow Chat and your chosen model.</p>
                   <div class="api-access-links">
-                    <a href="https://grok.com/dashboard/api-keys" target="_blank" rel="noopener noreferrer" data-i18n="options.apiSubscriptionLink">Create API Key</a>
+                    <a href="https://grok.com/dashboard/api-keys" target="_blank" rel="noopener noreferrer" data-i18n="options.apiSubscriptionLink">Create Grok API Key</a>
                     <a href="https://grok.com/dashboard/usage" target="_blank" rel="noopener noreferrer" data-i18n="options.dashboardUsage">View usage</a>
                   </div>
                 </div>
@@ -127,7 +127,7 @@
             <div class="field">
               <label for="build-model" data-i18n="options.model">Model</label>
               <select id="build-model" required aria-describedby="build-model-help build-fast-help"></select>
-              <p id="build-model-help" class="help" data-i18n="options.buildModelHelp">Available models and reasoning levels are checked with official Grok when connecting.</p>
+              <p id="build-model-help" class="help" data-i18n="options.buildModelHelp">Model settings are saved separately from API mode. Available models and reasoning levels are checked when connecting.</p>
               <p id="build-fast-help" class="help" hidden></p>
               <p id="build-model-status" class="help" role="status" aria-live="polite"></p>
             </div>

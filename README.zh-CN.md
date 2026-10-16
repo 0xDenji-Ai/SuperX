@@ -66,11 +66,11 @@ Chrome 优先从商店安装：
 
 从解压版切到商店版属于另一安装，当前不自动迁移设置与 Key。请先停用旧安装，避免重复分析，再配置新安装。
 
-## API Key 与费用
+## Grok API Key 与费用
 
 The X Subscription 用户可在 [Grok Dashboard → API Keys](https://grok.com/dashboard/api-keys) 创建 **Grok Inference** 类型 Key，而非默认的 **Cursor** 类型，并为 Chat 和所用模型授权。已有 [xAI 控制台](https://console.x.ai/) Key 继续可用。具体订阅权益、限额及费用以自己账号的 [用量页](https://grok.com/dashboard/usage) 和提供方规则为准，不承诺所有订阅均含免费或无限 API。
 
-两种来源都填写在「设置 → 连接 → API Key」，无需另选 Key 来源。展开「获取 API Key 或查看用量」即可找到对应入口：订阅用量去 Grok Dashboard，按量付费用量和账单去 xAI Console，以创建 Key 的账户为准。保存 Key 仅确认本机存储，不代表已验证 API 权限或剩余额度。
+两种来源都填写在「设置 → 连接 → Grok API Key」，无需另选 Key 来源。展开「获取 Grok API Key 或查看用量」即可找到对应入口：订阅用量去 Grok Dashboard，按量付费用量和账单去 xAI Console，以创建 Key 的账户为准。保存 Key 仅确认本机存储，不代表已验证 API 权限或剩余额度。
 
 符合条件的 The X Subscription API 使用计入订阅共享周额度；也可以在 [xAI 控制台](https://console.x.ai/) 创建 Key、购买按量付费额度，按 Token 和工具使用付费并管理账单。购买普通 API 额度不会自动提高处理优先级。[Priority Processing](https://docs.x.ai/developers/advanced-api-usage/priority-processing) 需要额外付费并明确启用；SuperX 当前使用标准请求。Priority 可能降低高峰期延迟，但不保证可用性。发送哪些数据及服务商如何处理，见 [隐私说明](PRIVACY.md)。
 

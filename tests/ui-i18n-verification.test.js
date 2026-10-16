@@ -221,7 +221,7 @@ test('compact connection and Key guidance is translated without guessing account
       if(language!=='en'&&key!=='options.apiKeyLabel')assert.notEqual(value,ui.catalog.en[key],`${language}: ${key} is translated`);
     }
     assert.match(ui.t('options.enable',language),/SuperX/);
-    assert.equal(ui.t('options.apiKeyLabel',language),'API Key');
+    assert.equal(ui.t('options.apiKeyLabel',language),'Grok API Key');
     assert.match(ui.t('options.apiKeyHint',language),/grok\.com/);assert.match(ui.t('options.apiKeyHint',language),/xAI Console/);
     assert.match(ui.t('options.apiSubscriptionSetup',language),/Grok Inference/);assert.match(ui.t('options.apiSubscriptionSetup',language),/Cursor/);assert.match(ui.t('options.apiSubscriptionSetup',language),/Chat/);
     assert.match(ui.t('options.modelHelp',language),/grok-4\.3/);assert.doesNotMatch(ui.t('options.modelHelp',language),/grok-4\.[567]/);
@@ -233,13 +233,47 @@ test('compact connection and Key guidance is translated without guessing account
   }
   assert.equal(ui.t('options.source','en'),'Connection');assert.equal(ui.t('options.source','zh-CN'),'连接');
   assert.equal(ui.t('options.enable','en'),'Enable SuperX');assert.equal(ui.t('options.enable','zh-CN'),'启用 SuperX');
-  assert.equal(ui.t('options.keyPlaceholder','en'),'Paste your API Key');
-  assert.equal(ui.t('options.apiKeyHint','en'),'Keys from grok.com and xAI Console both work here.');
-  assert.equal(ui.t('options.apiAccess','en'),'Get an API Key or check usage');
+  assert.equal(ui.t('options.keyPlaceholder','en'),'Paste your Grok API Key');
+  assert.equal(ui.t('options.apiKeyHint','en'),'Grok API Keys from grok.com and xAI Console both work here.');
+  assert.equal(ui.t('options.apiAccess','en'),'Get a Grok API Key or check usage');
   assert.equal(ui.t('options.apiSubscriptionTitle','en'),'grok.com · Subscription');
-  assert.equal(ui.t('options.apiSubscriptionLink','en'),'Create API Key');assert.equal(ui.t('options.dashboardUsage','en'),'View usage');
+  assert.equal(ui.t('options.apiSubscriptionLink','en'),'Create Grok API Key');assert.equal(ui.t('options.dashboardUsage','en'),'View usage');
   assert.equal(ui.t('options.apiMeteredTitle','en'),'xAI Console · Pay as you go');assert.equal(ui.t('options.apiMeteredLink','en'),'Keys & billing');
   assert.equal(ui.t('options.apiAccountHelp','en'),'Check usage and charges at the site where you created your Key.');
-  assert.equal(ui.t('options.keyMissing','en'),'Paste an API Key above and save settings.');
-  assert.equal(ui.t('options.keyMigration','en'),'Paste your API Key again and save settings.');
+  assert.equal(ui.t('options.keyMissing','en'),'Paste a Grok API Key above and save settings.');
+  assert.equal(ui.t('options.keyMigration','en'),'Paste your Grok API Key again and save settings.');
+});
+
+test('Key entry points and actionable errors consistently say Grok API Key in every language',()=>{
+  const keys=['options.providerKey','options.apiKeyLabel','options.keyPlaceholder','options.apiKeyHint','options.apiAccess','options.apiSubscriptionLink',
+    'options.apiSetup','options.keyMissing','options.keyMigration','options.keyRequired','status.needsKey','status.needsKeyAction',
+    'common.enterKey','note.settingsRequired','popup.addKey','error.apiKeyRejected','errors.keyInvalid','errors.keyStorage'];
+  const bareLabels=new Set(['options.providerKey','options.apiKeyLabel']);
+  for(const language of ui.SUPPORTED_LANGUAGES){
+    for(const key of keys){
+      const value=ui.catalog[language][key];assert.ok(value?.trim(),`${language}: ${key}`);assert.match(value,/Grok API Key/,`${language}: ${key}`);
+      assert.doesNotMatch(value,/(?<!Grok )API Key\b|Grok (?:Api|api)|Grok API key|Grok Grok|xAI Grok API/,`${language}: ${key}`);
+      if(language!=='en'&&!bareLabels.has(key))assert.notEqual(value,ui.catalog.en[key],`${language}: ${key} preserves localization`);
+    }
+    for(const key of bareLabels)assert.equal(ui.t(key,language),'Grok API Key');
+    const hint=ui.t('options.apiKeyHint',language);assert.match(hint,/grok\.com/);assert.match(hint,/xAI Console/);
+    const settings='SETTINGS_TARGET',action=ui.t('status.needsKeyAction',language,{settings});
+    assert.match(action,/Grok API Key/);assert.match(action,/SETTINGS_TARGET/);assert.doesNotMatch(action,/\{settings\}/);
+    assert.notEqual(ui.t('options.keyReadySaved',language),ui.t('options.keyMissing',language));
+  }
+  assert.equal(ui.t('status.needsKey','en'),'Set a Grok API Key in Settings');
+  assert.equal(ui.t('popup.addKey','en'),'Add Grok API Key');
+});
+
+test('Build model help explains independent settings and connection-time choices without changing defaults',()=>{
+  const independent={en:/independently of API mode/, 'zh-CN':/与 API 模式独立保存/, 'zh-TW':/與 API 模式獨立儲存/,ja:/API モードとは別に保存/,ko:/API 모드와 별도로 저장/,es:/por separado del modo API/,fr:/séparément du mode API/,de:/unabhängig vom API-Modus gespeichert/,pt:/separadamente do modo API/,ar:/بشكل مستقل عن وضع API/,ru:/отдельно от режима API/,hi:/API मोड से अलग सहेजी/};
+  for(const language of ui.SUPPORTED_LANGUAGES){
+    const value=ui.catalog[language]['options.buildModelHelp'];assert.ok(value?.trim(),language);assert.match(value,independent[language],language);
+    if(language!=='en')assert.notEqual(value,ui.catalog.en['options.buildModelHelp']);
+    assert.doesNotMatch(value,/grok-4\.[34567]|Priority|Fast/);
+  }
+  assert.match(ui.t('options.buildModelHelp','en'),/After connecting, confirm the available models and reasoning levels/);
+  assert.equal(ui.t('options.buildModelHelp','zh-CN'),'此模式的模型设置与 API 模式独立保存；连接后确认可用模型和推理档位。');
+  assert.equal(core.DEFAULT_SETTINGS.apiModel,'grok-4.3');assert.equal(core.DEFAULT_SETTINGS.apiReasoningEffort,'none');
+  assert.equal(core.DEFAULT_SETTINGS.buildModel,'grok-4.7');assert.equal(core.DEFAULT_SETTINGS.buildReasoningEffort,'low');
 });

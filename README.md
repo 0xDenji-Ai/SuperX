@@ -66,11 +66,11 @@ To upgrade a manual installation, replace the files in the folder you actually l
 
 Switching from an unpacked installation to the store is a separate installation, with no automatic settings or Key migration currently provided. Disable the old installation first to avoid duplicate analysis, then configure the new one.
 
-## Set up your API Key
+## Set up your Grok API Key
 
 For The X Subscription, use [Grok Dashboard → API Keys](https://grok.com/dashboard/api-keys), select **Grok Inference** rather than the default **Cursor** type, and enable Chat / the required model permissions. Existing [xAI Console](https://console.x.ai/) Keys remain supported. Check your [usage dashboard](https://grok.com/dashboard/usage) and provider rules for entitlement, limits and charges. SuperX does not promise that every subscription includes free or unlimited API use.
 
-Both sources use **Settings → Connection → API Key**; no separate Key-source selection is needed. Expand **Get an API Key or check usage** to find the relevant account links. Check subscription usage in Grok Dashboard, or pay-as-you-go usage and billing in xAI Console, according to where you created the Key. Saving a Key confirms local storage, not API authentication or remaining allowance.
+Both sources use **Settings → Connection → Grok API Key**; no separate Key-source selection is needed. Expand **Get a Grok API Key or check usage** to find the relevant account links. Check subscription usage in Grok Dashboard, or pay-as-you-go usage and billing in xAI Console, according to where you created the Key. Saving a Key confirms local storage, not API authentication or remaining allowance.
 
 Eligible API use from The X Subscription shares the plan's weekly allowance. Alternatively, create a Key and add pay-as-you-go credits in [xAI Console](https://console.x.ai/), with token and tool charges managed there. Buying standard API credits does not enable faster processing automatically. [Priority Processing](https://docs.x.ai/developers/advanced-api-usage/priority-processing) is separately priced and requires explicit opt-in; SuperX currently sends standard requests. Priority may reduce latency during demand peaks but does not guarantee availability. See [Privacy](PRIVACY.md) for the data sent and the provider's handling.
 
