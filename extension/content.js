@@ -12,7 +12,7 @@
   let uiLanguage = UI.resolveLanguage('auto',xUILanguage);
   const t = (key, vars) => UI.t(key, uiLanguage, vars);
   let settings = Core.DEFAULT_SETTINGS, providerReady = false, connected = false, port, used = 0, limited = false, pauseReason = '', capacityPaused = false, collapsed = false;
-  let lastPath = location.pathname, scanTimer, reconnectTimer, handshakeTimer, needsPageRefresh = false;
+  let lastPath = location.pathname, scanTimer, reconnectTimer, handshakeTimer, dwellTimer, dwellDeadline=0, needsPageRefresh = false;
   let hasConfig=false,workerSleeping=false,awaitingConfig=false,reconnectFailures=0;
   const wakeActions=new Map(),wakeControls=new Map();
   const entries = new Map(), requests = new Map(), visible = new Set();
@@ -71,7 +71,11 @@
   const resizeObserver = typeof ResizeObserver === 'function' ? new ResizeObserver(()=>scheduleLayout()) : null;
   const observer = new IntersectionObserver(changes=>{
     for(const change of changes) {
-      if(change.isIntersecting) visible.add(change.target);
+      if(change.isIntersecting) {
+        const entered=!visible.has(change.target);visible.add(change.target);
+        const entry=entries.get(change.target);
+        if(entered&&entry&&[...requests.values()].some(request=>request.entry===entry&&request.scrollCancellation))entry.since=Date.now();
+      }
       else {visible.delete(change.target);const entry=entries.get(change.target);if(entry){entry.since=0;entry.pending=false;queue.remove(entry.post.id);if(entry.status==='new')refreshCard(entry);}}
     }
     scheduleLayout();
@@ -92,10 +96,10 @@
   });
   themeObserver.observe(document.documentElement,{attributes:true,attributeFilter:['class','style','lang','hidden','aria-hidden']});
   if(document.head)themeObserver.observe(document.head,{childList:true,subtree:true,characterData:true,attributes:true,attributeFilter:['href','media','disabled']});
-  window.addEventListener('scroll',scheduleLayout,{passive:true,capture:true});
+  window.addEventListener('scroll',onFeedScroll,{passive:true,capture:true});
   window.addEventListener('resize',()=>{themeDirty=true;scheduleLayout();},{passive:true});
   window.visualViewport?.addEventListener('resize',scheduleLayout,{passive:true});
-  window.visualViewport?.addEventListener('scroll',scheduleLayout,{passive:true});
+  window.visualViewport?.addEventListener('scroll',onFeedScroll,{passive:true});
   connect();
   scheduleScan();
   setInterval(tick,100);
@@ -104,13 +108,14 @@
   document.addEventListener('visibilitychange',()=>{
     if(document.hidden) {
       wakeActions.clear();
+      cancelDwellTimer();
       queue.clear();post({type:'CANCEL_ALL'});requests.clear();
       for(const entry of entries.values()){entry.since=0;entry.pending=false;if(['queued','running'].includes(entry.status)){entry.status='new';refreshCard(entry);}if(['queued','running'].includes(entry.commentStatus)){entry.commentStatus='error';entry.commentError='status.cancelled';refreshComments(entry);}}
     }
     else {if(!connected&&!needsPageRefresh)connect();scheduleScan();tick();}
     scheduleLayout();
   });
-  window.addEventListener('pagehide',()=>{post({type:'CANCEL_ALL'});try{port?.disconnect();}catch{}});
+  window.addEventListener('pagehide',()=>{cancelDwellTimer();post({type:'CANCEL_ALL'});try{port?.disconnect();}catch{}});
 
   function invalidContext(error) {
     try {return needsPageRefresh || !chrome.runtime.id || /extension context invalidated/i.test(String(error?.message || ''));}
@@ -128,6 +133,7 @@
     // failure and must not overwrite completed reading or restart paid work.
     const idle=hasConfig&&!awaitingConfig&&!needsPageRefresh&&!error&&!requests.size&&!wakeActions.size&&!wakeControls.size;
     connected=false;awaitingConfig=false;workerSleeping=idle;
+    resetDwellWaits();
     clearTimeout(handshakeTimer);handshakeTimer=undefined;
     if(!idle)providerReady=false;
     const previousPort=port;port=undefined;
@@ -321,7 +327,7 @@
   }
   function pauseForAccountLimit(failure) {
     if(settings.provider!=='api'||!(failure?.httpStatus===402||['spending_limit','insufficient_credits','insufficient_quota','usage_limit_exceeded'].includes(Core.apiFailureProviderCode(failure?.providerCode))))return false;
-    limited=true;pauseReason='error.apiUsage';queue.clear();
+    limited=true;pauseReason='error.apiUsage';resetDwellWaits();
     for(const pending of entries.values())if(pending.status==='new')refreshCard(pending);
     return true;
   }
@@ -341,7 +347,7 @@
   function isCapacityFailure(code,failure) {return code==='API_CAPACITY'||failure?.errorCode==='API_CAPACITY';}
   function pauseForCapacity(code,failure) {
     if(settings.provider!=='api'||!isCapacityFailure(code,failure))return false;
-    capacityPaused=true;queue.clear();
+    capacityPaused=true;resetDwellWaits();
     for(const pending of entries.values())if(pending.status==='new')refreshCard(pending);
     return true;
   }
@@ -357,6 +363,7 @@
   function setCollapsed(value,persist=false) {
     collapsed=Boolean(value);
     if(collapsed) {
+      cancelDwellTimer();
       queue.clear();
       for(const entry of entries.values()){entry.pending=false;entry.since=0;}
       for(const [id,request] of requests)if(request.task==='comments'?request.entry.commentStatus==='queued':request.entry.status==='queued') {
@@ -408,13 +415,14 @@
       // controls; accepted jobs and visible answers retain their task snapshot.
       // An archived explanation draft can survive upgrades, but never changes
       // current fact-check jobs or their visible results.
-      for(const field of ['explainPrompt','verifyPrompt','commentsPrompt','interfaceLanguage']){delete previousOptions[field];delete nextOptions[field];}
+      for(const field of ['explainPrompt','verifyPrompt','commentsPrompt','interfaceLanguage','dwellMs','analysisDefaultsVersion']){delete previousOptions[field];delete nextOptions[field];}
       const allChanged=JSON.stringify(previousOptions)!==JSON.stringify(nextOptions);
       const presentationOrPromptsOnlyChanged=!allChanged&&JSON.stringify(settings)!==JSON.stringify(nextSettings);
       const identity=value=>JSON.stringify([value.provider,value.apiModel,value.apiReasoningEffort,value.buildModel,value.buildReasoningEffort,value.buildTransport,value.buildPort,value.language,value.webSearch,value.xSearch,value.apiVerification,value.explanationMode]);
-      const previous=identity(settings),previousApiModel=settings.apiModel;
+      const previous=identity(settings),previousApiModel=settings.apiModel,dwellChanged=settings.dwellMs!==nextSettings.dwellMs;
       const wasReady=providerReady;
       settings=nextSettings;
+      if(dwellChanged)resetDwellWaits();
       configureHistory(message.historyEnabled,message.historyEpoch);
       providerReady=Boolean(message.ready);used=message.used || 0;
       buildErrorCode=typeof message.buildStatus?.errorCode==='string'?message.buildStatus.errorCode:'';
@@ -433,6 +441,7 @@
       if(settings.provider==='api'&&message.apiCapacityPaused===true){capacityPaused=true;queue.clear();}
       else if(settings.provider!=='api'||message.apiCapacityPaused===false&&previousApiModel!==settings.apiModel)clearCapacityPause();
       if(allChanged || !settings.enabled || (wasReady&&!providerReady)) {
+        resetDwellWaits();
         post({type:'CANCEL_ALL'});requests.clear();
         for(const entry of entries.values()) {
           if(changed||['queued','running'].includes(entry.status)){entry.status='new';entry.pending=false;entry.since=0;entry.result=null;entry.analysisUsage=null;entry.requestDiagnostics=undefined;setVerificationFailure(entry,null,false);renderAnswer(entry,'',true);renderSources(entry,[]);note(entry,'');entry.ui.retry.hidden=true;}
@@ -498,8 +507,9 @@
       finishRequest(message);scheduleLayout();if(message.type==='COMMENT_RESULT')tick();return;
     }
     if(message.type==='QUEUED'){entry.status='queued';status(entry,'status.queued');}
-    if(message.type==='START'){request.railCancellation=false;entry.status='running';used=Math.max(used,message.used||0);status(entry,'status.verifying');}
+    if(message.type==='START'){request.railCancellation=false;request.scrollCancellation=false;entry.since=0;entry.status='running';used=Math.max(used,message.used||0);status(entry,'status.verifying');}
     if(message.type==='UPDATE'){
+      request.railCancellation=false;request.scrollCancellation=false;entry.since=0;
       captureUsage(entry,'analysis',message,request,false);
       entry.status='running';
       // Progress without a text snapshot leaves accepted prose intact. An
@@ -755,7 +765,7 @@
   function pauseUnseenRailQueue() {
     // No room for the result means no new paid work. Preserve requests whose
     // START has arrived, and only cancel work that is still waiting to begin.
-    queue.clear();
+    cancelDwellTimer();queue.clear();
     for(const entry of entries.values()){entry.pending=false;entry.since=0;}
     for(const [id,request] of requests)if(request.task==='comments'?request.entry.commentStatus==='queued':request.entry.status==='queued') {
       if(request.railCancellation)continue;
@@ -832,7 +842,7 @@
     entry.card.remove();entries.delete(article);
   }
   function scan() {
-    if(location.pathname!==lastPath){historySeen.clear();historyPending.clear();historyRetryAt=0;lastPath=location.pathname;queue.clear();post({type:'CANCEL_ALL'});requests.clear();for(const entry of entries.values()){entry.since=0;entry.pending=false;if(['queued','running'].includes(entry.status)){entry.status='new';renderAnswer(entry,'',true);refreshCard(entry);}if(['queued','running'].includes(entry.commentStatus)){entry.commentStatus='error';entry.commentError='status.cancelled';refreshComments(entry);}}}
+    if(location.pathname!==lastPath){cancelDwellTimer();historySeen.clear();historyPending.clear();historyRetryAt=0;lastPath=location.pathname;queue.clear();post({type:'CANCEL_ALL'});requests.clear();for(const entry of entries.values()){entry.since=0;entry.pending=false;if(['queued','running'].includes(entry.status)){entry.status='new';renderAnswer(entry,'',true);refreshCard(entry);}if(['queued','running'].includes(entry.commentStatus)){entry.commentStatus='error';entry.commentError='status.cancelled';refreshComments(entry);}}}
     for(const [article,entry] of entries)if(!article.isConnected)removeEntry(article,entry);
     if(!supportedPage()){scheduleLayout();return;}
     for(const article of document.querySelectorAll('article[data-testid="tweet"]')) {
@@ -881,19 +891,58 @@
   function eligibility(article) {
     return Core.visibilityEligibility(article.getBoundingClientRect(),{width:innerWidth,height:innerHeight},{minRatio:0,minVisiblePx:1});
   }
+  function onFeedScroll(event) {
+    const target=event?.target;
+    // Captured scrolls include X's nested feed containers. A scroll within our
+    // shadow rail is only reading the answer, so it must not postpone a post.
+    const owned=target===overlay||event?.composedPath?.().includes(overlay)||Boolean(target?.nodeType&&overlay.contains(target));
+    if(!owned&&settings.dwellMs>0){
+      cancelDwellTimer();queue.clear();const now=Date.now();
+      for(const entry of entries.values())if(entry.status==='new'){
+        entry.pending=false;
+        entry.since=entry.article.isConnected&&visible.has(entry.article)&&eligibility(entry.article).eligible?now:0;
+      }
+      for(const [id,request] of requests)if(request.task==='analysis'&&request.entry.status==='queued'&&!request.force){
+        request.scrollCancellation=true;
+        const entry=request.entry;
+        entry.since=entry.article.isConnected&&visible.has(entry.article)&&eligibility(entry.article).eligible?now:0;
+        // A START can already be crossing the port. Keep this subscription
+        // attached and ask the worker to cancel only if it truly has not begun.
+        if(!request.railCancellation){request.railCancellation=true;post({type:'CANCEL_IF_QUEUED',requestId:id});}
+      }
+    }
+    scheduleLayout();
+  }
+  function cancelDwellTimer() {
+    if(dwellTimer!==undefined)clearTimeout(dwellTimer);
+    dwellTimer=undefined;dwellDeadline=0;
+  }
+  function resetDwellWaits() {
+    cancelDwellTimer();queue.clear();
+    for(const entry of entries.values()){entry.since=0;entry.pending=false;}
+  }
+  function scheduleDwell(deadline) {
+    if(!deadline){cancelDwellTimer();return;}
+    if(dwellTimer!==undefined&&dwellDeadline===deadline)return;
+    cancelDwellTimer();dwellDeadline=deadline;
+    // One timeout wakes the earliest continuously visible post after scrolling
+    // stops. It exists only while at least one visible post is waiting.
+    dwellTimer=setTimeout(()=>{dwellTimer=undefined;dwellDeadline=0;tick();},Math.max(1,deadline-Date.now()));
+  }
   function tick() {
     recordHistory();
-    if(document.hidden || collapsed || !settings.enabled || !providerReady || limited || capacityPaused || !supportedPage())return;
+    if(document.hidden || collapsed || !settings.enabled || !providerReady || limited || capacityPaused || !supportedPage()){resetDwellWaits();return;}
     if(currentRailBounds().hidden){pauseUnseenRailQueue();return;}
     if(location.pathname!==lastPath){scheduleScan();return;}
     if(!connected){
+      resetDwellWaits();
       if(workerSleeping&&[...visible].some(article=>{
         const entry=entries.get(article);return entry?.status==='new'&&article.isConnected&&eligibility(article).eligible;
       }))connect();
       return;
     }
-    if(awaitingConfig)return;
-    const now=Date.now();
+    if(awaitingConfig){resetDwellWaits();return;}
+    const now=Date.now();let nextDwell=0;
     // Obsolete requests must not delay the posts the user is reading.
     // The grace interval avoids cancelling for a brief scroll adjustment.
     for(const [id,running] of requests) {
@@ -901,6 +950,7 @@
       if(rect.bottom<=0 || rect.top>=innerHeight) {
         running.offscreenSince ||= now;
         const queued=running.task==='comments'?running.entry.commentStatus==='queued':running.entry.status==='queued';
+        if(queued&&running.scrollCancellation){running.entry.since=0;continue;}
         if(queued||now-running.offscreenSince>=1000) {
           post({type:'CANCEL',requestId:id});requests.delete(id);
           if(running.task==='comments'){running.entry.commentStatus='error';running.entry.commentError='status.cancelled';refreshComments(running.entry);}
@@ -917,15 +967,19 @@
       const visibility=eligibility(article);
       if(!visibility.eligible){entry.since=0;entry.pending=false;queue.remove(entry.post.id);continue;}
       if(entry.status!=='new')continue;
+      if(!entry.since)entry.since=now;
+      const deadline=entry.since+settings.dwellMs;
+      if(deadline>now){nextDwell=nextDwell?Math.min(nextDwell,deadline):deadline;continue;}
       entry.pending=queue.enqueue(entry.post,1/(1+Math.max(0,article.getBoundingClientRect().top)));refreshCard(entry);
     }
     let candidate;
     while((candidate=queue.take())) {
-      const entry=[...entries.values()].find(e=>e.post.id===candidate.id&&e.status==='new'&&visible.has(e.article));
+      const entry=[...entries.values()].find(e=>e.post.id===candidate.id&&e.status==='new'&&visible.has(e.article)&&now-e.since>=settings.dwellMs);
       if(!entry)continue;
       if(!eligibility(entry.article).eligible){entry.pending=false;refreshCard(entry);continue;}
       submit(entry,false);
     }
+    scheduleDwell(nextDwell);
   }
   function configureHistory(enabled,epoch) {
     const nextEpoch=Number.isSafeInteger(epoch)?epoch:historyEpoch;
@@ -963,7 +1017,7 @@
     // Cancelling a comment can synchronously invalidate the shared port.
     if(!connected||!providerReady)return;
     const requestId=crypto.randomUUID();
-    entry.pending=false;queue.remove(entry.post.id);entry.status='queued';entry.phase='';entry.verificationBase='';entry.verificationStarted=false;entry.verificationStart=undefined;entry.result=null;entry.cached=false;entry.requestDiagnostics=undefined;setVerificationFailure(entry,null,false);status(entry,'status.queued');entry.ui.retry.hidden=true;
+    entry.pending=false;entry.since=0;queue.remove(entry.post.id);entry.status='queued';entry.phase='';entry.verificationBase='';entry.verificationStarted=false;entry.verificationStart=undefined;entry.result=null;entry.cached=false;entry.requestDiagnostics=undefined;setVerificationFailure(entry,null,false);status(entry,'status.queued');entry.ui.retry.hidden=true;
     if(force||!entry.ui.answer.textContent)renderAnswer(entry,'',true);
     renderSources(entry,[]);note(entry,'');entry.ui.diagnostics.hidden=true;entry.ui.diagnosticText.textContent='';
     requests.set(requestId,{...requestSnapshot(entry,requestId),force:force===true,capacityProbe:settings.provider==='api'&&capacityPaused&&force===true});

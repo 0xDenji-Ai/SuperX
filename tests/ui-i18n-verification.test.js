@@ -149,3 +149,61 @@ test('all UI locales describe separate language controls and saved versus sessio
   assert.match(ui.t('options.keyReady','en'),/only for this browser session.*not saved.*again after restarting/);
   assert.match(ui.t('options.keyReadySaved','en'),/Saved on this device.*restart/);
 });
+
+test('analysis timing, shared concurrency and API access guidance are complete in all twelve languages',()=>{
+  const keys=['options.dwell','options.dwellHelp','options.concurrencyHelp','options.apiAccess','options.apiSubscriptionTitle',
+    'options.apiSubscriptionHelp','options.apiSubscriptionLink','options.apiMeteredTitle','options.apiMeteredHelp','options.apiMeteredLink',
+    'options.apiPriorityHelp','options.apiPriorityLink'];
+  const brandNames=new Set(['options.apiSubscriptionTitle','options.apiSubscriptionLink','options.apiMeteredLink']);
+  for(const language of ui.SUPPORTED_LANGUAGES)for(const key of keys){
+    const value=ui.catalog[language][key];assert.equal(typeof value,'string',`${language}: ${key}`);assert.ok(value.trim(),`${language}: ${key}`);
+    assert.equal(ui.t(key,language),value);assert.doesNotMatch(value,/<\/?[A-Za-z][^>]*>|\{[A-Za-z][A-Za-z0-9_]*\}/,`${language}: ${key} is plain complete text`);
+    if(language!=='en'&&!brandNames.has(key))assert.notEqual(value,ui.catalog.en[key],`${language}: ${key} is translated`);
+  }
+  assert.equal(ui.t('options.dwell','en'),'Analyze after (seconds)');assert.equal(ui.t('options.dwell','zh-CN'),'自动分析前停留（秒）');
+  assert.match(ui.t('options.dwellHelp','en'),/stay visible.*Default: 1 second; 0 starts immediately.*Manual actions do not wait/);
+  assert.match(ui.t('options.dwellHelp','zh-CN'),/持续可见.*默认 1 秒.*0.*手动操作无需等待/);
+  assert.equal(ui.t('options.concurrencyHelp','en'),'Default: 3. All X tabs and comment requests share this limit.');
+  assert.match(ui.t('options.concurrencyHelp','zh-CN'),/默认 3.*所有 X 标签页和评论请求共享/);
+});
+
+test('both providers require scrolling to stop and continuous visibility for the configured time',()=>{
+  const configured={en:/configured/, 'zh-CN':/设置/, 'zh-TW':/設定/,ja:/設定した/,ko:/설정한/,es:/configurad/,fr:/configur/,de:/eingestellte/,pt:/configurad/,ar:/المحددة/,ru:/задан/,hi:/तय/};
+  const stopped={en:/scrolling stops/, 'zh-CN':/停止滚动/, 'zh-TW':/停止捲動/,ja:/スクロール停止後/,ko:/스크롤이 멈춘 후/,es:/detener el desplazamiento/,fr:/arrêt du défilement/,de:/Scrollen endet/,pt:/parar a rolagem/,ar:/توقف التمرير/,ru:/остановки прокрутки/,hi:/स्क्रॉलिंग रुकने/};
+  const visible={en:/remain visible/, 'zh-CN':/持续可见/, 'zh-TW':/持續可見/,ja:/表示され続ける/,ko:/계속 보이면/,es:/permanec/,fr:/rest/,de:/sichtbar bleiben/,pt:/continuam visíveis/,ar:/تبقى مرئية|بقائها مرئية/,ru:/остаются видимыми|непрерывной видимости/,hi:/लगातार दिखने/};
+  for(const language of ui.SUPPORTED_LANGUAGES){
+    for(const key of ['options.providerIntro','options.subtitle','popup.apiHint','popup.buildHint']){
+      const value=ui.t(key,language);assert.match(value,configured[language],`${language}: ${key}`);
+      assert.match(value,stopped[language],`${language}: ${key} waits for scrolling to stop`);
+      assert.match(value,visible[language],`${language}: ${key} requires continuous visibility`);
+    }
+    assert.match(ui.t('options.presetReady',language),/1|واحدة/,`${language}: preset names the one-second delay`);
+    assert.match(ui.t('options.presetReady',language),/3/,`${language}: preset names shared concurrency three`);
+  }
+  assert.doesNotMatch(['options.providerIntro','options.subtitle','popup.apiHint','popup.buildHint'].map(key=>ui.t(key,'en')).join(' '),/immediat|instantly|as soon as/i);
+  assert.match(ui.t('popup.buildHint','en'),/one task at a time/);
+  assert.match(ui.t('options.presetReady','en'),/1-second.*3 shared concurrent API requests.*Save/);
+});
+
+test('dwell help explains scroll resets, excludes sidebar scrolling and preserves immediate and manual actions',()=>{
+  for(const language of ui.SUPPORTED_LANGUAGES){
+    const help=ui.t('options.dwellHelp',language);
+    assert.match(help,/SuperX/,`${language}: help identifies sidebar scrolling separately`);
+    assert.match(help,/0/,`${language}: zero remains available`);
+    assert.doesNotMatch(help,/\b(?:100|200|250|300|500)\s*(?:ms|milliseconds)\b|quiet period/i);
+  }
+  assert.match(ui.t('options.dwellHelp','en'),/After feed or page scrolling stops.*stay visible.*Scrolling again resets the timer; scrolling inside the SuperX sidebar does not.*Default: 1 second; 0 starts immediately.*Manual actions do not wait/);
+  assert.match(ui.t('options.dwellHelp','zh-CN'),/停止滚动信息流或页面后.*持续可见.*再次滚动会重新计时.*SuperX 右栏内部不会影响.*默认 1 秒.*0.*立即开始.*手动操作无需等待/);
+});
+
+test('API access copy separates subscription allowance, metered billing and optional paid priority without performance promises',()=>{
+  assert.match(ui.t('options.apiSubscriptionHelp','en'),/eligible API usage.*shared weekly allowance.*models, limits and extra charges/);
+  assert.match(ui.t('options.apiMeteredHelp','en'),/Key.*credits.*tokens and tools.*billing/);
+  assert.match(ui.t('options.apiPriorityHelp','en'),/standard API credits does not enable Priority Processing.*SuperX uses standard requests.*explicit opt-in at an extra cost.*may reduce peak-time latency.*does not guarantee availability/);
+  assert.match(ui.t('options.apiPriorityHelp','zh-CN'),/标准 API credits 不会开启.*SuperX 使用标准请求.*明确选择并额外付费.*可能降低高峰期延迟.*不保证/);
+  assert.doesNotMatch([ui.t('options.apiSubscriptionHelp','en'),ui.t('options.apiMeteredHelp','en')].join(' '),/faster|more stable|priority|unlimited|free/i);
+  for(const language of ui.SUPPORTED_LANGUAGES){
+    assert.match(ui.t('options.apiSubscriptionHelp',language),/Grok Dashboard/);assert.match(ui.t('options.apiMeteredHelp',language),/xAI Console/);
+    assert.match(ui.t('options.apiPriorityHelp',language),/Priority/);assert.match(ui.t('options.apiPriorityHelp',language),/SuperX/);
+  }
+});

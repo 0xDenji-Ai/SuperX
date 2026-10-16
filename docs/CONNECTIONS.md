@@ -1,6 +1,6 @@
 # Connect SuperX
 
-The unreleased **0.9.7** candidate offers two independent modes. **API Key** is the default. **Grok CLI / ACP** connects directly to the official Grok service on your computer. Neither mode automatically falls back to the other or resubmits a paid task. Published Stable remains **0.7.26**.
+The unreleased **0.9.8** candidate offers two independent modes. **API Key** is the default. **Grok CLI / ACP** connects directly to the official Grok service on your computer. Neither mode automatically falls back to the other or resubmits a paid task. Published Stable remains **0.7.26**.
 
 ## API Key
 
@@ -12,6 +12,8 @@ This is the simplest setup on both Windows and macOS. No terminal or extra local
 4. Select an available model and reasoning effort. Enable SuperX and open X.
 
 Entitlement, usage limits and charges depend on your account and the provider's rules. Check [Grok Dashboard usage](https://grok.com/dashboard/usage); a subscription is not a promise of free or unlimited API usage. See [Privacy](../PRIVACY.md) for data and credential handling.
+
+Eligible API use from The X Subscription shares the plan's weekly allowance. For pay-as-you-go API use, create a Key and add credits in [xAI Console](https://console.x.ai/); tokens and tool calls are billed there. Purchasing standard credits does not automatically improve processing priority. [Priority Processing](https://docs.x.ai/developers/advanced-api-usage/priority-processing) requires explicit opt-in and extra payment; SuperX currently uses standard requests. Priority can reduce peak-time latency but does not guarantee availability.
 
 ## Grok CLI / ACP — official local connection
 
@@ -33,7 +35,7 @@ SuperX supplies a restricted profile for each new post session, checks that the 
 
 Closing a browser connection alone does not guarantee that an official-service task stops. SuperX explicitly requests cancellation and session closure; if it cannot confirm this, it reports the uncertainty instead of retrying. Press Ctrl+C in the service terminal if a stop cannot be confirmed. If the warning remains after the service has stopped, reload SuperX from Settings, then start and check the service again; the worker deliberately keeps an unresolved-session block until it can confirm cleanup or is reloaded. Already submitted work may count against provider usage. Official Grok can make supporting requests, such as generating session titles, in addition to the main task.
 
-Visible posts enter the queue immediately. This candidate executes local Grok tasks serially with a fresh session per post. Neither ACP nor the selected reasoning effort guarantees lower latency or lower quota consumption. Reported Token counts are not a measurement of subscription cash charges.
+In both connection modes, automatic analysis waits until feed/page scrolling stops and a post remains visible for the configured time: 1 second by default, adjustable from 0 to 30 seconds in Settings. Further scrolling resets pending work's timer; scrolling inside SuperX's answers does not. Zero starts immediately, and manual reanalysis/comments bypass the wait. API concurrency defaults to 3 (configurable from 1 to 8); local Grok tasks run serially with a fresh session per post. Neither ACP nor the selected reasoning effort guarantees lower latency or lower quota consumption. Reported Token counts are not a measurement of subscription cash charges.
 
 ## Troubleshooting
 
@@ -56,6 +58,8 @@ For API failures, open **Local diagnostic log** at the bottom of Settings. It ke
 ## 中文快速引导
 
 **API Key 模式**在 Windows 和 Mac 上都只需浏览器：设置中选择 API Key，打开 [Grok Dashboard → API Keys](https://grok.com/dashboard/api-keys)，创建 **Grok Inference** 类型而非 Cursor 类型的 Key，按账号要求授权 Chat／模型，粘贴并保存。已有 xAI 控制台 Key 可继续使用。默认在本机自动加密记住，无需 SuperX 密码。订阅权益、限额及费用以账号用量页和提供方规则为准。
+
+符合条件的订阅 API 使用计入共享周额度；也可在 [xAI 控制台](https://console.x.ai/) 购买按量付费额度。购买普通额度不等于启用额外收费的 Priority Processing，SuperX 当前使用标准处理。两种模式均默认在停止滚动、帖子连续可见满 1 秒后自动分析，设置可改为 0–30 秒，0 秒立即分析；API 默认并发 3（可设 1–8），本机模式逐项执行。手动重新分析、评论及浏览历史不受停留等待影响。
 
 **Grok CLI / ACP 模式**无需安装 SuperX 提供的其他程序：先按 [Grok 官方说明](https://github.com/xai-org/grok-build) 安装并用 `grok login` 登录。打开 SuperX 的逐步引导，选择 Windows 或 macOS，生成并复制启动命令；Windows 在 PowerShell、Mac 在终端执行。保持该窗口打开，回到 SuperX 检查连接、保存连接，再选择模型／推理档位并保存设置。检查连接不发送核查问题。
 

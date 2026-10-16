@@ -175,7 +175,8 @@
   const DEFAULT_SETTINGS = Object.freeze({
     provider: 'api',
     enabled: true,
-    dwellMs: 0,
+    analysisDefaultsVersion: 1,
+    dwellMs: 1000,
     maxPerSession: 0,
     cooldownMs: 0,
     language: 'auto',
@@ -186,7 +187,7 @@
     buildPort: 2419,
     buildModel: 'grok-4.7',
     buildReasoningEffort: 'low',
-    apiConcurrency: 4,
+    apiConcurrency: 3,
     apiVerification: 'only',
     webSearch: true,
     xSearch: true,
@@ -260,13 +261,18 @@
     const normalizedModel = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(model) ? model : DEFAULT_SETTINGS.apiModel;
     const buildModel = typeof value.buildModel === 'string' ? value.buildModel.trim() : '';
     const normalizedBuildModel = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(buildModel) ? buildModel : DEFAULT_SETTINGS.buildModel;
+    const currentDefaults=value.analysisDefaultsVersion===DEFAULT_SETTINGS.analysisDefaultsVersion;
+    const dwell=boundedNumber(value.dwellMs,DEFAULT_SETTINGS.dwellMs,0,30000);
+    const concurrency=boundedNumber(value.apiConcurrency,DEFAULT_SETTINGS.apiConcurrency,1,8);
     return {
       // The retired page automation provider is unrelated to Grok Build.
       provider: value.provider === 'build' ? 'build' : 'api',
       enabled: typeof value.enabled === 'boolean' ? value.enabled : DEFAULT_SETTINGS.enabled,
-      // Kept for backward compatibility only: visible posts have no dwell,
-      // artificial startup delay or per-session analysis limit.
-      dwellMs: 0,
+      // Upgrade former zero-delay/default-four records once. The versioned
+      // output preserves later explicit selections of zero or four.
+      analysisDefaultsVersion: DEFAULT_SETTINGS.analysisDefaultsVersion,
+      dwellMs: !currentDefaults&&dwell===0?DEFAULT_SETTINGS.dwellMs:dwell,
+      // The old per-session cap and launch-spacing controls remain retired.
       maxPerSession: 0,
       cooldownMs: 0,
       language: validLanguage(language) ? language : DEFAULT_SETTINGS.language,
@@ -277,7 +283,7 @@
       buildPort: boundedNumber(value.buildPort, DEFAULT_SETTINGS.buildPort, 1024, 65535),
       buildModel: normalizedBuildModel,
       buildReasoningEffort: buildReasoningEffort(normalizedBuildModel,value.buildReasoningEffort),
-      apiConcurrency: boundedNumber(value.apiConcurrency, DEFAULT_SETTINGS.apiConcurrency, 1, 8),
+      apiConcurrency: !currentDefaults&&concurrency===4?DEFAULT_SETTINGS.apiConcurrency:concurrency,
       // Legacy explanation/combined/off choices all become one fact-check task.
       apiVerification: 'only',
       webSearch: typeof value.webSearch === 'boolean' ? value.webSearch : DEFAULT_SETTINGS.webSearch,

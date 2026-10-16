@@ -480,7 +480,7 @@ chrome.runtime.onConnect.addListener(port => {
 function liveJob(job) {
   return runningJobs.has(job) && jobs.get(job.key)===job && !job.controller.signal.aborted && job.revision===revision && job.clientEpoch===job.client.cancelEpoch && clients.has(job.client);
 }
-function apiLimit(s) { return s.provider==='build'?1:Math.max(1,Math.min(8,Math.trunc(Number(s.apiConcurrency))||4)); }
+function apiLimit(s) { return s.provider==='build'?1:Math.max(1,Math.min(8,Math.trunc(Number(s.apiConcurrency))||3)); }
 function rateLimitError() { return Object.assign(new Error('Grok 已限速，自动队列已暂停，请稍后手动重试。'),{code:'RATE_LIMIT'}); }
 const API_BUDGET_CODES=new Set(['spending_limit','insufficient_credits','insufficient_quota','usage_limit_exceeded']);
 function apiBudgetFailure(value) {
@@ -851,12 +851,12 @@ async function saveSettings(input) {
   if(JSON.stringify(next)!==JSON.stringify(settings)) {
     const modelChanged=next.apiModel!==settings.apiModel;
     const jobSettings=value=>{
-      const {explainPrompt,verifyPrompt,commentsPrompt,interfaceLanguage,...other}=value;
+      const {explainPrompt,verifyPrompt,commentsPrompt,interfaceLanguage,dwellMs,analysisDefaultsVersion,...other}=value;
       return other;
     };
     const cancelsJobs=JSON.stringify(jobSettings(next))!==JSON.stringify(jobSettings(settings));
-    // Prompts are frozen when a job is accepted. Saving a new instruction or
-    // interface locale never discards an already paid generation.
+    // Accepted jobs keep their prompt/timing snapshot. Changes to future
+    // visibility timing, prompts or UI locale never discard a paid generation.
     if(cancelsJobs){revision++;for(const job of [...jobs.values()])abortJob(job);}
     settings=next;
     if(cancelsJobs){await clearQueuePause();pump();}

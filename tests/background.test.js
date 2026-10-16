@@ -50,7 +50,7 @@ function storage(initial = {}, hooks = {}) {
   };
 }
 function createBackground(options = {}) {
-  const local = storage({ settings: { provider: options.native ? 'native' : 'api', ...options.settings }, ...options.local }, { get: options.localGet, set: options.localSet, remove: options.localRemove });
+  const local = storage({ settings: { ...core.DEFAULT_SETTINGS, provider: options.native ? 'native' : 'api', ...options.settings }, ...options.local }, { get: options.localGet, set: options.localSet, remove: options.localRemove });
   const keyStoreState=options.keyStoreState||keyStoreProfiles.get(options.local)||{key:null};
   keyStoreProfiles.set(local.data,keyStoreState);
   const keyStoreCalls=[];
@@ -181,6 +181,28 @@ function createBackground(options = {}) {
   return harness;
 }
 const post = id => ({ id: String(id), url: `https://x.com/author/status/${id}`, text: `Claim ${id}`, quotedContext: [], images: [] });
+test('fresh installations persist the versioned three-request and one-second defaults without provider calls',async()=>{
+  const bg=createBackground({local:{settings:undefined},session:null});await bg.ready();const config=await bg.message({type:'GET_CONFIG'});assert.equal(config.settings.analysisDefaultsVersion,1);assert.equal(config.settings.apiConcurrency,3);assert.equal(config.settings.dwellMs,1000);assert.deepEqual(bg.local.data.settings,core.DEFAULT_SETTINGS);assert.equal(bg.apiCalls.length,0);assert.equal(bg.commentCalls.length,0);assert.equal(bg.buildCalls.length,0);
+});
+test('old default-four and zero-delay records migrate once and the normalized settings remain stable after worker restart',async()=>{
+  let writes=0;const legacy={provider:'api',enabled:true,apiConcurrency:4,dwellMs:0,apiModel:'grok-4.7',apiReasoningEffort:'high',language:'ja',verifyPrompt:'Preserve this user prompt.'};const bg=createBackground({local:{settings:legacy},localSet:values=>{if(values.settings)writes++;}});await bg.ready();assert.equal(writes,1);assert.equal(bg.local.data.settings.analysisDefaultsVersion,1);assert.equal(bg.local.data.settings.dwellMs,1000);assert.equal(bg.local.data.settings.apiConcurrency,3);for(const field of ['apiModel','apiReasoningEffort','language','verifyPrompt'])assert.equal(bg.local.data.settings[field],legacy[field]);const saved=clone(bg.local.data.settings);let rewrites=0;const restarted=createBackground({local:bg.local.data,session:bg.session.data,localSet:values=>{if(values.settings)rewrites++;}});await restarted.ready();assert.equal(rewrites,0);assert.deepEqual(restarted.local.data.settings,saved);assert.equal(restarted.apiCalls.length,0);
+});
+test('legacy custom request limits and positive dwell settings survive the one-time default migration',async()=>{
+  for(const limit of [1,2,3,5,6,7,8]){const bg=createBackground({local:{settings:{provider:'api',apiConcurrency:limit,dwellMs:1750}}});await bg.ready();assert.equal(bg.local.data.settings.apiConcurrency,limit);assert.equal(bg.local.data.settings.dwellMs,1750);assert.equal(bg.local.data.settings.analysisDefaultsVersion,1);}
+});
+test('explicit versioned zero delay and four-request selections save, restore and really dispatch four concurrent calls',async()=>{
+  const seed=createBackground({local:{settings:{apiConcurrency:4,dwellMs:0}}});await seed.ready();assert.equal(seed.local.data.settings.apiConcurrency,3);assert.equal((await seed.message({type:'SAVE_SETTINGS',settings:{...seed.local.data.settings,dwellMs:0,apiConcurrency:4}})).ok,true);const gate=deferred();const bg=createBackground({local:seed.local.data,session:seed.session.data,apiRun:()=>gate.promise});await bg.ready();const config=await bg.message({type:'GET_CONFIG'});assert.equal(config.settings.analysisDefaultsVersion,1);assert.equal(config.settings.dwellMs,0);assert.equal(config.settings.apiConcurrency,4);const port=bg.connect();for(let i=0;i<5;i++)port.send({type:'ANALYZE',requestId:'explicit-four-'+i,post:post(100+i)});await until(()=>bg.apiCalls.length===4);await tick();assert.equal(bg.apiCalls.length,4);assert.equal(bg.apiCalls.every(call=>call.settings.dwellMs===0),true);port.send({type:'CANCEL_ALL'});await until(()=>bg.apiCalls.every(call=>call.signal.aborted));gate.resolve({text:'Canceled old work.',provider:'api'});
+});
+test('versioned dwell validation bounds integers and atomic credential saves retain explicit timing and request limits',async()=>{
+  const bg=createBackground();await bg.ready();for(const [input,expected]of [[-10,0],[0,0],[0.6,1],[1234.6,1235],[30001,30000],[Infinity,1000],['invalid',1000]]){await bg.message({type:'SAVE_SETTINGS',settings:{...bg.local.data.settings,dwellMs:input}});assert.equal(bg.local.data.settings.dwellMs,expected);assert.equal(bg.local.data.settings.analysisDefaultsVersion,1);}
+  assert.equal((await bg.message({type:'SAVE_KEY',apiKey:'new-timing-fixture-key',remember:false,settings:{...bg.local.data.settings,dwellMs:0,apiConcurrency:4}})).ok,true);const worker=createBackground({local:bg.local.data,session:bg.session.data});await worker.ready();assert.equal(worker.local.data.settings.dwellMs,0);assert.equal(worker.local.data.settings.apiConcurrency,4);assert.equal(worker.local.data.settings.analysisDefaultsVersion,1);assert.equal(worker.apiCalls.length,0);
+});
+test('upgrading default timing and concurrency never clears stored budget or model-capacity pauses',async()=>{
+  const budget={version:1,reason:'api-budget',verificationFailure:{stage:'verify',code:'ACCESS',errorCode:'API_ERROR',httpStatus:402,providerCode:'spending_limit'}},capacity={version:1,reason:'api-capacity',model:'grok-4.3'};const bg=createBackground({local:{settings:{provider:'api',dwellMs:0,apiConcurrency:4}},session:{apiBudgetPause:budget,apiCapacityPause:capacity}});await bg.ready();const config=await bg.message({type:'GET_CONFIG'});assert.equal(config.settings.apiConcurrency,3);assert.equal(config.settings.dwellMs,1000);assert.equal(config.apiBudgetPaused,true);assert.equal(config.apiCapacityPaused,true);await bg.message({type:'SAVE_SETTINGS',settings:{...bg.local.data.settings,dwellMs:0,apiConcurrency:4}});assert.deepEqual(bg.session.data.apiBudgetPause,budget);assert.deepEqual(bg.session.data.apiCapacityPause,capacity);assert.equal((await analyze(bg,bg.connect(),'defaults-upgrade-still-paused')).code,'API_ERROR');assert.equal(bg.apiCalls.length,0);
+});
+test('changing only visibility dwell preserves active paid work and accepted queue snapshots',async()=>{
+  const pending=deferred(),bg=createBackground({settings:{apiConcurrency:1},apiRun:call=>call.post.id==='100'?pending.promise:{text:'Completed evidence.',provider:'api'}});await bg.ready();const port=bg.connect();port.send({type:'ANALYZE',requestId:'dwell-active-analysis',post:post(100)});await until(()=>bg.apiCalls.length===1);port.send({type:'GENERATE_COMMENTS',requestId:'dwell-accepted-comments',post:post(101)});port.send({type:'ANALYZE',requestId:'dwell-accepted-analysis',post:post(102)});await until(()=>port.messages.some(message=>message.requestId==='dwell-accepted-analysis'&&message.type==='QUEUED'));assert.equal((await bg.message({type:'SAVE_SETTINGS',settings:{...bg.local.data.settings,dwellMs:2500}})).ok,true);assert.equal(bg.apiCalls[0].signal.aborted,false);assert.equal(port.messages.some(message=>['ERROR','COMMENT_ERROR'].includes(message.type)),false);pending.resolve({text:'Paid evidence preserved.',provider:'api'});await until(()=>port.messages.filter(message=>['RESULT','COMMENT_RESULT'].includes(message.type)).length===3);assert.equal(bg.apiCalls.every(call=>call.settings.dwellMs===1000),true);assert.equal(bg.commentCalls[0].settings.dwellMs,1000);await analyze(bg,port,'dwell-new-snapshot',103);assert.equal(bg.apiCalls.at(-1).settings.dwellMs,2500);
+});
 test('local launch is a draft, uses a random connection code, and never saves or starts inference',async()=>{
   const bg=createBackground();await bg.ready();
   const launch=await bg.message({type:'GET_BUILD_LAUNCH',platform:'windows',port:2419});
@@ -245,7 +267,7 @@ test('failed diagnostic Clear returns a fixed safe status while ordinary request
 });
 
 test('Build failures and API jobs held before dispatch do not create fake provider diagnostics',async()=>{
-  const gates=new Map(['100','101','102','103'].map(id=>[id,deferred()]));const bg=createBackground({apiRun:call=>gates.get(call.post.id).promise,buildRun:()=>{throw Object.assign(new Error('Offline'),{code:'BUILD_DISCONNECTED',requestDiagnostics:safeRequestDiagnostics});}});await bg.ready();const port=bg.connect();for(let i=0;i<5;i++)port.send({type:'ANALYZE',requestId:'real-request-'+i,post:post(100+i)});await until(()=>bg.apiCalls.length===4);gates.get('100').reject(diagnosticError());await until(()=>port.messages.filter(value=>value.type==='ERROR').length===2);assert.equal((await analyze(bg,port,'not-dispatched',105)).code,'API_ERROR');for(const id of ['101','102','103'])gates.get(id).resolve({text:'Already running request completed.',provider:'api'});await until(()=>port.messages.filter(value=>value.type==='RESULT').length===3);assert.equal((await readDiagnostics(bg)).entries.length,1);
+  const gates=new Map(['100','101','102','103'].map(id=>[id,deferred()]));const bg=createBackground({settings:{apiConcurrency:4},apiRun:call=>gates.get(call.post.id).promise,buildRun:()=>{throw Object.assign(new Error('Offline'),{code:'BUILD_DISCONNECTED',requestDiagnostics:safeRequestDiagnostics});}});await bg.ready();const port=bg.connect();for(let i=0;i<5;i++)port.send({type:'ANALYZE',requestId:'real-request-'+i,post:post(100+i)});await until(()=>bg.apiCalls.length===4);gates.get('100').reject(diagnosticError());await until(()=>port.messages.filter(value=>value.type==='ERROR').length===2);assert.equal((await analyze(bg,port,'not-dispatched',105)).code,'API_ERROR');for(const id of ['101','102','103'])gates.get(id).resolve({text:'Already running request completed.',provider:'api'});await until(()=>port.messages.filter(value=>value.type==='RESULT').length===3);assert.equal((await readDiagnostics(bg)).entries.length,1);
   await bg.configureBuild();await bg.message({type:'SAVE_SETTINGS',settings:{...bg.local.data.settings,provider:'build'}});const result=await analyze(bg,port,'build-no-api-log',106);assert.equal(result.code,'BUILD_DISCONNECTED');assert.equal(result.requestDiagnostics,undefined);assert.equal((await readDiagnostics(bg)).entries.length,1);
 });
 test('local connection is encrypted independently, restores after worker restart, and never enters public config',async()=>{
@@ -1309,17 +1331,17 @@ const authorization = (run, action = 'observe') => ({
   type: 'NATIVE_AUTHORIZE', nonce: run.nonce, requestId: run.requestId, postId: run.post.id, action
 });
 
-test('default API concurrency is four globally across feed tabs and streams stay bound to their requests', async () => {
+test('default API concurrency is three globally across feed tabs and streams stay bound to their requests', async () => {
   const gates = new Map(Array.from({ length: 6 }, (_, i) => [String(100 + i), deferred()]));
   const bg = createBackground({ apiRun: call => gates.get(call.post.id).promise });
   await bg.ready(); const first = bg.connect(), second = bg.connect({ sender: { id: bg.chrome.runtime.id, frameId: 0, url: 'https://x.com/home', tab: { id: 8 } } });
   for (let i = 0; i < 6; i += 1) (i % 2 ? second : first).send({ type: 'ANALYZE', requestId: 'parallel-' + i, post: post(100 + i) });
-  await until(() => bg.apiCalls.length === 4);
-  await tick(); await tick(); assert.equal(bg.apiCalls.length, 4, 'Waiting requests cannot exceed the global cap');
+  await until(() => bg.apiCalls.length === 3);
+  await tick(); await tick(); assert.equal(bg.apiCalls.length, 3, 'Waiting requests cannot exceed the global cap');
   for (const call of bg.apiCalls) call.onUpdate({ text: 'Stream ' + call.post.id, phase: 'explain', verificationStatus: 'pending', warning: 'Checking later', sources: [], usage: { input_tokens: 1 } });
   for (const [port, parity] of [[first, 0], [second, 1]]) {
     const updates = port.messages.filter(message => message.type === 'UPDATE');
-    assert.equal(updates.length, 2);
+    assert.equal(updates.length, parity===0?2:1);
     for (const update of updates) {
       const index = Number(update.requestId.split('-')[1]);
       assert.equal(index % 2, parity); assert.equal(update.text, 'Stream ' + (100 + index));
@@ -1327,10 +1349,11 @@ test('default API concurrency is four globally across feed tabs and streams stay
     }
   }
   gates.get('102').resolve({ text: 'Answer 102', provider: 'api' });
-  await until(() => bg.apiCalls.length === 5);
-  assert.equal(bg.apiCalls[4].post.id, '104');
+  await until(() => bg.apiCalls.length === 4);
+  assert.equal(bg.apiCalls[3].post.id, '103');
   gates.get('101').resolve({ text: 'Answer 101', provider: 'api' });
-  await until(() => bg.apiCalls.length === 6);
+  await until(() => bg.apiCalls.length === 5);
+  assert.equal(bg.apiCalls[4].post.id,'104');
   for (const [id, gate] of gates) gate.resolve({ text: 'Answer ' + id, provider: 'api' });
   await until(() => first.messages.filter(message => message.type === 'RESULT').length === 3 && second.messages.filter(message => message.type === 'RESULT').length === 3);
   assert.equal(bg.session.data.quotas[7], 3); assert.equal(bg.session.data.quotas[8], 3);
@@ -1359,7 +1382,7 @@ test('API starts use only concurrency slots and waiting visible posts have no pl
   assert.deepEqual(starts,[starts[0],starts[0],starts[0]]);
   assert.equal(port.messages.some(message => message.type === 'RESULT'), false);
   port.send({ type: 'CANCEL_ALL' }); await until(() => bg.apiCalls.every(call => call.signal.aborted));
-  const bounded = createBackground({ apiRun: () => gate.promise }); await bounded.ready(); const boundedPort = bounded.connect();
+  const bounded = createBackground({ settings:{apiConcurrency:4}, apiRun: () => gate.promise }); await bounded.ready(); const boundedPort = bounded.connect();
   for (let i = 0; i < 80; i += 1) boundedPort.send({ type: 'ANALYZE', requestId: 'queued-' + i, post: post(200 + i) });
   await until(() => boundedPort.messages.filter(message => message.type === 'QUEUED').length === 80);
   assert.equal(boundedPort.messages.some(message=>message.code==='QUEUE_FULL'),false);
@@ -1545,12 +1568,12 @@ test('settings changes and client cancellation stop all old parallel jobs before
     const gates = [], bg = createBackground({ apiRun: call => { const gate = deferred(); gates.push(gate); return gate.promise; } });
     await bg.ready(); const port = bg.connect();
     for (let i = 0; i < 8; i += 1) port.send({ type: 'ANALYZE', requestId: action + '-' + i, post: post(100 + i) });
-    await until(() => bg.apiCalls.length === 4);
+    await until(() => bg.apiCalls.length === 3);
     if (action === 'settings') await bg.message({ type: 'SAVE_SETTINGS', settings: { ...core.DEFAULT_SETTINGS, language: 'en' } });
     else { port.send({ type: 'CANCEL_ALL' }); await tick(); }
     await until(() => bg.apiCalls.every(call => call.signal.aborted));
     await tick(); await tick();
-    assert.equal(bg.apiCalls.length, 4); assert.equal(bg.session.data.quotas[7], 4);
+    assert.equal(bg.apiCalls.length, 3); assert.equal(bg.session.data.quotas[7], 3);
     for (const gate of gates) gate.resolve({ text: 'Stale answer', provider: 'api' });
     await tick(); await tick();
     assert.equal(port.messages.some(message => message.type === 'RESULT'), false);
@@ -1560,7 +1583,7 @@ test('settings changes and client cancellation stop all old parallel jobs before
 
 test('a 429 stops waiting API work but other dispatched streams finish and only explicit retry resumes new work', async () => {
   const gates = new Map(Array.from({ length: 6 }, (_, i) => [String(100 + i), deferred()]));
-  const bg = createBackground({ apiRun: call => gates.get(call.post.id).promise }); await bg.ready(); const port = bg.connect();
+  const bg = createBackground({ settings:{apiConcurrency:4}, apiRun: call => gates.get(call.post.id).promise }); await bg.ready(); const port = bg.connect();
   for (let i = 0; i < 5; i += 1) port.send({ type: 'ANALYZE', requestId: 'rate-' + i, post: post(100 + i) });
   await until(() => bg.apiCalls.length === 4);
   gates.get('100').reject(Object.assign(new Error('Rate limit'), { code: 'RATE_LIMIT', partialResult: { text: 'Completed explanation', verificationStatus: 'incomplete', warning: 'Unfinished checking' } }));

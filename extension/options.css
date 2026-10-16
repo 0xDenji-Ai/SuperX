@@ -62,6 +62,9 @@ h2 { margin: 0 0 20px; font-size: 20px; line-height: 1.35; font-weight: 700; scr
 .onboarding li + li { margin-top: 5px; }
 .onboarding-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin-top: 14px; font-size: 13px; }
 .onboarding-actions .secondary-button { width: auto; }
+.api-access-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 20px; margin-top: 16px; font-size: 13px; line-height: 1.5; }
+.api-access-options h4 { margin: 0; font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
+.api-access-options a { display: inline-block; margin-top: 7px; }
 .connection-check, .shared-search { margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--line); }
 .connection-check .key-state { margin-top: 12px; }
 .launch-actions{margin-top:14px}.launch-command{display:flex;align-items:flex-start;gap:12px;margin-top:14px;padding:14px;border:1px solid var(--line);background:var(--background);min-width:0}.launch-command code{flex:1;min-width:0;white-space:pre-wrap;overflow-wrap:anywhere;font:12px/1.6 monospace}.launch-command button{flex:0 0 auto}.connection-fields{display:grid;grid-template-columns:minmax(95px,.3fr) minmax(0,1fr);gap:18px}.connection-fields label{display:block;margin-bottom:8px;font-size:14px}.connection-actions{margin-top:4px}
@@ -140,6 +143,7 @@ button:disabled, input:disabled, select:disabled, textarea:disabled { opacity: .
   .settings-footer { padding-inline: 16px; }
 }
 @media (max-width: 430px) {
+  .api-access-options { grid-template-columns: minmax(0, 1fr); }
   .connection-fields{grid-template-columns:minmax(0,1fr)}.launch-command{flex-direction:column}
   .field-grid { grid-template-columns: minmax(0, 1fr); gap: 0; }
   .checkbox-row { flex-direction: column; }

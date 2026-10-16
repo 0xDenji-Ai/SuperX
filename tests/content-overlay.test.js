@@ -76,7 +76,7 @@ test('clearing history invalidates old batches without immediately re-recording 
 
 test('turning off history does not prevent analysis and hidden tabs never record new visits',()=>{
   const page=fixture({postCount:1});
-  page.port.onMessage.emit({type:'CONFIG',settings:core.DEFAULT_SETTINGS,ready:true,historyEnabled:false,historyEpoch:0});
+  page.port.onMessage.emit({type:'CONFIG',settings:{...core.DEFAULT_SETTINGS,dwellMs:0},ready:true,historyEnabled:false,historyEpoch:0});
   page.flush();page.intersect();page.tick();
   assert.equal(page.port.sent.some(message=>message.type==='HISTORY_VISIT'),false);
   assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,1);
@@ -251,7 +251,7 @@ function fixture({postCount=2,connectError=null,historyAck=true}={}) {
     GrokFirstFeedNative:{install(){nativeHooks.install++;throw new Error('Native bridge must not install');}},
     XGrokNative:{run(){nativeHooks.run++;throw new Error('Native generation must not run');}},
     getComputedStyle: element => ({ position: 'static', display: 'block', overflow: 'visible', width: `${element.rect.width}px`,backgroundColor:'rgba(0, 0, 0, 0)',...element.computed }),
-    setTimeout(fn, delay) { const id = ++nextTimer; timeouts.set(id, { fn, delay }); return id; }, clearTimeout: id => timeouts.delete(id),
+    setTimeout(fn, delay) { const id = ++nextTimer; timeouts.set(id, { fn, delay, at:now+delay }); return id; }, clearTimeout: id => timeouts.delete(id),
     setInterval(fn, delay) { intervals.push({ fn, delay }); return intervals.length; }, clearInterval() {},
     requestAnimationFrame(fn) { const id = ++nextTimer; frames.set(id, fn); return id; }, cancelAnimationFrame: id => frames.delete(id),
     IntersectionObserver: class { constructor(callback) { this.callback = callback; this.observed = new Set(); intersectionObservers.push(this); } observe(node) { this.observed.add(node); } unobserve(node) { this.observed.delete(node); } disconnect() { this.observed.clear(); } },
@@ -276,10 +276,10 @@ function fixture({postCount=2,connectError=null,historyAck=true}={}) {
     replacePort(){const previous=port;port=makePort();return previous;},
     runTimeouts(maxDelay=3000){for(const [id,timer] of [...timeouts])if(timer.delay<=maxDelay){timeouts.delete(id);timer.fn();}harness.flush();},
     pendingTimeouts(){return [...timeouts.values()].map(timer=>timer.delay);},
-    configure(overrides = {}) { port.onMessage.emit({ type: 'CONFIG', settings: { ...core.DEFAULT_SETTINGS, provider: 'api', dwellMs: 300, ...overrides }, ready: true, used: 0 }); harness.flush(); },
+    configure(overrides = {}) { port.onMessage.emit({ type: 'CONFIG', settings: { ...core.DEFAULT_SETTINGS, provider: 'api', dwellMs: 0, ...overrides }, ready: true, used: 0 }); harness.flush(); },
     flush() {
       for (let pass = 0; pass < 8; pass++) {
-        const timers = [...timeouts].filter(([, timer]) => timer.delay <= 160); const pendingFrames = [...frames];
+        const timers = [...timeouts].filter(([, timer]) => timer.delay<=160&&timer.at<=now); const pendingFrames = [...frames];
         if (!timers.length && !pendingFrames.length) break;
         for (const [id, timer] of timers) { timeouts.delete(id); timer.fn(); }
         for (const [id, fn] of pendingFrames) { frames.delete(id); fn(now); }
@@ -299,6 +299,7 @@ function fixture({postCount=2,connectError=null,historyAck=true}={}) {
     },
     intersect() { for (const observer of intersectionObservers) observer.callback(articles.filter(article => article.isConnected).map(target => ({ target, isIntersecting: true }))); harness.flush(); },
     tick(ms = 0) { now += ms; for (const interval of intervals) if (interval.delay === 100) interval.fn(); harness.flush(); },
+    elapse(ms) { now+=ms;for(const [id,timer] of [...timeouts])if(timer.at<=now){timeouts.delete(id);timer.fn();}harness.flush(); },
     scroll(delta) { for (const article of articles) { article.rect.top -= delta; article.rect.bottom -= delta; } window.emit('scroll'); document.emit('scroll'); harness.flush(); },
     resize(width) { context.innerWidth = width; window.visualViewport.width = width; window.emit('resize'); for (const observer of resizeObservers) observer.callback([]); harness.flush(); },
     cards() { return nodes.filter(node => node.tagName === 'GROK-FIRST-CARD' && node.isConnected); },
@@ -389,7 +390,7 @@ test('a credential error arriving before CONFIG offers recovery and blocks stale
 
 test('a legacy consent flag does not block a ready personal API Key',()=>{
   const page=fixture();
-  page.port.onMessage.emit({type:'CONFIG',settings:core.DEFAULT_SETTINGS,ready:true,consentGranted:false});
+  page.port.onMessage.emit({type:'CONFIG',settings:{...core.DEFAULT_SETTINGS,dwellMs:0},ready:true,consentGranted:false});
   page.flush();page.intersect();page.tick();
   assert.equal(page.cards().length,2);
   assert.ok(page.port.sent.some(message=>message.type==='ANALYZE'));
@@ -1537,6 +1538,156 @@ test('changing the X interface locale updates a verification waiting label witho
   assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,1);assert.deepEqual(page.writes,[]);
 });
 
+test('default dwell waits one continuous second and its own timeout dispatches a stationary visible post',()=>{
+  assert.equal(core.DEFAULT_SETTINGS.dwellMs,1000);
+  const page=fixture({postCount:1});page.port.onMessage.emit({type:'CONFIG',settings:core.DEFAULT_SETTINGS,ready:true});page.flush();
+  assert.equal(page.port.sent.some(message=>message.type==='ANALYZE'),false);assert.equal(page.port.sent.some(message=>message.type==='HISTORY_VISIT'),true);
+  assert.deepEqual(page.pendingTimeouts(),[1000]);
+  page.elapse(999);assert.equal(page.port.sent.some(message=>message.type==='ANALYZE'),false);
+  // elapse runs due timeouts without invoking the old 100 ms housekeeping tick.
+  page.elapse(1);assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,1);assert.deepEqual(page.pendingTimeouts(),[]);
+  page.elapse(30000);assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,1);assert.deepEqual(page.writes,[]);
+});
+
+test('dwell is independent per post and still accepts a one-pixel viewport edge',()=>{
+  const page=fixture({postCount:2});page.articles[1].rect={...page.articles[1].rect,top:1200,bottom:1480};page.configure({dwellMs:1000});
+  page.elapse(600);page.articles[1].rect={...page.articles[1].rect,top:959,bottom:1239};page.intersect();
+  page.elapse(400);let sent=page.port.sent.filter(message=>message.type==='ANALYZE');assert.deepEqual(sent.map(message=>message.post.id),['100']);
+  assert.deepEqual(page.pendingTimeouts(),[600]);page.elapse(599);assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,1);
+  page.elapse(1);sent=page.port.sent.filter(message=>message.type==='ANALYZE');assert.deepEqual(sent.map(message=>message.post.id),['100','101']);assert.deepEqual(page.pendingTimeouts(),[]);
+});
+
+test('a post leaving and re-entering the viewport must start a fresh uninterrupted dwell',()=>{
+  const page=fixture({postCount:1});page.configure({dwellMs:1000});page.elapse(700);page.scroll(1500);
+  assert.deepEqual(page.pendingTimeouts(),[]);page.elapse(5000);assert.equal(page.port.sent.some(message=>message.type==='ANALYZE'),false);
+  page.scroll(-1500);assert.deepEqual(page.pendingTimeouts(),[1000]);page.elapse(999);assert.equal(page.port.sent.some(message=>message.type==='ANALYZE'),false);
+  page.elapse(1);assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,1);
+});
+
+test('continuing to scroll a still-visible post postpones analysis until one full dwell after the final scroll',()=>{
+  const page=fixture({postCount:1});page.configure({dwellMs:1000});
+  for(let index=0;index<7;index++){
+    page.elapse(200);page.scroll(1);assert.equal(page.port.sent.some(message=>message.type==='ANALYZE'),false,'A continuously moving feed cannot consume the dwell window');
+  }
+  assert.ok(page.articles[0].rect.top>0);assert.deepEqual(page.pendingTimeouts(),[1000]);
+  page.elapse(999);assert.equal(page.port.sent.some(message=>message.type==='ANALYZE'),false);page.elapse(1);assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,1);
+});
+
+test('captured nested X scrolls reset pending dwell while SuperX answer scrolling leaves it unchanged',()=>{
+  for(const source of ['x-container','overlay-host','overlay-shadow']){
+    const page=fixture({postCount:1});page.configure({dwellMs:1000});page.elapse(700);
+    const overlay=page.nodes.find(node=>node.id==='grokfirst-overlay'),box=page.cards()[0].testShadow.querySelector('.card');
+    page.window.emit('scroll',source==='x-container'?{target:page.primary}:source==='overlay-host'?{target:overlay}:{target:box,composedPath:()=>[box,page.cards()[0].testShadow,page.cards()[0],overlay.testShadow,overlay,page.document.body,page.window]});page.flush();
+    page.elapse(300);assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,source==='x-container'?0:1,source);
+    if(source==='x-container'){page.elapse(699);assert.equal(page.port.sent.some(message=>message.type==='ANALYZE'),false);page.elapse(1);assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,1);}
+  }
+});
+
+test('scroll quiet time does not cancel accepted work or impose waiting when dwell is explicitly zero',()=>{
+  const page=fixture({postCount:1});page.configure({dwellMs:0});const request=page.port.sent.find(message=>message.type==='ANALYZE');page.port.onMessage.emit({type:'START',requestId:request.requestId});
+  page.configure({dwellMs:1000});const before=page.port.sent.length;
+  for(let index=0;index<7;index++){page.elapse(200);page.scroll(1);}
+  assert.equal(page.port.sent.slice(before).some(message=>['CANCEL','CANCEL_ALL','ANALYZE'].includes(message.type)),false);assert.deepEqual(page.pendingTimeouts(),[]);
+  const immediate=fixture({postCount:1});immediate.configure({dwellMs:0});immediate.scroll(1);assert.equal(immediate.port.sent.filter(message=>message.type==='ANALYZE').length,1);assert.deepEqual(immediate.pendingTimeouts(),[]);
+});
+
+test('scrolling safely removes unstarted automatic work from the worker queue and waits from the final scroll',()=>{
+  const page=fixture({postCount:1});page.configure({dwellMs:1000});page.elapse(1000);let requests=page.port.sent.filter(message=>message.type==='ANALYZE');const queued=requests[0];
+  page.scroll(1);page.elapse(200);page.scroll(1);page.elapse(500);
+  assert.equal(page.port.sent.filter(message=>message.type==='CANCEL_IF_QUEUED').length,1);assert.equal(page.port.sent.some(message=>message.type==='CANCEL'),false);assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,1);
+  page.port.onMessage.emit({type:'ERROR',requestId:queued.requestId,code:'CANCELLED'});page.flush();assert.deepEqual(page.pendingTimeouts(),[500]);
+  page.elapse(499);assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,1);page.elapse(1);requests=page.port.sent.filter(message=>message.type==='ANALYZE');assert.equal(requests.length,2);
+  page.port.onMessage.emit({type:'UPDATE',requestId:queued.requestId,phase:'verify',text:'An obsolete cancelled queue fragment.'});page.flush();assert.doesNotMatch(page.cards()[0].testShadow.textContent,/obsolete cancelled/);
+  page.scroll(1);page.elapse(2000);assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,2,'An overdue but unacknowledged cancellation cannot create a duplicate');
+  page.port.onMessage.emit({type:'ERROR',requestId:requests[1].requestId,code:'CANCELLED'});page.flush();assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,3,'A confirmed unstarted job needs no extra fixed delay once the quiet window has elapsed');
+});
+
+test('START or actual progress crossing a scroll queue-cancellation probe preserves the paid task',()=>{
+  for(const crossing of ['START','UPDATE']){
+    const page=fixture({postCount:1});page.configure({dwellMs:1000});page.elapse(1000);const request=page.port.sent.find(message=>message.type==='ANALYZE');page.scroll(1);
+    assert.equal(page.port.sent.filter(message=>message.type==='CANCEL_IF_QUEUED').length,1);
+    page.port.onMessage.emit(crossing==='START'?{type:'START',requestId:request.requestId}:{type:'UPDATE',requestId:request.requestId,phase:'verify',text:'Paid progress still belongs to this post.'});page.flush();
+    const before=page.port.sent.length;for(let index=0;index<7;index++){page.elapse(200);page.scroll(1);}
+    assert.equal(page.port.sent.slice(before).some(message=>['CANCEL','CANCEL_ALL','CANCEL_IF_QUEUED','ANALYZE'].includes(message.type)),false,crossing);
+    page.port.onMessage.emit({type:'RESULT',requestId:request.requestId,result:{provider:'api',text:'The original paid result completed.',verificationStatus:'completed',usage:{total_tokens:33},sources:[]}});page.flush();
+    assert.equal(page.cards()[0].testShadow.querySelector('.answer').textContent,'The original paid result completed.');assertTokenCount(page.cards()[0],33);assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,1);
+  }
+});
+
+test('scroll queue probes exclude manual retries, comments and explicit zero-wait mode',()=>{
+  const manual=fixture({postCount:1});manual.port.onMessage.emit({type:'CONFIG',settings:{...core.DEFAULT_SETTINGS,dwellMs:1000},ready:true,apiBudgetPaused:true});manual.flush();manual.cards()[0].testShadow.querySelector('.retry').emit('click');manual.flush();const retry=manual.port.sent.find(message=>message.type==='ANALYZE');assert.equal(retry.force,true);manual.scroll(1);assert.equal(manual.port.sent.some(message=>message.type==='CANCEL_IF_QUEUED'),false);
+  const comments=fixture({postCount:1});comments.configure({dwellMs:1000});comments.cards()[0].testShadow.querySelector('.generate-comments').emit('click');comments.flush();comments.scroll(1);assert.equal(comments.port.sent.some(message=>message.type==='GENERATE_COMMENTS'),true);assert.equal(comments.port.sent.some(message=>message.type==='CANCEL_IF_QUEUED'),false);
+  const immediate=fixture({postCount:1});immediate.configure({dwellMs:0});immediate.scroll(1);assert.equal(immediate.port.sent.some(message=>message.type==='CANCEL_IF_QUEUED'),false);
+});
+
+test('a scroll cancellation waiting on the worker stays race-safe through leaving and re-entering the viewport',()=>{
+  const page=fixture({postCount:1});page.configure({dwellMs:1000});page.elapse(1000);const request=page.port.sent.find(message=>message.type==='ANALYZE');page.scroll(1500);page.tick(2000);
+  assert.equal(page.port.sent.filter(message=>message.type==='CANCEL_IF_QUEUED').length,1);assert.equal(page.port.sent.some(message=>message.type==='CANCEL'),false);assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,1);
+  page.scroll(-1500);page.port.onMessage.emit({type:'ERROR',requestId:request.requestId,code:'CANCELLED'});page.flush();page.elapse(999);assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,1);page.elapse(1);assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,2);
+});
+
+test('quickly scrolling past posts records history immediately without dispatching paid work',()=>{
+  const page=fixture({postCount:5});page.articles.forEach((article,index)=>{article.rect={...article.rect,top:index?1200:90,bottom:index?1480:370};});page.configure({dwellMs:1000});
+  for(let index=0;index<4;index++){
+    page.elapse(200);page.articles[index].rect={...page.articles[index].rect,top:-600,bottom:-320};page.articles[index+1].rect={...page.articles[index+1].rect,top:90,bottom:370};page.intersect();
+  }
+  assert.equal(page.port.sent.some(message=>message.type==='ANALYZE'),false);const visits=new Set(page.port.sent.filter(message=>message.type==='HISTORY_VISIT').flatMap(message=>message.posts.map(post=>post.id)));assert.equal(visits.size,5);
+  page.elapse(1000);assert.deepEqual(page.port.sent.filter(message=>message.type==='ANALYZE').map(message=>message.post.id),['104']);assert.deepEqual(page.pendingTimeouts(),[]);
+});
+
+test('hiding the tab, collapsing the rail and pausing the extension cancel and reset pending dwell timers',()=>{
+  for(const action of ['hidden','collapsed','disabled','no-rail-space']){
+    const page=fixture({postCount:1});page.configure({dwellMs:1000});page.elapse(700);
+    if(action==='hidden'){page.document.hidden=true;page.document.emit('visibilitychange');}
+    else if(action==='collapsed')page.nodes.find(node=>node.className==='rail-collapse').emit('click');
+    else if(action==='disabled')page.configure({dwellMs:1000,enabled:false});
+    else page.resize(950);
+    page.flush();assert.deepEqual(page.pendingTimeouts(),[],action);page.elapse(30000);assert.equal(page.port.sent.some(message=>message.type==='ANALYZE'),false,action);
+    if(action==='hidden'){page.document.hidden=false;page.document.emit('visibilitychange');}
+    else if(action==='collapsed')page.nodes.find(node=>node.className==='rail-expand').emit('click');
+    else if(action==='disabled')page.configure({dwellMs:1000,enabled:true});
+    else page.resize(1440);
+    page.flush();page.elapse(999);assert.equal(page.port.sent.some(message=>message.type==='ANALYZE'),false,action);
+    page.elapse(1);assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,1,action);
+  }
+});
+
+test('a translated post identity restarts dwell while unrelated preview hydration preserves elapsed visibility',()=>{
+  for(const changedLanguage of [true,false]){
+    const page=fixture({postCount:1});page.articles[0].postData.language='en';page.configure({dwellMs:1000});page.elapse(700);
+    page.articles[0].postData={...page.articles[0].postData,text:changedLanguage?'当前显示中文翻译。':'Expanded English post preview.',language:changedLanguage?'zh-CN':'en',images:[{url:'https://pbs.twimg.com/media/fixture.jpg'}]};page.mutate();
+    page.elapse(300);assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,changedLanguage?0:1);
+    if(changedLanguage){page.elapse(699);assert.equal(page.port.sent.some(message=>message.type==='ANALYZE'),false);page.elapse(1);const request=page.port.sent.find(message=>message.type==='ANALYZE');assert.equal(request.post.language,'zh-CN');}
+  }
+});
+
+test('configured dwell duration and zero apply without cancelling accepted work or adding per-session limits',()=>{
+  const page=fixture({postCount:2});page.articles[1].rect={...page.articles[1].rect,top:1200,bottom:1480};page.configure({dwellMs:2500});page.elapse(2499);assert.equal(page.port.sent.some(message=>message.type==='ANALYZE'),false);page.elapse(1);
+  const request=page.port.sent.find(message=>message.type==='ANALYZE');page.port.onMessage.emit({type:'START',requestId:request.requestId});page.articles[1].rect={...page.articles[1].rect,top:400,bottom:680};page.intersect();page.elapse(1000);
+  const before=page.port.sent.length;page.configure({dwellMs:0});assert.equal(page.port.sent.slice(before).some(message=>['CANCEL','CANCEL_ALL'].includes(message.type)),false,'Changing dwell only changes future waiting work');
+  assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,2);assert.deepEqual(page.pendingTimeouts(),[]);
+  const many=fixture({postCount:35});many.context.innerHeight=12000;many.configure({dwellMs:1000,maxPerSession:1,cooldownMs:60000});many.elapse(1000);assert.equal(many.port.sent.filter(message=>message.type==='ANALYZE').length,35,'Every visible post may queue after its own dwell');
+});
+
+test('changing a nonzero dwell restarts only waiting posts and replaces the single deadline',()=>{
+  const page=fixture({postCount:1});page.configure({dwellMs:1000});page.elapse(700);page.configure({dwellMs:500});
+  assert.deepEqual(page.pendingTimeouts(),[500]);page.elapse(499);assert.equal(page.port.sent.some(message=>message.type==='ANALYZE'),false);page.elapse(1);assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,1);
+  const detached=fixture({postCount:1});detached.configure({dwellMs:1000});detached.elapse(700);detached.articles[0].remove();detached.mutate();assert.deepEqual(detached.pendingTimeouts(),[]);detached.elapse(10000);assert.equal(detached.port.sent.some(message=>message.type==='ANALYZE'),false);
+});
+
+test('manual retry and comment generation bypass dwell while automatic requests remain delayed',()=>{
+  const page=fixture({postCount:1});page.configure({dwellMs:30000});page.cards()[0].testShadow.querySelector('.generate-comments').emit('click');page.flush();
+  assert.equal(page.port.sent.filter(message=>message.type==='GENERATE_COMMENTS').length,1);assert.equal(page.port.sent.some(message=>message.type==='ANALYZE'),false);
+  page.port.onMessage.emit({type:'CONFIG',settings:{...core.DEFAULT_SETTINGS,dwellMs:30000},ready:true,apiBudgetPaused:true});page.flush();
+  const retry=page.cards()[0].testShadow.querySelector('.retry');assert.equal(retry.hidden,false);retry.emit('click');page.flush();const requests=page.port.sent.filter(message=>message.type==='ANALYZE');assert.equal(requests.length,1);assert.equal(requests[0].force,true);
+});
+
+test('history does not require a Key or wait for dwell, and supplying a Key starts a fresh full dwell',()=>{
+  const page=fixture({postCount:1});page.port.onMessage.emit({type:'CONFIG',settings:core.DEFAULT_SETTINGS,ready:false,historyEnabled:true});page.flush();
+  assert.equal(page.port.sent.filter(message=>message.type==='HISTORY_VISIT').length,1);assert.equal(page.port.sent.some(message=>message.type==='ANALYZE'),false);assert.deepEqual(page.pendingTimeouts(),[]);
+  page.elapse(10000);page.port.onMessage.emit({type:'CONFIG',settings:core.DEFAULT_SETTINGS,ready:true});page.flush();page.elapse(999);assert.equal(page.port.sent.some(message=>message.type==='ANALYZE'),false);page.elapse(1);assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,1);
+});
+
 test('all visible API posts are submitted together including partial viewport edges',()=>{
   const page=fixture({postCount:7});
   page.articles.forEach((article,index)=>{article.rect={...article.rect,top:90+index*130,bottom:370+index*130};});
@@ -2167,7 +2318,7 @@ test('Settings runtime failure exposes refresh recovery instead of silently drop
 test('more than 24 visible posts are submitted immediately through API, independent of legacy session settings',()=>{
   for(const provider of ['api']) {
     const page=fixture({postCount:35});page.context.innerHeight=12000;
-    page.configure({provider,dwellMs:10000,maxPerSession:1,cooldownMs:60000});
+    page.configure({provider,dwellMs:0,maxPerSession:1,cooldownMs:60000});
     const sent=page.port.sent.filter(message=>message.type==='ANALYZE');
     assert.equal(sent.length,35,provider+' dispatches all visible posts before waiting or IntersectionObserver delivery');
     assert.deepEqual(sent.map(message=>message.post.id),page.articles.map(article=>article.postData.id));
@@ -2828,7 +2979,7 @@ test('failed or incomplete manual account probes keep automatic work paused and 
 });
 test('saved account pause reaches a new tab before dispatch and recovery in another tab resumes new work',()=>{
   const page=fixture({postCount:1});
-  page.port.onMessage.emit({type:'CONFIG',settings:core.DEFAULT_SETTINGS,ready:true,apiBudgetPaused:true,apiBudgetFailure:spendingFailure,historyEnabled:true,historyEpoch:0});page.flush();page.intersect();page.tick(1000);
+  page.port.onMessage.emit({type:'CONFIG',settings:{...core.DEFAULT_SETTINGS,dwellMs:0},ready:true,apiBudgetPaused:true,apiBudgetFailure:spendingFailure,historyEnabled:true,historyEpoch:0});page.flush();page.intersect();page.tick(1000);
   assert.equal(page.port.sent.some(message=>message.type==='ANALYZE'),false);assert.equal(page.port.sent.some(message=>message.type==='HISTORY_VISIT'),true,'Local history remains available while API spending is paused');
   assert.equal(page.cards()[0].testShadow.querySelector('.note').textContent,ui.t('note.accountLimit','zh-CN'));
   page.port.onMessage.emit({type:'API_BUDGET_RECOVERED'});page.flush();page.tick();
@@ -2858,7 +3009,7 @@ test('an already-running rate-limit error cannot replace the account pause or cl
   const page=fixture({postCount:3});page.articles[2].rect={...page.articles[2].rect,top:1200,bottom:1480};page.configure();const [first,second]=page.port.sent.filter(message=>message.type==='ANALYZE');
   page.port.onMessage.emit({type:'ERROR',requestId:first.requestId,code:'API_ERROR',verificationFailure:spendingFailure});page.flush();
   page.port.onMessage.emit({type:'ERROR',requestId:second.requestId,code:'RATE_LIMIT'});page.flush();
-  const before=page.port.sent.length;page.port.onMessage.emit({type:'CONFIG',settings:{...core.DEFAULT_SETTINGS,verifyPrompt:'A different future style.',interfaceLanguage:'en'},ready:true,apiBudgetPaused:true,apiBudgetFailure:spendingFailure});page.flush();
+  const before=page.port.sent.length;page.port.onMessage.emit({type:'CONFIG',settings:{...core.DEFAULT_SETTINGS,dwellMs:0,verifyPrompt:'A different future style.',interfaceLanguage:'en'},ready:true,apiBudgetPaused:true,apiBudgetFailure:spendingFailure});page.flush();
   assert.equal(page.port.sent.slice(before).some(message=>message.type==='CANCEL_ALL'),false,'An account notice does not cancel accepted paid work');
   page.articles[2].rect={...page.articles[2].rect,top:650,bottom:930};page.intersect();page.tick(1000);
   assert.equal(page.cards()[2].testShadow.querySelector('.status').textContent,ui.t('error.apiUsage','en'));assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,2);
@@ -2907,7 +3058,7 @@ test('capacity partial results keep their category and failed or cached probes c
 });
 
 test('capacity CONFIG pauses before dispatch and ordinary settings cannot recover it or change the selected model',()=>{
-  const page=fixture({postCount:1}),settings={...core.DEFAULT_SETTINGS,interfaceLanguage:'en'};
+  const page=fixture({postCount:1}),settings={...core.DEFAULT_SETTINGS,dwellMs:0,interfaceLanguage:'en'};
   page.port.onMessage.emit({type:'CONFIG',settings,ready:true,apiCapacityPaused:true});page.flush();page.intersect();page.tick();
   assert.equal(page.port.sent.some(message=>message.type==='ANALYZE'),false);assert.equal(page.port.sent.some(message=>message.type==='HISTORY_VISIT'),true);
   const card=page.cards()[0].testShadow;assert.equal(card.querySelector('.status').textContent,ui.t('error.apiCapacity','en'));assert.equal(card.querySelector('.retry').disabled,false);
@@ -2919,7 +3070,7 @@ test('capacity CONFIG pauses before dispatch and ordinary settings cannot recove
 
 test('capacity and account pauses recover independently and budget guidance takes priority',()=>{
   for(const recovered of ['API_CAPACITY_RECOVERED','API_BUDGET_RECOVERED']){
-    const page=fixture({postCount:1});page.port.onMessage.emit({type:'CONFIG',settings:core.DEFAULT_SETTINGS,ready:true,apiBudgetPaused:true,apiCapacityPaused:true});page.flush();page.intersect();page.tick();
+    const page=fixture({postCount:1});page.port.onMessage.emit({type:'CONFIG',settings:{...core.DEFAULT_SETTINGS,dwellMs:0},ready:true,apiBudgetPaused:true,apiCapacityPaused:true});page.flush();page.intersect();page.tick();
     const card=page.cards()[0].testShadow;assert.equal(card.querySelector('.status').textContent,ui.t('error.apiUsage','zh-CN'));assert.equal(card.querySelector('.note').textContent,ui.t('note.accountLimit','zh-CN'));
     page.port.onMessage.emit({type:recovered});page.flush();page.tick();assert.equal(page.port.sent.some(message=>message.type==='ANALYZE'),false);
     assert.equal(card.querySelector('.status').textContent,ui.t(recovered==='API_CAPACITY_RECOVERED'?'error.apiUsage':'error.apiCapacity','zh-CN'));
@@ -2944,7 +3095,7 @@ test('a capacity notice does not cancel accepted requests and API-only pauses do
   page.port.onMessage.emit({type:'UPDATE',requestId:requests[0].requestId,phase:'verify',text:'Retained live findings.',usage:{total_tokens:6}});page.flush();const before=page.port.sent.length;
   page.port.onMessage.emit({type:'CONFIG',settings:core.DEFAULT_SETTINGS,ready:true,apiCapacityPaused:true});page.flush();
   assert.equal(page.port.sent.slice(before).some(message=>['CANCEL','CANCEL_ALL'].includes(message.type)),false);assert.equal(page.cards()[0].testShadow.querySelector('.answer').textContent,'Retained live findings.');assertTokenCount(page.cards()[0],6);
-  const build=fixture();build.port.onMessage.emit({type:'CONFIG',settings:{...core.DEFAULT_SETTINGS,provider:'build'},ready:true,apiCapacityPaused:true});build.flush();build.tick();assert.equal(build.port.sent.filter(message=>message.type==='ANALYZE').length,2);
+  const build=fixture();build.port.onMessage.emit({type:'CONFIG',settings:{...core.DEFAULT_SETTINGS,provider:'build',dwellMs:0},ready:true,apiCapacityPaused:true});build.flush();build.tick();assert.equal(build.port.sent.filter(message=>message.type==='ANALYZE').length,2);
 });
 
 test('an active port disconnect marks only interrupted work and reconnect never automatically replays it',()=>{

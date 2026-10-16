@@ -2,6 +2,14 @@
 
 SuperX release history. The extension's `manifest.json` is the authoritative installed version. Test counts below describe those releases' recorded checks, not live provider or browser-store certification.
 
+## 0.9.8 — Wait for reading and use three API slots by default (unreleased candidate)
+
+- Default API concurrency to 3, configurable from 1 to 8. Preserve the shared limit across tabs, fact checks, comments and cancellation cleanup.
+- Default automatic analysis to a 1-second wait after feed/page scrolling stops, with the post continuously visible. Settings supports 0–30 seconds, including fractions; 0 starts immediately. Further scrolling resets waiting work, including tasks confirmed not yet started in the provider queue. Scrolling inside SuperX's answers does not reset the timer. Started requests continue, and manual reanalysis/comments bypass the wait.
+- Apply the wait to both API Key and official local Grok modes, without delaying browsing history or requiring an API Key for history. Changing the wait alone preserves already-started requests. Migrate the old 0-second/default-four settings once; retain later explicit zero/four choices and other valid custom values.
+- Explain subscription API allowance and pay-as-you-go xAI credits in Settings and connection guides. Standard credits do not automatically enable separately priced Priority Processing; SuperX continues to send standard requests without changing billing tiers.
+- Retain account-limit and model-capacity pause protections. This remains a local candidate; published Stable remains 0.7.26.
+
 ## 0.9.7 — Distinguish model capacity and pause automatic requests (unreleased candidate)
 
 - Recognize supported overload error codes and the provider's fixed model-at-capacity error message at the error boundary. Use a local capacity classification without inventing an upstream error code or replacing the original HTTP transport status.

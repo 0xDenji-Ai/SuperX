@@ -167,6 +167,7 @@
       || $("api-model").value !== currentSettings.apiModel
       || $("api-reasoning-effort").value !== currentSettings.apiReasoningEffort
       || Number($("api-concurrency").value) !== currentSettings.apiConcurrency
+      || Math.round(Number($("analysis-dwell").value) * 1000) !== currentSettings.dwellMs
       || $("web-search").checked !== currentSettings.webSearch
       || $("x-search").checked !== currentSettings.xSearch
       || $("language").value !== currentSettings.language
@@ -323,6 +324,7 @@
     populateModels(settings.apiModel);
     populateReasoning(settings.apiModel,settings.apiReasoningEffort);
     $("api-concurrency").value = settings.apiConcurrency;
+    $("analysis-dwell").value = settings.dwellMs / 1000;
     $("web-search").checked = settings.webSearch;
     $("x-search").checked = settings.xSearch;
     for (const field of promptFields) $(field.name + "-prompt").value = settings[field.setting];
@@ -412,7 +414,7 @@
   });
   $("interface-language").addEventListener("change",() => { renderLanguage();markDraft(); });
   $("api-model").addEventListener("change",() => { populateReasoning($("api-model").value,$("api-reasoning-effort").value);markDraft(); });
-  for (const id of ["enabled","build-reasoning-effort","api-reasoning-effort","api-concurrency","web-search","x-search","language",...promptFields.map(field => field.name + "-prompt")]) {
+  for (const id of ["enabled","build-reasoning-effort","api-reasoning-effort","api-concurrency","analysis-dwell","web-search","x-search","language",...promptFields.map(field => field.name + "-prompt")]) {
     $(id).addEventListener("input",markDraft);
     $(id).addEventListener("change",markDraft);
   }
@@ -433,7 +435,8 @@
   $("fast-preset").addEventListener("click",() => {
     $("api-model").value = "grok-4.3";
     populateReasoning("grok-4.3","none");
-    $("api-concurrency").value = 4;
+    $("api-concurrency").value = core.DEFAULT_SETTINGS.apiConcurrency;
+    $("analysis-dwell").value = core.DEFAULT_SETTINGS.dwellMs / 1000;
     showExplanationMode();setStatus("options.presetReady");
   });
   $("reload-extension").addEventListener("click",() => {
@@ -462,6 +465,7 @@
     }
     const settings = core.normalizeSettings({
       ...currentSettings,
+      analysisDefaultsVersion:core.DEFAULT_SETTINGS.analysisDefaultsVersion,
       enabled:$("enabled").checked,
       provider:$("provider").value,
       buildTransport:"acp",
@@ -472,6 +476,7 @@
       apiModel:$("api-model").value.trim(),
       apiReasoningEffort:$("api-reasoning-effort").value,
       apiConcurrency:Number($("api-concurrency").value),
+      dwellMs:Math.round(Number($("analysis-dwell").value) * 1000),
       apiVerification:"only",
       webSearch:$("web-search").checked,
       xSearch:$("x-search").checked,

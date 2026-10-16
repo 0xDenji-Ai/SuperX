@@ -792,6 +792,157 @@
     ru:['Минимальный','Проверьте модель и уровень рассуждения и сохраните подключение.','После установки выполните:'],
     hi:['न्यूनतम','मॉडल और तर्क स्तर जाँचें, फिर कनेक्शन इस्तेमाल करने के लिए सहेजें।','इंस्टॉल करने के बाद चलाएँ:']
   });
+  section(['options.dwell','options.dwellHelp','options.concurrencyHelp','options.apiAccess',
+    'options.apiSubscriptionTitle','options.apiSubscriptionHelp','options.apiSubscriptionLink',
+    'options.apiMeteredTitle','options.apiMeteredHelp','options.apiMeteredLink','options.apiPriorityHelp','options.apiPriorityLink',
+    'options.providerIntro','options.subtitle','popup.apiHint','options.presetReady'],{
+    en:[
+      'Analyze after (seconds)','After feed or page scrolling stops, posts must stay visible for this long before automatic analysis. Scrolling again resets the timer; scrolling inside the SuperX sidebar does not. Default: 1 second; 0 starts immediately. Manual actions do not wait.',
+      'Default: 3. All X tabs and comment requests share this limit.','Subscription or pay-as-you-go API',
+      'The X Subscription','Create an API Key in Grok Dashboard to use eligible API usage from your plan’s shared weekly allowance. Check your account for available models, limits and extra charges.','Grok API Keys',
+      'Pay-as-you-go xAI API','Create a Key and add credits in xAI Console. Pay for the tokens and tools you use, and manage API usage and billing there.','xAI Console',
+      'Buying standard API credits does not enable Priority Processing. SuperX uses standard requests. Priority requires explicit opt-in at an extra cost; it may reduce peak-time latency but does not guarantee availability.','About Priority Processing',
+      'Choose an answer source. Enabled posts queue for fact-checking after scrolling stops and they remain visible for the configured time.',
+      'Enabled posts analyze automatically after scrolling stops and they remain visible for the configured time, with no session limit.',
+      'After scrolling stops, posts are fact-checked once they remain visible for the configured time. Usage depends on your account and provider rules.',
+      'Defaults selected: 1-second visible time and 3 shared concurrent API requests. Save to apply.'
+    ],
+    'zh-CN':[
+      '自动分析前停留（秒）','停止滚动信息流或页面后，帖子须持续可见达到此时长才会自动分析。再次滚动会重新计时，滚动 SuperX 右栏内部不会影响。默认 1 秒；设为 0 即可立即开始。手动操作无需等待。',
+      '默认 3。所有 X 标签页和评论请求共享此上限。','订阅或按量付费 API',
+      'The X Subscription','在 Grok Dashboard 创建 API Key，使用套餐支持的 API 额度，与其他受支持的使用共享周额度。可用模型、额度和额外费用以账户页面为准。','Grok API Keys',
+      '按量使用 xAI API','在 xAI Console 创建 Key 并购买 credits，按实际使用的 Token 和工具计费，在控制台管理 API 用量和账单。','xAI Console',
+      '购买标准 API credits 不会开启 Priority Processing。SuperX 使用标准请求。Priority 需要明确选择并额外付费，可能降低高峰期延迟，但不保证服务始终可用。','了解 Priority Processing',
+      '选择回答来源。开启后，停止滚动且帖子持续可见达到设置的时长后，才会排队等待事实核查。',
+      '启用后，停止滚动且帖子持续可见达到设置的时长后自动分析，不设每会话条数上限。',
+      '停止滚动且帖子持续可见达到设置的时长后开始事实核查，用量取决于账号和提供方规则。',
+      '已选默认配置：停留 1 秒、共享 API 并发上限 3。保存后生效。'
+    ],
+    'zh-TW':[
+      '自動分析前停留（秒）','停止捲動動態或頁面後，貼文須持續可見達到此時長才會自動分析。再次捲動會重新計時，捲動 SuperX 右欄內部不會影響。預設 1 秒；設為 0 即可立即開始。手動操作無需等待。',
+      '預設 3。所有 X 分頁和留言請求共用此上限。','訂閱或按用量付費 API',
+      'The X Subscription','在 Grok Dashboard 建立 API Key，使用方案支援的 API 額度，與其他支援的使用共用每週額度。可用模型、額度及額外費用以帳戶頁面為準。','Grok API Keys',
+      '按用量使用 xAI API','在 xAI Console 建立 Key 並購買 credits，依實際使用的 Token 和工具計費，在控制台管理 API 用量及帳單。','xAI Console',
+      '購買標準 API credits 不會啟用 Priority Processing。SuperX 使用標準請求。Priority 需要明確選擇並額外付費，可能降低尖峰時段延遲，但不保證服務始終可用。','了解 Priority Processing',
+      '選擇回答來源。開啟後，停止捲動且貼文持續可見達到設定的時長後，才會排隊等待事實查核。',
+      '啟用後，停止捲動且貼文持續可見達到設定的時長後自動分析，不設每次瀏覽的篇數上限。',
+      '停止捲動且貼文持續可見達到設定的時長後開始事實查核，用量取決於帳號及提供者規則。',
+      '已選預設設定：停留 1 秒、共用 API 並行上限 3。儲存後生效。'
+    ],
+    ja:[
+      '自動分析までの表示時間（秒）','フィードやページのスクロール停止後、投稿がこの時間だけ表示され続けると自動分析します。再スクロールで計時をやり直しますが、SuperX サイドバー内のスクロールは影響しません。既定は 1 秒、0 はすぐに開始します。手動操作は待ちません。',
+      '既定は 3。すべての X タブとコメント要求でこの上限を共有します。','サブスクリプションまたは従量課金 API',
+      'The X Subscription','Grok Dashboard で API Key を作成し、プラン対象の API 利用を共有の週間枠から使用します。利用可能なモデル、上限、追加料金はアカウントで確認してください。','Grok API Keys',
+      '従量課金の xAI API','xAI Console で Key を作成し、クレジットを購入します。使用したトークンとツールに応じて課金され、API 利用量と請求を管理できます。','xAI Console',
+      '通常の API クレジット購入では Priority Processing は有効になりません。SuperX は標準の要求を送ります。Priority は明示的な選択と追加料金が必要で、混雑時の遅延を減らす場合がありますが、可用性は保証しません。','Priority Processing について',
+      '回答元を選択してください。有効な投稿はスクロール停止後、設定した時間だけ表示され続けると事実確認の待ち行列に入ります。',
+      '有効な間はスクロール停止後、投稿が設定した時間だけ表示され続けると自動分析します。セッションごとの件数制限はありません。',
+      'スクロール停止後、投稿が設定した時間だけ表示され続けると事実確認します。利用量はアカウントと提供元の規則によります。',
+      '既定値を選択しました。表示時間 1 秒、共有 API 同時要求数 3。保存すると適用されます。'
+    ],
+    ko:[
+      '자동 분석 전 표시 시간(초)','피드나 페이지 스크롤이 멈춘 후 게시물이 이 시간 동안 계속 보이면 자동 분석합니다. 다시 스크롤하면 타이머가 초기화되지만 SuperX 사이드바 내부 스크롤은 영향을 주지 않습니다. 기본값은 1초이며 0은 즉시 시작합니다. 수동 작업은 기다리지 않습니다.',
+      '기본값: 3. 모든 X 탭과 댓글 요청이 이 한도를 공유합니다.','구독 또는 종량제 API',
+      'The X Subscription','Grok Dashboard에서 API Key를 만들어 요금제가 지원하는 API 사용량을 주간 공유 한도에서 사용하세요. 사용 가능한 모델, 한도 및 추가 요금은 계정에서 확인하세요.','Grok API Keys',
+      '종량제 xAI API','xAI Console에서 Key를 만들고 크레딧을 구매하세요. 사용한 토큰과 도구에 따라 요금이 부과되며 API 사용량과 청구를 관리할 수 있습니다.','xAI Console',
+      '일반 API 크레딧 구매로 Priority Processing이 켜지지 않습니다. SuperX는 표준 요청을 사용합니다. Priority는 명시적 선택과 추가 비용이 필요하며 혼잡 시간 지연을 줄일 수 있지만 가용성을 보장하지 않습니다.','Priority Processing 알아보기',
+      '답변 소스를 선택하세요. 스크롤이 멈춘 후 활성화된 게시물이 설정한 시간 동안 계속 보이면 사실 확인 대기열에 추가됩니다.',
+      '활성화된 동안 스크롤이 멈춘 후 게시물이 설정한 시간 동안 계속 보이면 자동 분석합니다. 세션별 개수 제한은 없습니다.',
+      '스크롤이 멈춘 후 게시물이 설정한 시간 동안 계속 보이면 사실을 확인합니다. 사용량은 계정과 제공업체 규칙에 따라 다릅니다.',
+      '기본값 선택됨: 표시 시간 1초, 공유 API 동시 요청 한도 3. 저장하면 적용됩니다.'
+    ],
+    es:[
+      'Analizar tras (segundos)','Tras detener el desplazamiento del feed o la página, las publicaciones deben permanecer visibles este tiempo. Desplazarse de nuevo reinicia el temporizador; hacerlo dentro de la barra lateral de SuperX no lo reinicia. Predeterminado: 1 segundo; 0 inicia al instante. Las acciones manuales no esperan.',
+      'Predeterminado: 3. Todas las pestañas de X y las solicitudes de comentarios comparten este límite.','API con suscripción o pago por uso',
+      'The X Subscription','Crea una API Key en Grok Dashboard para usar la API incluida en la cuota semanal compartida de tu plan. Consulta tu cuenta para ver modelos, límites y cargos adicionales.','Grok API Keys',
+      'xAI API de pago por uso','Crea una Key y compra créditos en xAI Console. Pagas por los tokens y herramientas que uses y gestionas allí el uso y la facturación de la API.','xAI Console',
+      'Comprar créditos estándar de API no activa Priority Processing. SuperX envía solicitudes estándar. Priority requiere activación explícita y un coste adicional; puede reducir la latencia en horas punta, pero no garantiza disponibilidad.','Acerca de Priority Processing',
+      'Elige el origen de las respuestas. Tras detener el desplazamiento, las publicaciones activadas entran en cola al permanecer visibles el tiempo configurado.',
+      'Al activarlo, tras detener el desplazamiento, las publicaciones se analizan cuando permanecen visibles el tiempo configurado, sin límite por sesión.',
+      'Tras detener el desplazamiento, las publicaciones se verifican cuando permanecen visibles el tiempo configurado. El uso depende de tu cuenta y de las reglas del proveedor.',
+      'Valores predeterminados seleccionados: 1 segundo visible y 3 solicitudes API simultáneas compartidas. Guarda para aplicar.'
+    ],
+    fr:[
+      'Analyser après (secondes)','Après l’arrêt du défilement du fil ou de la page, les publications doivent rester visibles pendant cette durée. Tout nouveau défilement relance le délai, sauf dans la barre latérale SuperX. Par défaut : 1 seconde ; 0 lance immédiatement. Les actions manuelles n’attendent pas.',
+      'Par défaut : 3. Tous les onglets X et les demandes de commentaires partagent cette limite.','API avec abonnement ou à l’usage',
+      'The X Subscription','Créez une API Key dans Grok Dashboard pour utiliser l’API éligible dans le quota hebdomadaire partagé de votre offre. Consultez votre compte pour les modèles, limites et frais supplémentaires.','Grok API Keys',
+      'xAI API à l’usage','Créez une Key et achetez des crédits dans xAI Console. Payez les tokens et outils utilisés et gérez l’utilisation et la facturation de l’API.','xAI Console',
+      'L’achat de crédits API standard n’active pas Priority Processing. SuperX utilise des requêtes standard. Priority demande une activation explicite et un supplément ; il peut réduire la latence aux heures de pointe, sans garantir la disponibilité.','À propos de Priority Processing',
+      'Choisissez la source des réponses. Après l’arrêt du défilement, les publications activées rejoignent la file en restant visibles pendant la durée configurée.',
+      'Après l’arrêt du défilement, les publications activées sont analysées lorsqu’elles restent visibles pendant la durée configurée, sans limite par session.',
+      'Après l’arrêt du défilement, les publications sont vérifiées lorsqu’elles restent visibles pendant la durée configurée. L’utilisation dépend de votre compte et des règles du fournisseur.',
+      'Valeurs par défaut sélectionnées : 1 seconde de visibilité et 3 requêtes API simultanées partagées. Enregistrez pour appliquer.'
+    ],
+    de:[
+      'Analysieren nach (Sekunden)','Nach dem Scrollen im Feed oder auf der Seite müssen Beiträge so lange sichtbar bleiben. Erneutes Scrollen setzt den Timer zurück; Scrollen innerhalb der SuperX-Seitenleiste nicht. Standard: 1 Sekunde; 0 startet sofort. Manuelle Aktionen warten nicht.',
+      'Standard: 3. Alle X-Tabs und Kommentaranfragen teilen sich dieses Limit.','API mit Abo oder nutzungsbasierter Abrechnung',
+      'The X Subscription','Erstelle im Grok Dashboard einen API Key, um berechtigte API-Nutzung aus dem gemeinsamen Wochenkontingent deines Tarifs zu verwenden. Modelle, Limits und Zusatzkosten findest du in deinem Konto.','Grok API Keys',
+      'Nutzungsbasierte xAI API','Erstelle einen Key und kaufe Guthaben in der xAI Console. Bezahle die verwendeten Tokens und Tools und verwalte dort API-Nutzung und Abrechnung.','xAI Console',
+      'Der Kauf von Standard-API-Guthaben aktiviert Priority Processing nicht. SuperX nutzt Standardanfragen. Priority erfordert eine ausdrückliche Auswahl und kostet extra; es kann Spitzenlast-Latenzen senken, garantiert aber keine Verfügbarkeit.','Über Priority Processing',
+      'Wähle die Antwortquelle. Sobald das Scrollen endet und aktivierte Beiträge die eingestellte Zeit sichtbar bleiben, werden sie zur Faktenprüfung eingereiht.',
+      'Bei aktivierter Funktion werden Beiträge analysiert, sobald das Scrollen endet und sie die eingestellte Zeit sichtbar bleiben, ohne Sitzungslimit.',
+      'Beiträge werden geprüft, sobald das Scrollen endet und sie die eingestellte Zeit sichtbar bleiben. Die Nutzung hängt von deinem Konto und den Anbieterregeln ab.',
+      'Standardwerte gewählt: 1 Sekunde sichtbar und 3 gemeinsame gleichzeitige API-Anfragen. Zum Anwenden speichern.'
+    ],
+    pt:[
+      'Analisar após (segundos)','Após parar a rolagem do feed ou da página, as publicações devem continuar visíveis por este tempo. Rolar novamente reinicia o tempo; rolar dentro da barra lateral do SuperX não. Padrão: 1 segundo; 0 inicia imediatamente. Ações manuais não esperam.',
+      'Padrão: 3. Todas as abas do X e solicitações de comentários compartilham este limite.','API por assinatura ou por uso',
+      'The X Subscription','Crie uma API Key no Grok Dashboard para usar a API elegível da cota semanal compartilhada do seu plano. Consulte sua conta para ver modelos, limites e cobranças extras.','Grok API Keys',
+      'xAI API por uso','Crie uma Key e compre créditos no xAI Console. Pague pelos tokens e ferramentas utilizados e gerencie o uso e a cobrança da API.','xAI Console',
+      'Comprar créditos padrão de API não ativa o Priority Processing. O SuperX usa solicitações padrão. Priority exige adesão explícita e custo adicional; pode reduzir a latência em horários de pico, mas não garante disponibilidade.','Sobre Priority Processing',
+      'Escolha a origem das respostas. Após parar a rolagem, publicações ativadas entram na fila quando continuam visíveis pelo tempo configurado.',
+      'Quando ativado, após parar a rolagem, publicações são analisadas quando continuam visíveis pelo tempo configurado, sem limite por sessão.',
+      'Após parar a rolagem, publicações são verificadas quando continuam visíveis pelo tempo configurado. O uso depende da sua conta e das regras do provedor.',
+      'Padrões selecionados: 1 segundo visível e 3 solicitações API simultâneas compartilhadas. Salve para aplicar.'
+    ],
+    ar:[
+      'التحليل بعد (بالثواني)','بعد توقف تمرير الخلاصة أو الصفحة، يجب أن تبقى المنشورات مرئية لهذه المدة. يعيد التمرير المؤقت من البداية، لكن التمرير داخل شريط SuperX الجانبي لا يؤثر. الافتراضي ثانية واحدة؛ 0 يبدأ فورًا. الإجراءات اليدوية لا تنتظر.',
+      'الافتراضي: 3. تتشارك جميع علامات تبويب X وطلبات التعليقات هذا الحد.','API باشتراك أو بالدفع حسب الاستخدام',
+      'The X Subscription','أنشئ API Key في Grok Dashboard لاستخدام API المؤهل من الحصة الأسبوعية المشتركة لخُطتك. راجع حسابك للنماذج المتاحة والحدود والرسوم الإضافية.','Grok API Keys',
+      'xAI API بالدفع حسب الاستخدام','أنشئ Key واشترِ رصيدًا في xAI Console. ادفع مقابل الرموز والأدوات المستخدمة، وأدر استخدام API والفوترة هناك.','xAI Console',
+      'شراء رصيد API عادي لا يفعّل Priority Processing. يستخدم SuperX طلبات عادية. يتطلب Priority اختيارًا صريحًا وتكلفة إضافية؛ قد يقلل التأخير وقت الذروة لكنه لا يضمن التوافر.','حول Priority Processing',
+      'اختر مصدر الإجابات. بعد توقف التمرير، تدخل المنشورات المفعّلة قائمة التحقق عندما تبقى مرئية للمدة المحددة.',
+      'عند التفعيل، تُحلّل المنشورات بعد توقف التمرير وبقائها مرئية للمدة المحددة، دون حد لكل جلسة.',
+      'يُتحقق من المنشورات بعد توقف التمرير وبقائها مرئية للمدة المحددة. يعتمد الاستخدام على حسابك وقواعد المزوّد.',
+      'تم اختيار الإعدادات الافتراضية: ظهور لمدة ثانية واحدة و3 طلبات API متزامنة مشتركة. احفظ لتطبيقها.'
+    ],
+    ru:[
+      'Анализировать через (секунды)','После остановки прокрутки ленты или страницы публикация должна оставаться видимой это время. Новая прокрутка сбрасывает таймер, кроме прокрутки внутри боковой панели SuperX. По умолчанию 1 секунда; 0 — сразу. Ручные действия не ждут.',
+      'По умолчанию: 3. Все вкладки X и запросы комментариев используют этот общий лимит.','API по подписке или с оплатой за использование',
+      'The X Subscription','Создайте API Key в Grok Dashboard, чтобы использовать API в рамках общего недельного лимита вашего плана. Доступные модели, ограничения и доплаты указаны в аккаунте.','Grok API Keys',
+      'xAI API с оплатой за использование','Создайте Key и купите кредиты в xAI Console. Платите за использованные токены и инструменты, управляйте расходами и счетами API.','xAI Console',
+      'Покупка обычных API-кредитов не включает Priority Processing. SuperX отправляет стандартные запросы. Priority требует явного выбора и доплаты; он может снизить задержку в часы пик, но не гарантирует доступность.','О Priority Processing',
+      'Выберите источник ответов. После остановки прокрутки включённые публикации попадают в очередь, если остаются видимыми заданное время.',
+      'При включении публикации анализируются после остановки прокрутки и непрерывной видимости заданное время, без лимита на сеанс.',
+      'Публикации проверяются после остановки прокрутки и непрерывной видимости заданное время. Использование зависит от аккаунта и правил провайдера.',
+      'Выбраны значения по умолчанию: 1 секунда видимости и 3 общих одновременных API-запроса. Сохраните для применения.'
+    ],
+    hi:[
+      'विश्लेषण से पहले ठहराव (सेकंड)','फ़ीड या पेज की स्क्रॉलिंग रुकने के बाद पोस्ट इतनी देर लगातार दिखनी चाहिए। फिर स्क्रॉल करने पर टाइमर दोबारा शुरू होता है; SuperX साइडबार के अंदर स्क्रॉल करने से नहीं। डिफ़ॉल्ट: 1 सेकंड; 0 तुरंत शुरू करता है। मैन्युअल कार्रवाइयाँ इंतज़ार नहीं करतीं।',
+      'डिफ़ॉल्ट: 3. सभी X टैब और टिप्पणी अनुरोध यह सीमा साझा करते हैं।','सदस्यता या उपयोग के अनुसार भुगतान वाला API',
+      'The X Subscription','Grok Dashboard में API Key बनाकर अपने प्लान की साझा साप्ताहिक सीमा से पात्र API उपयोग करें। उपलब्ध मॉडल, सीमाएँ और अतिरिक्त शुल्क अपने खाते में देखें।','Grok API Keys',
+      'उपयोग के अनुसार भुगतान वाला xAI API','xAI Console में Key बनाएँ और क्रेडिट खरीदें। इस्तेमाल किए गए टोकन और टूल के लिए भुगतान करें तथा API उपयोग और बिलिंग वहाँ सँभालें।','xAI Console',
+      'सामान्य API क्रेडिट खरीदने से Priority Processing चालू नहीं होता। SuperX सामान्य अनुरोध भेजता है। Priority के लिए स्पष्ट चयन और अतिरिक्त शुल्क चाहिए; इससे व्यस्त समय में देरी घट सकती है, लेकिन उपलब्धता की गारंटी नहीं है।','Priority Processing के बारे में',
+      'जवाब का स्रोत चुनें। स्क्रॉलिंग रुकने के बाद सक्षम पोस्ट तय समय तक लगातार दिखने पर तथ्य-जाँच की कतार में जुड़ती हैं।',
+      'चालू होने पर स्क्रॉलिंग रुकने और पोस्ट तय समय तक लगातार दिखने के बाद अपने आप विश्लेषण होता है। प्रति सत्र कोई सीमा नहीं है।',
+      'स्क्रॉलिंग रुकने और पोस्ट तय समय तक लगातार दिखने के बाद तथ्य-जाँच होती है। उपयोग आपके खाते और प्रदाता के नियमों पर निर्भर है।',
+      'डिफ़ॉल्ट चुने गए: 1 सेकंड का ठहराव और 3 साझा समवर्ती API अनुरोध। लागू करने के लिए सहेजें।'
+    ]
+  });
+  section(['popup.buildHint'],{
+    en:['After scrolling stops, posts queue once they remain visible for the configured time; your local Grok Build connection handles one task at a time.'],
+    'zh-CN':['停止滚动且帖子持续可见达到设置的时长后进入队列；本机 Grok Build 连接一次处理一个任务。'],
+    'zh-TW':['停止捲動且貼文持續可見達到設定的時長後進入佇列；本機 Grok Build 連線一次處理一個工作。'],
+    ja:['スクロール停止後、投稿が設定した時間だけ表示され続けると待ち行列に入ります。ローカルの Grok Build 接続は一度に 1 件を処理します。'],
+    ko:['스크롤이 멈춘 후 게시물이 설정한 시간 동안 계속 보이면 대기열에 추가됩니다. 로컬 Grok Build 연결은 한 번에 하나씩 처리합니다.'],
+    es:['Tras detener el desplazamiento, las publicaciones entran en cola al permanecer visibles el tiempo configurado; tu conexión local de Grok Build procesa una tarea a la vez.'],
+    fr:['Après l’arrêt du défilement, les publications rejoignent la file en restant visibles pendant la durée configurée ; votre connexion Grok Build locale traite une tâche à la fois.'],
+    de:['Beiträge werden eingereiht, sobald das Scrollen endet und sie die eingestellte Zeit sichtbar bleiben; die lokale Grok-Build-Verbindung bearbeitet eine Aufgabe gleichzeitig.'],
+    pt:['Após parar a rolagem, publicações entram na fila quando continuam visíveis pelo tempo configurado; sua conexão local do Grok Build processa uma tarefa por vez.'],
+    ar:['تدخل المنشورات القائمة بعد توقف التمرير وبقائها مرئية للمدة المحددة؛ يعالج اتصال Grok Build المحلي مهمة واحدة في كل مرة.'],
+    ru:['Публикации попадают в очередь после остановки прокрутки и непрерывной видимости заданное время; локальное подключение Grok Build выполняет одну задачу за раз.'],
+    hi:['स्क्रॉलिंग रुकने और पोस्ट तय समय तक लगातार दिखने के बाद कतार में जुड़ती हैं; स्थानीय Grok Build कनेक्शन एक समय में एक कार्य करता है।']
+  });
   const aliases = {'common.auto':'lang.auto','common.failed':'status.failed','tooltip.collapse':'common.collapse','tooltip.expand':'common.expand'};
   for (const language of SUPPORTED_LANGUAGES) {
     for (const [key, source] of Object.entries(aliases)) catalog[language][key] = catalog[language][source];

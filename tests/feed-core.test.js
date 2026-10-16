@@ -424,7 +424,7 @@ test('settings reject malformed values, clamp numeric limits, and use safe defau
   assert.deepEqual(core.normalizeSettings(null), core.DEFAULT_SETTINGS);
   const settings = core.normalizeSettings({ provider: 'other', dwellMs: -1, cooldownMs: Infinity, maxPerSession: 99999, language: '<script>', apiModel: 'bad model', enabled: 'false' });
   assert.equal(settings.provider, 'api');
-  assert.equal(settings.dwellMs, 0);
+  assert.equal(settings.dwellMs, 1000);
   assert.equal(settings.cooldownMs, 0);
   assert.equal(settings.maxPerSession, 0);
   assert.equal(settings.language, 'auto');
@@ -432,13 +432,13 @@ test('settings reject malformed values, clamp numeric limits, and use safe defau
   assert.equal(settings.enabled, true);
 });
 
-test('old pacing limits cannot survive migration and retired providers resolve to API', () => {
+test('retired pacing limits stay removed while supported visibility delay survives migration', () => {
   for (const provider of ['native', 'api']) {
     for (const oldValues of [{dwellMs:900,cooldownMs:3000,maxPerSession:40},
       {dwellMs:1200,cooldownMs:5000,maxPerSession:1},
       {dwellMs:Infinity,cooldownMs:-1,maxPerSession:99999}]) {
       const settings=core.normalizeSettings({provider,...oldValues,enabled:false,nativeVerification:true});
-      assert.equal(settings.dwellMs,0);assert.equal(settings.cooldownMs,0);assert.equal(settings.maxPerSession,0);
+      assert.equal(settings.dwellMs,Number.isFinite(oldValues.dwellMs)?oldValues.dwellMs:1000);assert.equal(settings.cooldownMs,0);assert.equal(settings.maxPerSession,0);
       assert.equal(settings.provider,'api');assert.equal(settings.enabled,false);assert.equal(Object.hasOwn(settings,'nativeVerification'),false);
     }
   }
@@ -456,8 +456,8 @@ test('native parent identity tolerates preview hydration but distinguishes edits
 test('API defaults use bounded parallelism and only Fact Check while preserving explicit model choices',()=>{
   const settings=core.normalizeSettings({});
   assert.equal(settings.provider,'api');assert.equal(settings.apiModel,'grok-4.3');
-  assert.equal(settings.apiConcurrency,4);assert.equal(settings.apiVerification,'only');
-  assert.equal(settings.dwellMs,0);assert.equal(settings.cooldownMs,0);assert.equal(settings.maxPerSession,0);
+  assert.equal(settings.apiConcurrency,3);assert.equal(settings.apiVerification,'only');
+  assert.equal(settings.dwellMs,1000);assert.equal(settings.cooldownMs,0);assert.equal(settings.maxPerSession,0);
   assert.equal(core.normalizeSettings({provider:'native'}).provider,'api');
   assert.equal(core.normalizeSettings({apiModel:'grok-4.7'}).apiModel,'grok-4.7');
   assert.equal(core.normalizeSettings({apiConcurrency:999,apiVerification:'made-up'}).apiConcurrency,8);
@@ -872,17 +872,17 @@ test('injected unknown models and unsupported reasoning values are rejected befo
   }
 });
 
-test('fast defaults select Grok 4.3 with no reasoning and four requests while preserving other drafts until Save',async()=>{
-  const original=core.normalizeSettings({apiModel:'grok-4.7',apiReasoningEffort:'xhigh',apiConcurrency:8,language:'ja',explanationMode:'custom',verifyPrompt:'My check draft.',commentsPrompt:'My comment draft.'});
+test('recommended defaults select Grok 4.3, three requests and one second while preserving other drafts until Save',async()=>{
+  const original=core.normalizeSettings({apiModel:'grok-4.7',apiReasoningEffort:'xhigh',apiConcurrency:8,dwellMs:7000,language:'ja',explanationMode:'custom',verifyPrompt:'My check draft.',commentsPrompt:'My comment draft.'});
   const fixture=uiPageFixture('options',original);await settleUI();await settleUI();
   fixture.ids.get('fast-preset').listeners.click();
   assert.equal(fixture.ids.get('api-model').value,'grok-4.3');assert.equal(fixture.ids.get('api-reasoning-effort').value,'none');
-  assert.equal(fixture.ids.get('api-concurrency').value,4);assert.equal(fixture.ids.get('language').value,'ja');
+  assert.equal(fixture.ids.get('api-concurrency').value,3);assert.equal(fixture.ids.get('analysis-dwell').value,1);assert.equal(fixture.ids.get('language').value,'ja');
   assert.equal(fixture.ids.get('verify-prompt').value,original.verifyPrompt);assert.equal(fixture.ids.get('comments-prompt').value,original.commentsPrompt);
   assert.equal(fixture.ids.get('api-key').value,'session-secret');assert.equal(fixture.local.settings,original);
   assert.deepEqual(uiMessageTypes(fixture),['GET_UI_LANGUAGE']);
   const form=fixture.ids.get('settings-form');await form.listeners.submit({preventDefault(){},currentTarget:form});
-  assert.equal(fixture.local.settings.apiModel,'grok-4.3');assert.equal(fixture.local.settings.apiReasoningEffort,'none');assert.equal(fixture.local.settings.apiConcurrency,4);
+  assert.equal(fixture.local.settings.apiModel,'grok-4.3');assert.equal(fixture.local.settings.apiReasoningEffort,'none');assert.equal(fixture.local.settings.apiConcurrency,3);assert.equal(fixture.local.settings.dwellMs,1000);
   assert.equal(fixture.local.settings.language,'ja');assert.equal(fixture.local.settings.verifyPrompt,original.verifyPrompt);
   assert.deepEqual(uiMessageTypes(fixture),['GET_UI_LANGUAGE','SAVE_SETTINGS']);
 });
@@ -2036,7 +2036,7 @@ test('both modes and all twelve locales offer official setup without an extra Su
   for(const locale of ui.SUPPORTED_LANGUAGES)for(const key of ['build.platform','build.generate','build.commandHelp','build.localPrivacy','build.code','build.codeHelp','build.codeRequired','build.codeInvalid','build.savedCode','build.setupIntro']){
     assert.ok(ui.catalog[locale][key]);if(locale!=='en')assert.notEqual(ui.catalog[locale][key],ui.catalog.en[key],locale+': '+key);
   }
-  assert.match(ui.t('options.providerIntro','en'),/queue.*immediately/);assert.match(ui.t('popup.buildHint','en'),/queue immediately.*one task at a time/);
+  assert.match(ui.t('options.providerIntro','en'),/scrolling stops/);assert.match(ui.t('options.providerIntro','en'),/visible.*configured time/);assert.match(ui.t('popup.buildHint','en'),/configured.*one task at a time/);
   assert.match(ui.t('build.codeHelp','en'),/not your Grok account password/);assert.match(ui.t('build.commandHelp','en'),/PowerShell.*Windows.*Terminal.*macOS/);
   assert.match(ui.t('build.commandHelp','en'),/Ctrl\+C/);assert.match(ui.t('build.cancelUnconfirmed','en'),/Ctrl\+C/);
 });
@@ -2150,4 +2150,40 @@ test('Settings diagnostics retain a local capacity classification without invent
   assert.equal(shown.code,'API_CAPACITY');assert.equal(shown.requestDiagnostics.transportStatus,200);
   assert.deepEqual(shown.verificationFailure,{stage:'verify',code:'SERVER',errorCode:'API_CAPACITY'});
   assert.doesNotMatch(JSON.stringify(shown),/PRIVATE_CAPACITY_FIELD|ENTRY_PRIVATE_|DIAGNOSTIC_PRIVATE_/);
+});
+
+test('reading defaults migrate once while later explicit immediate analysis and concurrency four survive normalization',()=>{
+  for(const legacy of [{},{dwellMs:0,apiConcurrency:4},{dwellMs:0,apiConcurrency:4,analysisDefaultsVersion:0}]){
+    const migrated=core.normalizeSettings(legacy);assert.equal(migrated.analysisDefaultsVersion,1);assert.equal(migrated.dwellMs,1000);assert.equal(migrated.apiConcurrency,3);assert.deepEqual(core.normalizeSettings(migrated),migrated);
+  }
+  for(const legacy of [{dwellMs:750,apiConcurrency:2},{dwellMs:2300,apiConcurrency:7}]){
+    const migrated=core.normalizeSettings(legacy);assert.equal(migrated.dwellMs,legacy.dwellMs);assert.equal(migrated.apiConcurrency,legacy.apiConcurrency);
+  }
+  const manual=core.normalizeSettings({...core.DEFAULT_SETTINGS,dwellMs:0,apiConcurrency:4});assert.equal(manual.dwellMs,0);assert.equal(manual.apiConcurrency,4);assert.deepEqual(core.normalizeSettings(manual),manual);
+  for(const [value,expected]of [[-1,0],[30001,30000],[Infinity,1000],[NaN,1000]])assert.equal(core.normalizeSettings({...core.DEFAULT_SETTINGS,dwellMs:value}).dwellMs,expected);
+});
+
+test('Settings viewing-time control saves seconds as milliseconds and keeps explicit immediate analysis across reopening',async()=>{
+  for(const [seconds,milliseconds]of [['0',0],['0.25',250],['2.5',2500],['30',30000]]){
+    const fixture=uiPageFixture('options');await settleUI();await settleUI();
+    assert.equal(fixture.ids.get('analysis-dwell').value,1);assert.equal(fixture.ids.get('api-concurrency').value,3);
+    fixture.ids.get('analysis-dwell').value=seconds;fixture.ids.get('api-concurrency').value='4';fixture.ids.get('analysis-dwell').listeners.input();
+    assert.equal(fixture.ids.get('status').textContent,ui.t('options.unsavedChanges','en'));
+    const form=fixture.ids.get('settings-form');await form.listeners.submit({preventDefault(){},currentTarget:form});
+    assert.equal(fixture.local.settings.dwellMs,milliseconds);assert.equal(fixture.local.settings.apiConcurrency,4);assert.equal(fixture.local.settings.analysisDefaultsVersion,1);
+    const reopened=uiPageFixture('options',fixture.local.settings);await settleUI();await settleUI();assert.equal(Number(reopened.ids.get('analysis-dwell').value),Number(seconds));assert.equal(reopened.ids.get('api-concurrency').value,4);
+  }
+});
+
+test('Settings exposes subscription and metered API guidance without an automatic priority setting',async()=>{
+  const fixture=uiPageFixture('options');await settleUI();await settleUI();
+  for(const [id,min,max,step]of [['api-concurrency','1','8','1'],['analysis-dwell','0','30','any']]){
+    const input=fixture.ids.get(id);assert.equal(input.getAttribute('min'),min);assert.equal(input.getAttribute('max'),max);assert.equal(input.getAttribute('step'),step);
+  }
+  const html=fs.readFileSync(path.join(__dirname,'../extension/options.html'),'utf8');
+  for(const [key,url]of [['options.apiSubscriptionLink','https://grok.com/dashboard/api-keys'],['options.apiMeteredLink','https://console.x.ai/'],['options.apiPriorityLink','https://docs.x.ai/developers/advanced-api-usage/priority-processing']]){
+    assert.ok(html.includes('href="'+url+'"'));assert.ok(html.includes('data-i18n="'+key+'"'));
+  }
+  assert.match(ui.t('options.apiSubscriptionHelp','en'),/weekly allowance/);assert.match(ui.t('options.apiPriorityHelp','en'),/standard/);
+  assert.equal(fixture.messages.some(message=>/PRIORITY|TIER|UPGRADE|BILLING/.test(message.type)),false);
 });

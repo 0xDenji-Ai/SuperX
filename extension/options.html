@@ -33,7 +33,7 @@
           <p id="status" role="status" aria-live="polite"></p>
         </header>
         <div class="page-intro">
-          <p class="subtitle" data-i18n="options.providerIntro">Choose an answer source. Enabled visible posts queue for fact-checking immediately.</p>
+          <p class="subtitle" data-i18n="options.providerIntro">Choose an answer source. After scrolling stops, visible posts queue after the configured viewing time.</p>
           <p class="help" data-i18n="options.uiHint">Interface labels follow X. Answer language is configured separately.</p>
         </div>
       <form id="settings-form" autocomplete="off">
@@ -53,6 +53,23 @@
           <div id="api-fields">
             <div class="onboarding" aria-labelledby="api-setup-heading">
               <h3 id="api-setup-heading" data-i18n="options.apiSetup">Connect your API Key</h3>
+              <details id="api-access-guide" class="connection-details" open>
+                <summary data-i18n="options.apiAccess">Subscription or pay-as-you-go API</summary>
+                <div class="api-access-options">
+                  <div>
+                    <h4 data-i18n="options.apiSubscriptionTitle">The X Subscription</h4>
+                    <p class="help" data-i18n="options.apiSubscriptionHelp">Create a Key in Grok Dashboard to use eligible API usage from your plan's shared weekly allowance. Check your account for models, limits and extra charges.</p>
+                    <a href="https://grok.com/dashboard/api-keys" target="_blank" rel="noopener noreferrer" data-i18n="options.apiSubscriptionLink">Grok API Keys</a>
+                  </div>
+                  <div>
+                    <h4 data-i18n="options.apiMeteredTitle">Pay-as-you-go xAI API</h4>
+                    <p class="help" data-i18n="options.apiMeteredHelp">Create a Key and add credits in xAI Console. Pay for the tokens and tools you use, and manage API usage and billing there.</p>
+                    <a href="https://console.x.ai/" target="_blank" rel="noopener noreferrer" data-i18n="options.apiMeteredLink">xAI Console</a>
+                  </div>
+                </div>
+                <p class="help" data-i18n="options.apiPriorityHelp">Priority Processing is separately priced and must be explicitly enabled. Buying standard credits does not enable it; SuperX currently uses standard processing.</p>
+                <a href="https://docs.x.ai/developers/advanced-api-usage/priority-processing" target="_blank" rel="noopener noreferrer" data-i18n="options.apiPriorityLink">About Priority Processing</a>
+              </details>
               <ol>
                 <li><a href="https://grok.com/dashboard/api-keys" target="_blank" rel="noopener noreferrer" data-i18n="options.apiStep1">Open Grok Dashboard → API Keys.</a></li>
                 <li data-i18n="options.apiStep2">Choose Grok Inference as the Key type (the default Cursor type will not work). Allow Chat and, if needed, Models for your chosen model.</li>
@@ -83,11 +100,10 @@
                 <a id="model-pricing" class="help" href="https://docs.x.ai/developers/pricing" target="_blank" rel="noopener noreferrer" data-i18n="options.modelPricing">View models and pricing</a>
               </div>
             </div>
-            <div class="field-grid">
-              <div class="field concurrency-field">
-                <label for="api-concurrency" data-i18n="options.concurrency">Maximum concurrent API requests</label>
-                <input id="api-concurrency" type="number" min="1" max="8" step="1" required>
-              </div>
+            <div class="field concurrency-field">
+              <label for="api-concurrency" data-i18n="options.concurrency">Maximum concurrent API requests</label>
+              <input id="api-concurrency" type="number" min="1" max="8" step="1" value="3" required aria-describedby="api-concurrency-help">
+              <p id="api-concurrency-help" class="help" data-i18n="options.concurrencyHelp">Default: 3. All X tabs and comment requests share this limit.</p>
             </div>
             <p class="help" data-i18n="options.usageRules">Usage depends on your account and provider rules. View usage in Grok Dashboard.</p>
             <div class="credential-actions">
@@ -137,6 +153,11 @@
               <p id="build-status" class="key-state" role="status" aria-live="polite"></p>
               <p class="help" data-i18n="options.connectionHelp">Checks the local connector and login state. No fact-check request is sent.</p>
             </div>
+          </div>
+          <div class="field analysis-dwell-field">
+            <label for="analysis-dwell" data-i18n="options.dwell">Analyze after (seconds)</label>
+            <input id="analysis-dwell" type="number" min="0" max="30" step="any" value="1" required aria-describedby="analysis-dwell-help">
+            <p id="analysis-dwell-help" class="help" data-i18n="options.dwellHelp">After scrolling stops, posts must stay visible for this long before automatic analysis. Default: 1 second; 0 starts immediately. Manual actions do not wait.</p>
           </div>
           <div class="shared-search">
             <p class="help" data-i18n="options.verificationHelp">Fact checks read the full linked post. Search tool calls may add cost.</p>
