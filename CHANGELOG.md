@@ -2,6 +2,13 @@
 
 SuperX release history. The extension's `manifest.json` is the authoritative installed version. Test counts below describe those releases' recorded checks, not live provider or browser-store certification.
 
+## 0.9.3 — Pause automatic work at API account limits (unreleased candidate)
+
+- Installed 0.9.2 diagnostics identified a live HTTP 402 / `spending_limit` rejection alongside successful Grok 4.3 checks. This identifies a provider account spending or usage restriction, not which balance, budget or allowance was exhausted.
+- Pause queued and new automatic API work on structured account-limit errors. Preserve already-running answers and reported usage, keep cached results and local history available, and retain only a sanitized pause cause in restricted browser-session storage across worker sleep.
+- Allow one explicit manual recovery probe at a time. Resume new automatic work across open tabs only after a complete provider response and confirmed pause-state removal. A failed probe, cached answer, ordinary settings edit or same-Key save does not establish account recovery. Replacing or clearing the API Key resets the previous account's pause.
+- Keep API and local Grok independent; do not retry paid work automatically, change account budgets or fall back to another provider. Published Stable remains 0.7.26.
+
 ## 0.9.2 — Settings layout and API failure details (unreleased candidate)
 
 - Fix a misplaced closing tag that displayed local Grok model, reasoning and connection controls outside their selected provider panel. Add strict structural checks and verify real browser form containment, validation and provider switching.

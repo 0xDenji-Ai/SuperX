@@ -262,6 +262,20 @@
     "ru":["Ответы кешируются только в текущем сеансе браузера для повторного использования до 24 часов. Закрытие браузера или удаление Key очищают кеш. Затем обновите X или повторите анализ."],
     "hi":["उत्तर केवल वर्तमान ब्राउज़र सत्र में अधिकतम 24 घंटे पुनः उपयोग के लिए कैश होते हैं। ब्राउज़र बंद करना या Key मिटाना कैश साफ़ करता है। इसके बाद X रीफ़्रेश करें या फिर प्रयास करें।"]
   });
+  section(['note.accountLimit'], {
+    en:['Automatic API requests are paused. Check your account usage or budget, then retry one post manually to resume.'],
+    'zh-CN':['自动 API 请求已暂停。请检查账户用量或预算，解决后手动重试一条帖子以恢复。'],
+    'zh-TW':['自動 API 請求已暫停。請檢查帳戶用量或預算，解決後手動重試一則貼文以恢復。'],
+    ja:['API の自動リクエストを停止しました。アカウントの使用量や予算を確認し、解決後に投稿を1件手動で再試行すると再開します。'],
+    ko:['자동 API 요청이 일시 중지되었습니다. 계정 사용량이나 예산을 확인하고 해결한 후 게시물 하나를 수동으로 재시도하면 재개됩니다.'],
+    es:['Las solicitudes automáticas de la API están pausadas. Revisa el uso o presupuesto de tu cuenta y reintenta una publicación manualmente para reanudar.'],
+    fr:['Les requêtes API automatiques sont suspendues. Vérifiez l’utilisation ou le budget du compte, puis réessayez une publication manuellement pour reprendre.'],
+    de:['Automatische API-Anfragen sind pausiert. Prüfe Kontonutzung oder Budget und versuche danach einen Beitrag manuell erneut, um fortzufahren.'],
+    pt:['As solicitações automáticas da API estão pausadas. Confira o uso ou orçamento da conta e tente uma publicação manualmente para retomar.'],
+    ar:['تم إيقاف طلبات API التلقائية مؤقتًا. تحقق من استخدام الحساب أو ميزانيته، ثم أعد محاولة منشور واحد يدويًا للاستئناف.'],
+    ru:['Автоматические API-запросы приостановлены. Проверьте использование или бюджет аккаунта, затем повторите один пост вручную, чтобы продолжить.'],
+    hi:['स्वतः API अनुरोध रुके हैं। खाते का उपयोग या बजट जाँचें, फिर दोबारा शुरू करने के लिए एक पोस्ट पर मैन्युअल कोशिश करें।']
+  });
   section(["status.needsKeyAction","note.rateLimited","options.unsavedChanges","popup.addKey"], {
     "en":["Set an API Key in {settings}","Automatic analysis is paused by the API limit. Check your xAI quota or balance before retrying.","Unsaved changes.","Add API Key"],
     "zh-CN":["请在{settings}中填写 API Key","API 额度或请求频率达到上限，自动分析已暂停。请确认 xAI 额度或余额后重试。","有未保存的更改。","填写 API Key"],

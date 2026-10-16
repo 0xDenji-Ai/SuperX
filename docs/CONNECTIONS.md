@@ -1,6 +1,6 @@
 # Connect SuperX
 
-The unreleased **0.9.2** candidate offers two independent modes. **API Key** is the default. **Grok CLI / ACP** connects directly to the official Grok service on your computer. Neither mode automatically falls back to the other or resubmits a paid task. Published Stable remains **0.7.26**.
+The unreleased **0.9.3** candidate offers two independent modes. **API Key** is the default. **Grok CLI / ACP** connects directly to the official Grok service on your computer. Neither mode automatically falls back to the other or resubmits a paid task. Published Stable remains **0.7.26**.
 
 ## API Key
 
@@ -47,7 +47,7 @@ Visible posts enter the queue immediately. This candidate executes local Grok ta
 | Model / effort unavailable | Select the choices reported by the connected account. API and CLI catalogs may differ; no model is silently substituted. |
 | Restricted session could not be confirmed | Use the generated command. Managed-device policy may prevent this setup; do not disable company protections. API mode remains available. |
 | Stop could not be confirmed | Press Ctrl+C in the official service terminal. SuperX does not replay the request automatically. |
-| Usage / account limit | Check the official dashboard and retry manually when appropriate. Switching transport is not a quota workaround. |
+| Usage / account limit | A structured API 402 or account-limit code pauses automatic API work across tabs and worker sleep. Check the matching account's usage and billing; after resolving the limit, retry one post manually. A complete successful probe resumes new work; failed checks are not automatically replayed. Ordinary settings edits or saving the same Key do not reset this pause. Switching transport is not a quota workaround. |
 
 Windows and macOS command generation and protocol behavior have automated coverage. Installed-browser acceptance with a real account, including macOS devices, remains a separate release check; simulated paths are not a live-device pass.
 

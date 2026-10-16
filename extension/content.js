@@ -315,6 +315,25 @@
       language:settings.language,apiModel:settings.provider==='build'?settings.buildModel:settings.apiModel,
       verifyPrompt:settings.verifyPrompt,commentsPrompt:settings.commentsPrompt};
   }
+  function pauseForAccountLimit(failure) {
+    if(settings.provider!=='api'||!(failure?.httpStatus===402||['spending_limit','insufficient_credits','insufficient_quota','usage_limit_exceeded'].includes(Core.apiFailureProviderCode(failure?.providerCode))))return false;
+    limited=true;pauseReason='error.apiUsage';queue.clear();
+    for(const pending of entries.values())if(pending.status==='new')refreshCard(pending);
+    return true;
+  }
+  function recoverAccountPause(request,successful,message) {
+    // Only an explicit successful provider probe can reopen automatic work;
+    // another already-running request or a cached answer cannot prove recovery.
+    if(!successful||message.cached||message.apiBudgetRecovered!==true||!request.force||request.provider!=='api'||pauseReason!=='error.apiUsage')return;
+    clearAccountPause();
+  }
+  function clearAccountPause() {
+    limited=false;pauseReason='';
+    for(const pending of entries.values()){
+      if(pending.noteKey==='note.accountLimit')note(pending,'');
+      if(pending.status==='new')refreshCard(pending);
+    }
+  }
   function setCollapsed(value,persist=false) {
     collapsed=Boolean(value);
     if(collapsed) {
@@ -342,6 +361,13 @@
   }
   function handleMessage(message) {
     if(message.type==='HISTORY_CONFIG') {configureHistory(message.enabled,message.epoch);return;}
+    if(message.type==='API_BUDGET_RECOVERED') {
+      if(settings.provider==='api'&&pauseReason==='error.apiUsage'){
+        clearAccountPause();
+        tick();
+      }
+      return;
+    }
     if(message.type==='HISTORY_ACK') {
       const batch=historyPending.get(message.batchId);if(!batch)return;
       historyPending.delete(message.batchId);
@@ -377,7 +403,9 @@
       railLanguage.value=settings.language;railLanguage.disabled=false;
       refreshHeaderLanguage();
       const changed=previous!==identity(settings);
-      if(!presentationOrPromptsOnlyChanged){queue.clear();limited=false;pauseReason='';}
+      if(!presentationOrPromptsOnlyChanged){queue.clear();if(pauseReason!=='error.apiUsage'){limited=false;pauseReason='';}}
+      if(settings.provider==='api'&&message.apiBudgetPaused===true){limited=true;pauseReason='error.apiUsage';queue.clear();}
+      else if((message.apiBudgetPaused===false||settings.provider!=='api')&&pauseReason==='error.apiUsage')clearAccountPause();
       if(allChanged || !settings.enabled || (wasReady&&!providerReady)) {
         post({type:'CANCEL_ALL'});requests.clear();
         for(const entry of entries.values()) {
@@ -433,14 +461,15 @@
         if(Array.isArray(values)&&values.length===3&&values.every(text=>typeof text==='string'&&text.trim()&&Array.from(text).length<=280)&&new Set(values).size===3){entry.comments=values;entry.commentStatus='done';}
         else {entry.commentStatus='error';entry.commentError='status.failed';}
       }
-      if(message.type==='COMMENT_ERROR'){captureUsage(entry,'comments',message,request,false);entry.commentStatus='error';entry.commentError=errorKey(message.code);}
+      if(message.type==='COMMENT_ERROR'){captureUsage(entry,'comments',message,request,false);entry.commentStatus='error';entry.commentError=errorKey(message.code,message.verificationFailure);pauseForAccountLimit(message.verificationFailure);}
+      if(message.type==='COMMENT_RESULT')recoverAccountPause(request,entry.commentStatus==='done',message);
       refreshComments(entry);
       if(message.type==='COMMENT_RESULT'&&entry.commentStatus==='done'&&entry.ui.box.scrollTo) {
         const end=Math.max(entry.ui.comments.offsetTop+entry.ui.comments.offsetHeight,entry.ui.tokenUsage.offsetTop+entry.ui.tokenUsage.offsetHeight);
         const top=Math.max(0,end-entry.ui.box.clientHeight+16);
         entry.ui.box.scrollTo({top,behavior:globalThis.matchMedia?.('(prefers-reduced-motion:reduce)').matches?'instant':'smooth'});
       }
-      finishRequest(message);scheduleLayout();return;
+      finishRequest(message);scheduleLayout();if(message.type==='COMMENT_RESULT')tick();return;
     }
     if(message.type==='QUEUED'){entry.status='queued';status(entry,'status.queued');}
     if(message.type==='START'){request.railCancellation=false;entry.status='running';used=Math.max(used,message.used||0);status(entry,'status.verifying');}
@@ -488,6 +517,8 @@
       const sourceKey=incomplete?'status.incomplete':result.searched?'status.searched':'status.unverified';
       entry.cached=!invalid&&Boolean(message.cached);status(entry,sourceKey);
       note(entry,invalid?'':incomplete?partialResultNote(result):'note.possibleErrors');entry.ui.retry.hidden=false;
+      if(pauseForAccountLimit(entry.verificationFailure))note(entry,'note.accountLimit');
+      else recoverAccountPause(request,!invalid&&!incomplete,message);
       finishRequest(message);
     }
     if(message.type==='ERROR') {
@@ -508,10 +539,11 @@
         providerReady=false;queue.clear();
         for(const pending of entries.values())refreshCard(pending);
       }
-      if(message.code==='RATE_LIMIT'){
+      if(message.code==='RATE_LIMIT'&&pauseReason!=='error.apiUsage'){
         limited=true;pauseReason=errorKey(message.code);queue.clear();
         for(const pending of entries.values())if(pending.status==='new')refreshCard(pending);
       }
+      if(pauseForAccountLimit(entry.verificationFailure))note(entry,'note.accountLimit');
       finishRequest(message);
     }
     refreshCard(entry);scheduleLayout();
@@ -805,7 +837,7 @@
     entry.ui.diagnosticLabel.textContent=t('common.diagnostics');
     if(entry.status==='new') {
       status(entry,!connected&&!workerSleeping?(needsPageRefresh?'status.refreshRequired':'status.connectionLost'):limited?(pauseReason||'status.disabled'):!providerReady?needsProvider():entry.pending?'status.queued':'status.waiting');
-      note(entry,limited?(pauseReason==='status.rateLimited'?'note.rateLimited':'note.settingsRequired'):'');
+      note(entry,limited?(pauseReason==='status.rateLimited'?'note.rateLimited':pauseReason==='error.apiUsage'?'note.accountLimit':'note.settingsRequired'):'');
       entry.ui.retry.hidden=!limited;
     }
     else if(entry.statusKey)status(entry,entry.statusKey,entry.statusVars);
@@ -903,7 +935,7 @@
     entry.pending=false;queue.remove(entry.post.id);entry.status='queued';entry.phase='';entry.verificationBase='';entry.verificationStarted=false;entry.verificationStart=undefined;entry.result=null;entry.cached=false;setVerificationFailure(entry,null,false);status(entry,'status.queued');entry.ui.retry.hidden=true;
     if(force||!entry.ui.answer.textContent)renderAnswer(entry,'',true);
     renderSources(entry,[]);note(entry,'');entry.ui.diagnostics.hidden=true;entry.ui.diagnosticText.textContent='';
-    requests.set(requestId,requestSnapshot(entry,requestId));
+    requests.set(requestId,{...requestSnapshot(entry,requestId),force:force===true});
     entry.analysisUsage=null;captureUsage(entry,'analysis',{},requests.get(requestId),false,true);refreshUsage(entry);
     post({type:'ANALYZE',requestId,post:entry.post,force});scheduleLayout();
   }
@@ -923,6 +955,7 @@
     const requestId=crypto.randomUUID(),request=requestSnapshot(entry,requestId,'comments');
     request.analysis={text:entry.latestText||'',verificationStatus:entry.result?.verificationStatus||'unverified',warning:entry.result?.warning||'',sources:entry.result?.sources||[]};
     const force=entry.commentStatus==='error'||entry.comments.length>0;
+    request.force=force;
     entry.commentStatus='queued';entry.commentError='';entry.copyStatusKey='';entry.ui.copyStatus.textContent='';requests.set(requestId,request);captureUsage(entry,'comments',{},request,false,true);refreshComments(entry);
     post({type:'GENERATE_COMMENTS',requestId,post:entry.post,analysis:request.analysis,force});scheduleLayout();
   }
@@ -1063,7 +1096,7 @@
     const {indicator:verificationThinking,label:verificationThinkingLabel}=waitingIndicator('thinking verification-thinking');
     verificationThinkingLabel.classList.add('shimmer');
     const diagnostics=node('details','diagnostics'),diagnosticText=node('pre'),diagnosticLabel=node('summary','',t('common.diagnostics'));diagnostics.hidden=true;diagnostics.append(diagnosticLabel,diagnosticText);
-    const retry=node('button','retry',t('common.retry'));retry.hidden=true;retry.addEventListener('click',()=>{if(retry.disabled||[...requests.values()].some(r=>r.entry===entry&&r.task==='analysis'))return;limited=false;pauseReason='';for(const pending of entries.values())if(pending.status==='new')refreshCard(pending);submit(entry,true);});
+    const retry=node('button','retry',t('common.retry'));retry.hidden=true;retry.addEventListener('click',()=>{if(retry.disabled||[...requests.values()].some(r=>r.entry===entry&&r.task==='analysis'))return;if(pauseReason!=='error.apiUsage'){limited=false;pauseReason='';}for(const pending of entries.values())if(pending.status==='new')refreshCard(pending);submit(entry,true);});
     const generateButton=node('button','generate-comments',t('common.generateComments'));generateButton.addEventListener('click',()=>generateComments(entry));
     const comments=node('div','comments'),commentStatus=node('div','comment-status'),copyStatus=node('div','copy-status');commentStatus.hidden=true;comments.hidden=true;commentStatus.setAttribute('role','status');copyStatus.setAttribute('role','status');
     const commentHeading=node('div','comment-heading'),commentHint=node('div','comment-hint');commentHeading.hidden=commentHint.hidden=true;

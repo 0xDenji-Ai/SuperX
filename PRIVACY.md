@@ -1,6 +1,6 @@
 # Privacy and data handling
 
-This document describes the unreleased SuperX 0.9.1 candidate's Fact Check data flow, through API Key or a direct local connection to official Grok. Last updated: 2026-10-16. The currently published 0.7.26 stable release retains its earlier explanation-then-check flow and API-only connection.
+This document describes the unreleased SuperX 0.9.3 candidate's Fact Check data flow, through API Key or a direct local connection to official Grok. Last updated: 2026-10-16. The currently published 0.7.26 stable release retains its earlier explanation-then-check flow and API-only connection.
 
 ## Setup and control
 
@@ -52,6 +52,7 @@ Model-provided Markdown is parsed locally. SuperX does not execute model HTML or
 | Completed analyses and comments | Browser session result cache, reusable for up to 24 hours within that session, bounded to 160 entries and approximately 4 MB; removed when the browser session ends |
 | Recent X browsing history | Unencrypted, restricted local extension storage (`superxHistory`), retained for 24 hours after each post's latest view across browser restart; bounded to 1,000 posts and approximately 6 MB |
 | Per-tab counters, collapse state and session interface language | Session extension storage |
+| API account-limit pause | Restricted session extension storage (`apiBudgetPause`): a fixed reason and sanitized HTTP/error category only, until a successful manual recovery check, Key replacement/clearing or browser-session end; no post text, credentials or usage totals |
 | Active page snapshots, partial answers and queued jobs | Runtime memory while their page / worker remains active |
 | Local Grok connection code and port | Code encrypted in local extension storage with a separate local CryptoKey; restored into trusted session storage. Port is a local setting; credentials are not browser-synced |
 | Official Grok prompts, turns and isolated home | Official-runtime memory and its temporary home/working directory. Normal command exit attempts temporary cleanup; crashes or forced termination can leave remnants, and the provider's own retention rules apply |

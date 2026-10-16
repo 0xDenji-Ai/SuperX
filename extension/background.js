@@ -11,7 +11,8 @@ const jobs = new Map();
 const runningJobs = new Set();
 const apiSlots = new Set();
 let queue = [], pumping = false, settings, cache = {}, quotas = {}, railStates = {}, revision = 0, cacheEpoch = 0;
-let ratePaused = false, uiLanguage = UI.browserLanguage(globalThis);
+let ratePaused = false, queuePause, apiAccountPause, uiLanguage = UI.browserLanguage(globalThis);
+let budgetPauseWrites = Promise.resolve(), budgetPauseWriteVersion = 0, budgetPauseMayExist = false;
 let quotaWrites = Promise.resolve(), cacheWrites = Promise.resolve(), railStateWrites = Promise.resolve(), uiLanguageWrites = Promise.resolve();
 let securityWrites = Promise.resolve(), securityPending = 0, securityGeneration = 0;
 let hasSavedKey = false, rememberApiKey = true, credentialReady = false, securityFault = false, sealAttempted = false;
@@ -24,8 +25,11 @@ async function initialize() {
   await chrome.storage.local.setAccessLevel({accessLevel:'TRUSTED_CONTEXTS'});
   await chrome.storage.session.setAccessLevel({accessLevel:'TRUSTED_CONTEXTS'});
   const local = await chrome.storage.local.get(['settings','uiLanguage','apiKey','apiKeyEncrypted','apiKeyVault','rememberApiKey','buildConnectionEncrypted']);
-  const session = await chrome.storage.session.get(['quotas','railStates','uiLanguage','apiKey','cache','securityFault']);
+  const session = await chrome.storage.session.get(['quotas','railStates','uiLanguage','apiKey','cache','securityFault','apiBudgetPause']);
   settings = Core.normalizeSettings(local.settings);
+  budgetPauseMayExist=session.apiBudgetPause!==undefined;
+  const restoredPause=budgetPauseFromRecord(session.apiBudgetPause);
+  if(restoredPause)apiAccountPause=restoredPause;
   if(BuildKeyStore.envelopePresent(local.buildConnectionEncrypted)){
     try{const secret=await BuildKeyStore.open(local.buildConnectionEncrypted);if(validBuildSecret(secret))buildSecret=secret;}catch{/* Reconnect locally; API Key remains independent. */}
   }
@@ -174,7 +178,8 @@ async function publicConfig() {
   const status=securityStatus();
   const historyConfig=history.config();
   if(settings.provider==='build')ensureBuildStatus();
-  return {settings,ready:providerAllowsCalls(),keyState:status.keyState,...(settings.provider==='build'?{buildStatus:{...buildStatus,ready:buildReady()}}:{}),buildConnection:{configured:validBuildSecret(buildSecret),port:settings.buildPort},historyEnabled:historyConfig.enabled,historyEpoch:historyConfig.epoch};
+  const apiBudgetPaused=settings.provider==='api'&&Boolean(apiAccountPause);
+  return {settings,ready:providerAllowsCalls(),keyState:status.keyState,apiBudgetPaused,...(apiBudgetPaused?{apiBudgetFailure:apiAccountPause.verificationFailure}:{}),...(settings.provider==='build'?{buildStatus:{...buildStatus,ready:buildReady()}}:{}),buildConnection:{configured:validBuildSecret(buildSecret),port:settings.buildPort},historyEnabled:historyConfig.enabled,historyEpoch:historyConfig.epoch};
 }
 async function notifyHistoryChanged(){await chrome.runtime.sendMessage({type:'HISTORY_CHANGED',...history.config()}).catch(()=>{});}
 async function broadcastHistoryConfig(){
@@ -364,7 +369,7 @@ chrome.runtime.onConnect.addListener(port => {
       }
       if(!['ANALYZE','GENERATE_COMMENTS'].includes(message.type)) return;
       const comments=message.type==='GENERATE_COMMENTS';
-      const report=(error,code)=>send(port,{type:comments?'COMMENT_ERROR':'ERROR',requestId,error,code});
+      const report=(error,code,extra={})=>send(port,{type:comments?'COMMENT_ERROR':'ERROR',requestId,error,code,...extra});
       const requestId=messageRequestId;
       if(!requestId) return;
       if(client.requestCancellations.get(requestId)!==receivedCancellation)return;
@@ -387,9 +392,10 @@ chrome.runtime.onConnect.addListener(port => {
       if(!config.ready) { report(settings.provider==='build'?'请在设置中连接 Grok Build。':'请打开设置并输入 xAI API Key。',settings.provider==='build'?(buildStatus.errorCode||'BUILD_NOT_CONNECTED'):'NEEDS_KEY'); return; }
       const key=`${client.tabId}:${requestId}`;
       if(jobs.has(key)) return;
-      if(ratePaused && !message.force) { report('Grok 已限速，自动队列已暂停，请稍后手动重试。','RATE_LIMIT'); return; }
-      if(message.force)ratePaused=false;
-      const job={key,requestId,post,inputFingerprint,analysis,client,clientEpoch:receivedEpoch,settings:snapshot,revision:receivedRevision,fingerprint,historyTicket:ticket,historyLanguage,controller:new AbortController()};
+      const budgetProbe=snapshot.provider==='api'&&apiAccountPause&&message.force===true?apiAccountPause:undefined;
+      if(queuePausedFor(snapshot) && (message.force!==true||budgetProbe&&[...jobs.values()].some(job=>job.budgetProbe&&job.settings.provider===snapshot.provider))) { const paused=queuePauseError(snapshot);report(paused.error,paused.code,paused.verificationFailure?{verificationFailure:paused.verificationFailure}:{});return; }
+      if(message.force===true)clearQueuePause(snapshot.provider);
+      const job={key,requestId,post,inputFingerprint,analysis,client,clientEpoch:receivedEpoch,settings:snapshot,revision:receivedRevision,fingerprint,historyTicket:ticket,historyLanguage,budgetProbe,controller:new AbortController()};
       jobs.set(key,job);
       const before=comments?queue.findIndex(waiting=>!commentsJob(waiting)):-1;
       if(before>=0)queue.splice(before,0,job);else queue.push(job);
@@ -404,6 +410,55 @@ function liveJob(job) {
 }
 function apiLimit(s) { return s.provider==='build'?1:Math.max(1,Math.min(8,Math.trunc(Number(s.apiConcurrency))||4)); }
 function rateLimitError() { return Object.assign(new Error('Grok 已限速，自动队列已暂停，请稍后手动重试。'),{code:'RATE_LIMIT'}); }
+const API_BUDGET_CODES=new Set(['spending_limit','insufficient_credits','insufficient_quota','usage_limit_exceeded']);
+function apiBudgetFailure(value) {
+  const supplied=GrokFirstAPI.sanitizedVerificationFailure(value?.verificationFailure)||GrokFirstAPI.sanitizedVerificationFailure(value?.partialResult?.verificationFailure);
+  const details=value?.failureDetails;
+  const fallback=GrokFirstAPI.sanitizedVerificationFailure({stage:'verify',code:'ACCESS',errorCode:value?.code,
+    httpStatus:value?.httpStatus??details?.httpStatus,providerCode:value?.providerCode??details?.providerCode});
+  // Use structured, allowlisted diagnostics only. An upstream message, a
+  // generic 403, or a network failure cannot pause every automatic request.
+  return [supplied,fallback].find(failure=>failure&&(failure.httpStatus===402||API_BUDGET_CODES.has(failure.providerCode)));
+}
+function queuePausedFor(input) { return input.provider==='api'&&Boolean(apiAccountPause)||ratePaused&&queuePause?.provider===input.provider; }
+function budgetPauseRecord(pause) {
+  const failure=apiBudgetFailure(pause);
+  return pause?.provider==='api'&&failure?{version:1,reason:'api-budget',verificationFailure:failure}:undefined;
+}
+function budgetPauseFromRecord(record) {
+  if(record?.version!==1||record.reason!=='api-budget')return undefined;
+  const verificationFailure=apiBudgetFailure(record);
+  return verificationFailure?{provider:'api',code:'API_ERROR',error:GrokFirstAPI.publicError({code:'API_ERROR'}).error,verificationFailure}:undefined;
+}
+function persistBudgetPause(record) {
+  // Only a fixed reason and sanitized structured cause survive worker sleep.
+  // Serialize readbacks with writes so an earlier pause cannot revive after
+  // a Key/settings reset or a successful explicit recovery probe.
+  const writeVersion=++budgetPauseWriteVersion;
+  if(record)budgetPauseMayExist=true;
+  const operation=budgetPauseWrites.catch(()=>{}).then(async()=>{
+    try {
+      if(record)await chrome.storage.session.set({apiBudgetPause:record});else await chrome.storage.session.remove('apiBudgetPause');
+      const saved=await chrome.storage.session.get('apiBudgetPause');
+      const confirmed=record?JSON.stringify(budgetPauseRecord(budgetPauseFromRecord(saved.apiBudgetPause)))===JSON.stringify(record):saved.apiBudgetPause===undefined;
+      if(confirmed&&!record&&writeVersion===budgetPauseWriteVersion)budgetPauseMayExist=false;
+      return confirmed;
+    }catch{return false;}
+  });
+  budgetPauseWrites=operation;return operation;
+}
+function clearQueuePause(provider) {
+  if(provider&&queuePause?.provider!==provider)return Promise.resolve(true);
+  ratePaused=false;queuePause=undefined;return Promise.resolve(true);
+}
+function clearAPIBudgetPause() {
+  const previous=apiAccountPause;
+  if(!previous&&!budgetPauseMayExist)return Promise.resolve(true);
+  // Keep the account gate closed until durable removal is confirmed. A full
+  // result can still be displayed if storage fails; it must not resume auto.
+  return persistBudgetPause(undefined).then(cleared=>{if(cleared&&apiAccountPause===previous){apiAccountPause=undefined;return true;}return false;});
+}
+function queuePauseError(input=settings) { return input.provider==='api'&&apiAccountPause?apiAccountPause:queuePause??{code:'RATE_LIMIT',error:rateLimitError().message}; }
 function clearAPIDeadline(job) { clearTimeout(job.deadline);job.deadline=undefined; }
 function startAPIDeadline(job) {
   clearAPIDeadline(job);
@@ -412,13 +467,20 @@ function startAPIDeadline(job) {
     ...(stage==='verify'?{verificationFailure:{code:'TIMEOUT',stage:'verify',errorCode:'TIMEOUT'}}:{})})),150000);
 }
 function releaseAPISlot(job) { clearAPIDeadline(job);apiSlots.delete(job);job.slotHeld=false;job.slotPhase=null; }
-function pauseWaitingJobs() {
-  ratePaused=true;
-  for(const waiting of queue) {
-    jobError(waiting,rateLimitError().message,'RATE_LIMIT');
+function pauseWaitingJobs(job,error) {
+  const budget=job.settings.provider==='api'?apiBudgetFailure(error):undefined;
+  if(!budget&&error?.code!=='RATE_LIMIT')return;
+  const safe=budget?GrokFirstAPI.publicError({code:'API_ERROR'}):{code:'RATE_LIMIT',error:rateLimitError().message};
+  // Account spending is independent of short-lived provider rate limiting.
+  // Switching to Build or receiving a later 429 cannot erase an API cause.
+  if(budget){apiAccountPause={provider:'api',...safe,verificationFailure:budget};void persistBudgetPause(budgetPauseRecord(apiAccountPause));void broadcastConfig();}
+  else{queuePause={provider:job.settings.provider,...safe};ratePaused=true;}
+  const paused=queuePauseError(job.settings);
+  for(const waiting of queue.filter(value=>value.settings.provider===job.settings.provider)) {
+    jobError(waiting,paused.error,paused.code,paused.verificationFailure?{verificationFailure:paused.verificationFailure}:{});
     removeJob(waiting);
   }
-  queue=[];
+  queue=queue.filter(value=>value.settings.provider!==job.settings.provider);
 }
 function stopUnavailableBuild(code) {
   buildStatus={...buildStatus,available:false,errorCode:code};buildStatusAt=Date.now();
@@ -466,7 +528,7 @@ async function executeJob(job) {
     const result=withBillingMetadata(await (job.settings.provider==='build'?runAPI(job,onUpdate):waitForAbort(runAPI(job,onUpdate),signal)),job.settings.provider,commentsJob(job)?undefined:job.settings.apiVerification);
     if(!liveJob(job))return;
     job.billing=billingMetadata(result,job.settings.provider);
-    releaseAPISlot(job);pump();
+    if(job.settings.provider==='api'&&apiBudgetFailure(result))pauseWaitingJobs(job,result);
     if(commentsJob(job))result.comments=GrokFirstAPI.validateComments(result.comments);
     else {
       const reader=Core.readerOutput(result.text,{final:true});
@@ -477,6 +539,12 @@ async function executeJob(job) {
       }
       result.text=reader.text.slice(0,30000);
     }
+    // A spending pause permits one explicitly requested probe at a time.
+    // Incomplete/failed results never reopen automatic account spending.
+    let budgetRecovered=Boolean(job.budgetProbe&&apiAccountPause===job.budgetProbe&&!apiBudgetFailure(result)&&!['incomplete','failed'].includes(result.verificationStatus));
+    if(budgetRecovered)budgetRecovered=await clearAPIBudgetPause();
+    if(budgetRecovered){for(const peer of clients)send(peer.port,{type:'API_BUDGET_RECOVERED'});void broadcastConfig();}
+    releaseAPISlot(job);pump();
     result.completedAt=Date.now();
     rememberHistoryResult(job.historyTicket,result,commentsJob(job),job.historyLanguage);
     if(epoch===cacheEpoch && !['incomplete','failed'].includes(result.verificationStatus)) {
@@ -484,7 +552,7 @@ async function executeJob(job) {
       cache=pruneCache(cache);
       try{await waitForAbort(persistCache(epoch),signal);}catch(e){if(signal.aborted)throw e;/* Storage failure must not hide a complete answer. */}
     }
-    if(liveJob(job))send(client.port,commentsJob(job)?{type:'COMMENT_RESULT',requestId,comments:result.comments,cached:false,...job.billing}:{type:'RESULT',requestId,result,cached:false});
+    if(liveJob(job))send(client.port,commentsJob(job)?{type:'COMMENT_RESULT',requestId,comments:result.comments,cached:false,...job.billing,...(budgetRecovered?{apiBudgetRecovered:true}:{})}:{type:'RESULT',requestId,result,cached:false,...(budgetRecovered?{apiBudgetRecovered:true}:{})});
   } catch(e) {
     if(job.settings.provider==='build'&&e.code==='BUILD_CANCEL_UNCONFIRMED'){stopUnavailableBuild(e.code);if(!liveJob(job)&&clients.has(client))jobError(job,SuperXBuild.publicError(e).error,e.code);}
     if(liveJob(job)) {
@@ -492,9 +560,10 @@ async function executeJob(job) {
       const partialText=Core.readerOutput(e.partialResult?.text,{final:true}).text.slice(0,30000);
       const partialResult=partialText?withBillingMetadata({...e.partialResult,...errorBilling,text:partialText,verificationStatus:'incomplete'},job.settings.provider,job.settings.apiVerification):undefined;
       const safeError=job.settings.provider==='build'?SuperXBuild.publicError(e):GrokFirstAPI.publicError(e);
+      const budgetFailure=job.settings.provider==='api'?apiBudgetFailure(e):undefined;
       if(partialResult)rememberHistoryResult(job.historyTicket,{...partialResult,completedAt:Date.now()},false,job.historyLanguage);
-      jobError(job,safeError.error,safeError.code,{...errorBilling,...(commentsJob(job)?{}:{...verificationMetadata({verificationFailure:e.verificationFailure||partialResult?.verificationFailure},job.settings.apiVerification),partialResult})});
-      if(e.code==='RATE_LIMIT')pauseWaitingJobs();
+      jobError(job,safeError.error,safeError.code,{...errorBilling,...(commentsJob(job)?(budgetFailure?{verificationFailure:budgetFailure}:{}):{...verificationMetadata({verificationFailure:e.verificationFailure||partialResult?.verificationFailure||budgetFailure},job.settings.apiVerification),partialResult})});
+      if(e.code==='RATE_LIMIT'||budgetFailure)pauseWaitingJobs(job,e);
       if(job.settings.provider==='build'&&['BUILD_CONNECTION_REQUIRED','BUILD_CANCEL_UNCONFIRMED','BUILD_PERMISSION_REQUIRED','BUILD_LOGIN_REQUIRED','BUILD_VERSION_UNSUPPORTED','BUILD_CONFIG_UNSUPPORTED','BUILD_TOOL_POLICY','BUILD_DISCONNECTED','BUILD_UNAVAILABLE'].includes(safeError.code))stopUnavailableBuild(safeError.code);
     } else if(signal.aborted && clients.has(client) && job.revision===revision && (!jobs.has(job.key)||jobs.get(job.key)===job)) {
       const reason=signal.reason;
@@ -530,7 +599,7 @@ async function runAPI(job,onUpdate) {
 function invalidateSecurityJobs() {
   revision++;
   for(const job of [...jobs.values()])abortJob(job);
-  ratePaused=false;
+  return clearQueuePause();
 }
 function securityError() {
   return {ok:false,errorKey:'errors.keyStorage'};
@@ -593,14 +662,22 @@ async function mutateSecurity(message,generation) {
 function queueSecurityMutation(message) {
   const generation=++securityGeneration;
   securityPending++;
-  if(message.settings&&JSON.stringify(message.settings)!==JSON.stringify(settings))invalidateSecurityJobs();
-  else for(const job of [...jobs.values()].filter(job=>job.settings.provider!=='build'))abortJob(job);
+  let pauseReset;
+  if(message.settings&&JSON.stringify(message.settings)!==JSON.stringify(settings))pauseReset=invalidateSecurityJobs();
+  else {for(const job of [...jobs.values()].filter(job=>job.settings.provider!=='build'))abortJob(job);pauseReset=clearQueuePause('api');}
   cache={};cacheEpoch++;
   // Invalidate at receipt, before asynchronous storage or settings changes.
   void ready.then(()=>broadcastConfig()).catch(()=>{});
   const operation=securityWrites.catch(()=>{}).then(async()=>{
     await ready;
-    let failure;
+    await pauseReset;
+    let failure,changedAccountKey=!message.apiKey;
+    if(message.apiKey&&(apiAccountPause||budgetPauseMayExist)){
+      // Compare only in trusted worker memory, after startup restored the Key.
+      // If the previous credential cannot be read, retain the account pause
+      // until an explicit successful probe rather than guessing it changed.
+      try{const previous=await chrome.storage.session.get('apiKey');changedAccountKey=validKey(previous.apiKey)&&previous.apiKey.trim()!==message.apiKey.trim();}catch{/* A Key save may still succeed; no budget reset is inferred. */}
+    }
     try {
       try { await clearStoredCache(); }
       catch(error) { failure=securityError(); }
@@ -619,6 +696,7 @@ function queueSecurityMutation(message) {
           try { await chrome.storage.session.set({securityFault:true}); }catch{/* Readiness remains closed in this worker. */}
         }
       }
+      if(!failure&&generation===securityGeneration&&changedAccountKey)await clearAPIBudgetPause();
     }
     finally {
       securityPending--;
@@ -641,7 +719,7 @@ async function saveSettings(input) {
     // interface locale never discards an already paid generation.
     if(cancelsJobs){revision++;for(const job of [...jobs.values()])abortJob(job);}
     settings=next;
-    if(cancelsJobs){ratePaused=false;pump();}
+    if(cancelsJobs){await clearQueuePause();pump();}
     await chrome.storage.local.set({settings});
   }
   await broadcastConfig();

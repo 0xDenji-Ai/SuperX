@@ -2775,6 +2775,76 @@ test('unknown upstream codes are not copied to diagnostics and generic API error
   assert.equal(card.testShadow.querySelector('.status').textContent,ui.t('error.apiFailed','zh-CN'));assert.doesNotMatch(card.testShadow.querySelector('.diagnostics').textContent,/PRIVATE_CREDENTIAL_CANARY/);
 });
 
+const spendingFailure={stage:'verify',code:'ACCESS',errorCode:'API_ERROR',httpStatus:402,providerCode:'spending_limit'};
+test('account limits pause new visible API posts and only a worker-confirmed manual probe resumes them',()=>{
+  const page=fixture({postCount:3});page.articles[2].rect={...page.articles[2].rect,top:1200,bottom:1480};page.configure();
+  const [first,second]=page.port.sent.filter(message=>message.type==='ANALYZE');
+  page.port.onMessage.emit({type:'ERROR',requestId:first.requestId,code:'API_ERROR',verificationFailure:spendingFailure});page.flush();
+  page.port.onMessage.emit({type:'RESULT',requestId:second.requestId,result:{provider:'api',text:'An already-running check completed.',verificationStatus:'completed',sources:[]}});page.flush();
+  page.articles[2].rect={...page.articles[2].rect,top:650,bottom:930};page.intersect();page.tick(1000);
+  const pending=page.cards()[2].testShadow;
+  assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,2);
+  assert.equal(pending.querySelector('.status').textContent,ui.t('error.apiUsage','zh-CN'));
+  assert.equal(pending.querySelector('.note').textContent,ui.t('note.accountLimit','zh-CN'));
+  page.cards()[0].testShadow.querySelector('.retry').emit('click');page.tick(1000);
+  let requests=page.port.sent.filter(message=>message.type==='ANALYZE');assert.equal(requests.length,3);assert.equal(requests[2].force,true);
+  page.port.onMessage.emit({type:'RESULT',requestId:requests[2].requestId,result:{provider:'api',text:'Completed without a recovery confirmation.',verificationStatus:'completed',sources:[]}});page.flush();page.tick();
+  assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,3,'No sibling or unconfirmed result can reopen account spending');
+  page.cards()[0].testShadow.querySelector('.retry').emit('click');requests=page.port.sent.filter(message=>message.type==='ANALYZE');
+  page.port.onMessage.emit({type:'RESULT',requestId:requests[3].requestId,apiBudgetRecovered:true,result:{provider:'api',text:'Manual probe confirmed account recovery.',verificationStatus:'completed',sources:[]}});page.flush();page.tick();
+  assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,5,'Only newly visible, never-submitted work resumes');
+  assert.equal(page.cards()[1].testShadow.querySelector('.answer').textContent,'An already-running check completed.');assert.deepEqual(page.writes,[]);
+});
+test('failed or incomplete manual account probes keep automatic work paused and retain safe diagnostics',()=>{
+  const page=fixture({postCount:2});page.articles[1].rect={...page.articles[1].rect,top:1200,bottom:1480};page.configure();
+  const first=page.port.sent.find(message=>message.type==='ANALYZE');
+  page.port.onMessage.emit({type:'RESULT',requestId:first.requestId,result:{provider:'api',text:'Available findings.',verificationStatus:'incomplete',verificationFailure:spendingFailure,sources:[]}});page.flush();
+  assert.equal(page.cards()[0].testShadow.querySelector('.note').textContent,ui.t('note.accountLimit','zh-CN'));
+  page.cards()[0].testShadow.querySelector('.retry').emit('click');const probe=page.port.sent.filter(message=>message.type==='ANALYZE')[1];
+  page.port.onMessage.emit({type:'ERROR',requestId:probe.requestId,code:'API_ERROR',verificationFailure:{stage:'verify',code:'SERVER',httpStatus:503,providerCode:'service_unavailable'}});page.flush();
+  page.articles[1].rect={...page.articles[1].rect,top:400,bottom:680};page.intersect();page.tick(10000);
+  assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,2);assert.equal(page.cards()[1].testShadow.querySelector('.status').textContent,ui.t('error.apiUsage','zh-CN'));
+});
+test('saved account pause reaches a new tab before dispatch and recovery in another tab resumes new work',()=>{
+  const page=fixture({postCount:1});
+  page.port.onMessage.emit({type:'CONFIG',settings:core.DEFAULT_SETTINGS,ready:true,apiBudgetPaused:true,apiBudgetFailure:spendingFailure,historyEnabled:true,historyEpoch:0});page.flush();page.intersect();page.tick(1000);
+  assert.equal(page.port.sent.some(message=>message.type==='ANALYZE'),false);assert.equal(page.port.sent.some(message=>message.type==='HISTORY_VISIT'),true,'Local history remains available while API spending is paused');
+  assert.equal(page.cards()[0].testShadow.querySelector('.note').textContent,ui.t('note.accountLimit','zh-CN'));
+  page.port.onMessage.emit({type:'API_BUDGET_RECOVERED'});page.flush();page.tick();
+  assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,1);
+});
+test('ordinary service or access errors do not pause new automatic posts or infer an account spending limit',()=>{
+  for(const failure of [{stage:'verify',code:'SERVER',httpStatus:503},{stage:'verify',code:'ACCESS',httpStatus:403,providerCode:'permission_denied'},{stage:'verify',code:'UNKNOWN',providerCode:'private_spending_limit_canary'}]){
+    const page=fixture({postCount:2});page.articles[1].rect={...page.articles[1].rect,top:1200,bottom:1480};page.configure();const first=page.port.sent.find(message=>message.type==='ANALYZE');
+    page.port.onMessage.emit({type:'ERROR',requestId:first.requestId,code:'API_ERROR',verificationFailure:failure});page.flush();
+    page.articles[1].rect={...page.articles[1].rect,top:400,bottom:680};page.intersect();page.tick(1000);
+    assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,2);assert.doesNotMatch(page.cards()[0].testShadow.querySelector('.diagnostics').textContent,/private_spending/);
+  }
+});
+test('comment account limits pause analysis too and a confirmed comment probe recovers without replaying failed posts',()=>{
+  const page=fixture({postCount:2});page.articles[1].rect={...page.articles[1].rect,top:1200,bottom:1480};page.configure();const first=page.port.sent.find(message=>message.type==='ANALYZE');
+  page.port.onMessage.emit({type:'RESULT',requestId:first.requestId,result:{provider:'api',text:'A completed fact check.',verificationStatus:'completed',sources:[]}});page.flush();
+  const card=page.cards()[0].testShadow;card.querySelector('.generate-comments').emit('click');
+  const draft=page.port.sent.find(message=>message.type==='GENERATE_COMMENTS');assert.ok(draft);
+  page.port.onMessage.emit({type:'COMMENT_ERROR',requestId:draft.requestId,code:'API_ERROR',verificationFailure:spendingFailure});page.flush();
+  assert.equal(card.querySelector('.comment-status').textContent,ui.t('error.apiUsage','zh-CN'));
+  page.articles[1].rect={...page.articles[1].rect,top:400,bottom:680};page.intersect();page.tick(1000);assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,1);
+  card.querySelector('.generate-comments').emit('click');const probe=page.port.sent.filter(message=>message.type==='GENERATE_COMMENTS')[1];assert.equal(probe.force,true);
+  page.port.onMessage.emit({type:'COMMENT_RESULT',requestId:probe.requestId,comments:['First suggestion.','Second suggestion.','Third suggestion.'],apiBudgetRecovered:true});page.flush();page.tick();
+  assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,2);assert.equal(card.querySelector('.answer').textContent,'A completed fact check.');assert.deepEqual(page.writes,[]);
+});
+test('an already-running rate-limit error cannot replace the account pause or clear it on a prompt relabel',()=>{
+  const page=fixture({postCount:3});page.articles[2].rect={...page.articles[2].rect,top:1200,bottom:1480};page.configure();const [first,second]=page.port.sent.filter(message=>message.type==='ANALYZE');
+  page.port.onMessage.emit({type:'ERROR',requestId:first.requestId,code:'API_ERROR',verificationFailure:spendingFailure});page.flush();
+  page.port.onMessage.emit({type:'ERROR',requestId:second.requestId,code:'RATE_LIMIT'});page.flush();
+  const before=page.port.sent.length;page.port.onMessage.emit({type:'CONFIG',settings:{...core.DEFAULT_SETTINGS,verifyPrompt:'A different future style.',interfaceLanguage:'en'},ready:true,apiBudgetPaused:true,apiBudgetFailure:spendingFailure});page.flush();
+  assert.equal(page.port.sent.slice(before).some(message=>message.type==='CANCEL_ALL'),false,'An account notice does not cancel accepted paid work');
+  page.articles[2].rect={...page.articles[2].rect,top:650,bottom:930};page.intersect();page.tick(1000);
+  assert.equal(page.cards()[2].testShadow.querySelector('.status').textContent,ui.t('error.apiUsage','en'));assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,2);
+  page.port.onMessage.emit({type:'API_BUDGET_RECOVERED'});page.flush();page.tick();
+  assert.equal(page.cards()[0].testShadow.querySelector('.note').textContent,'','Recovery clears stale paused notices on retained failed cards');assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,3);
+});
+
 test('an active port disconnect marks only interrupted work and reconnect never automatically replays it',()=>{
   const page=fixture({postCount:2});page.configure();
   const requests=page.port.sent.filter(message=>message.type==='ANALYZE');assert.equal(requests.length,2);

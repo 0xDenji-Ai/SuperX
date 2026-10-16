@@ -9,6 +9,8 @@ test('API failure statuses explain recovery in every interface language without 
   const keys=['apiKeyRejected','apiUsage','apiAccess','apiRequest','apiServer','apiConnection','apiTimeout','apiOutputLimit','apiIncomplete','apiFailed'];
   for(const language of ui.SUPPORTED_LANGUAGES)for(const suffix of keys){const key='error.'+suffix,value=ui.catalog[language][key];assert.ok(value?.trim(),`${language}: ${key}`);if(language!=='en')assert.notEqual(value,ui.catalog.en[key]);assert.ok(Array.from(value).length<180);assert.doesNotMatch(value,/\{(?:error|message|body)\}/);}
   assert.match(ui.t('error.apiUsage','en'),/budget or usage/);assert.match(ui.t('error.apiServer','zh-CN'),/xAI 服务/);
+  for(const language of ui.SUPPORTED_LANGUAGES){assert.ok(ui.catalog[language]['note.accountLimit']?.trim());if(language!=='en')assert.notEqual(ui.t('note.accountLimit',language),ui.t('note.accountLimit','en'));}
+  assert.match(ui.t('note.accountLimit','en'),/paused.*manually/);assert.match(ui.t('note.accountLimit','zh-CN'),/暂停.*预算.*手动/);
 });
 
 test('English UI consistently names the feature fact check while internal localization keys stay compatible', () => {
