@@ -2716,6 +2716,18 @@ test('tool-only error partials and hard timeouts do not retain command arguments
   }
 });
 
+test('deeper Fact Check rules refresh preset and custom caches for API and Build without deleting history or comment drafts',async()=>{
+  for(const providerName of ['api','build'])for(const mode of ['preset','custom']){
+    const savedPrompt='Preserve my explicit custom fact-check instructions without rewriting them.';
+    const seed=createBackground({settings:{provider:providerName,explanationMode:mode,verifyPrompt:savedPrompt}});await seed.ready();if(providerName==='build')await seed.configureBuild();const initial=seed.connect();await until(()=>initial.messages.some(message=>message.type==='CONFIG'&&message.ready));await visitHistory(seed,initial,[300]);await analyze(seed,initial,'deeper-seed-check',100);await draftComments(seed,initial,'deeper-seed-comments',100);await analyze(seed,initial,'deeper-preserved-history',300);await until(()=>Object.keys(seed.session.data.cache||{}).length===3);
+    const keys=Object.keys(seed.session.data.cache),checkKey=keys.find(key=>JSON.parse(key)[0]==='GrokFirst-v1'&&key.includes('/status/100')),commentKey=keys.find(key=>JSON.parse(key)[0]==='GrokFirst-comments-v2-language');assert.ok(checkKey.includes('fact-check-prompts-v2-deeper'));assert.ok(commentKey);
+    const legacyKey=checkKey.replace('fact-check-prompts-v2-deeper','fact-check-prompts-v1'),legacyAnswer={...seed.session.data.cache[checkKey],text:'No meaningful checkable claim; no further findings.'},commentAnswer=clone(seed.session.data.cache[commentKey]);const oldHistory=clone((await seed.message({type:'GET_HISTORY'})).entries.find(entry=>entry.id==='300'));assert.ok(oldHistory);
+    const freshText='Fresh evidence examines the less obvious factual implications.';const worker=createBackground({local:seed.local.data,session:{...seed.session.data,cache:{[legacyKey]:legacyAnswer,[commentKey]:commentAnswer}},apiRun:()=>({text:freshText,provider:'api',verificationStatus:'completed'}),buildRun:()=>({text:freshText,provider:'build',verificationStatus:'completed'})});await worker.ready();const port=worker.connect();await until(()=>port.messages.some(message=>message.type==='CONFIG'&&message.ready));assert.equal(worker.local.data.settings.verifyPrompt,savedPrompt);assert.deepEqual(clone((await worker.message({type:'GET_HISTORY'})).entries.find(entry=>entry.id==='300')),oldHistory);
+    const comments=await draftComments(worker,port,'deeper-existing-comments',100);assert.equal(comments.cached,true);assert.deepEqual(comments.comments,commentAnswer.comments);assert.equal(worker.commentCalls.length,0);assert.equal(worker.buildCommentCalls.length,0);
+    const result=await analyze(worker,port,'deeper-fresh-check',100);assert.equal(result.cached,false);assert.equal(result.result.text,freshText);assert.equal((await analyze(worker,port,'deeper-repeat-check',100)).cached,true);assert.equal(worker.apiCalls.length,providerName==='api'?1:0);assert.equal(worker.buildCalls.length,providerName==='build'?1:0);await until(()=>Object.hasOwn(worker.session.data.cache||{},checkKey));assert.equal(worker.session.data.cache[legacyKey].text,legacyAnswer.text);assert.deepEqual(worker.session.data.cache[commentKey],commentAnswer);assert.deepEqual(clone((await worker.message({type:'GET_HISTORY'})).entries.find(entry=>entry.id==='300')),oldHistory);
+  }
+});
+
 test('v8 answers are not reused and contaminated session cache entries are pruned without touching comments',async()=>{
   const seed=createBackground();await seed.ready();await analyze(seed,seed.connect(),'v9-cache-seed');
   const key=Object.keys(seed.session.data.cache)[0],oldKey=key.replace('api-v10-model-reasoning','api-v8-fact-check-only'),now=seed.now();

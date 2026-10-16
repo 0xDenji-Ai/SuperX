@@ -13,7 +13,7 @@
   const t = (key, vars) => UI.t(key, uiLanguage, vars);
   let settings = Core.DEFAULT_SETTINGS, providerReady = false, connected = false, port, used = 0, limited = false, pauseReason = '', capacityPaused = false, collapsed = false;
   let lastPath = location.pathname, scanTimer, reconnectTimer, handshakeTimer, dwellTimer, dwellDeadline=0, needsPageRefresh = false;
-  let hasConfig=false,workerSleeping=false,awaitingConfig=false,reconnectFailures=0;
+  let hasConfig=false,workerSleeping=false,awaitingConfig=false,reconnectFailures=0,xModalBlocked=false;
   const wakeActions=new Map(),wakeControls=new Map();
   const entries = new Map(), requests = new Map(), visible = new Set();
   const historySeen = new Set(),historyPending=new Map();
@@ -84,12 +84,13 @@
   const mutations = new MutationObserver(changes=>{
     changes=changes.filter(change=>change.target!==overlay&&!overlay.contains(change.target)&&!change.target?.closest?.('[data-testid="GrokDrawer"], [data-testid="grokDrawer"]'));
     if(!changes.length)return;
+    syncXModalVisibility();
     themeDirty=true;
     scheduleLayout();
     if(changes.some(change=>change.type!=='attributes'||
         !['class','style','hidden','aria-hidden'].includes(change.attributeName)||affectsDisplayedPostBody(change.target)))scheduleScan();
   });
-  mutations.observe(document.body,{childList:true,subtree:true,characterData:true,attributes:true,attributeFilter:['href','src','alt','lang','datetime','data-testid','class','style','hidden','aria-hidden']});
+  mutations.observe(document.body,{childList:true,subtree:true,characterData:true,attributes:true,attributeFilter:['href','src','alt','lang','datetime','data-testid','class','style','hidden','aria-hidden','role','aria-modal','open','inert']});
   const themeObserver=new MutationObserver(changes=>{
     themeDirty=true;syncUILanguage();scheduleLayout();
     if(changes.some(change=>change.target===document.documentElement&&['class','style','hidden','aria-hidden'].includes(change.attributeName)))scheduleScan();
@@ -100,6 +101,7 @@
   window.addEventListener('resize',()=>{themeDirty=true;scheduleLayout();},{passive:true});
   window.visualViewport?.addEventListener('resize',scheduleLayout,{passive:true});
   window.visualViewport?.addEventListener('scroll',onFeedScroll,{passive:true});
+  for(const event of ['fullscreenchange','webkitfullscreenchange'])document.addEventListener(event,()=>{syncXModalVisibility();scheduleLayout();tick();});
   connect();
   scheduleScan();
   setInterval(tick,100);
@@ -611,6 +613,38 @@
   }
   function scheduleScan(){if(scanTimer)return;scanTimer=setTimeout(()=>{scanTimer=null;scan();},0);}
   function supportedPage(){return !/^\/(?:messages|i\/(?:chat|grok|flow|premium|settings))\b/.test(location.pathname);}
+  function hasBlockingXModal() {
+    // X can change its SPA route before its portal mounts, or retain the old
+    // dialog while navigating back. Either signal keeps the feed rail out.
+    if(/^\/(?:i\/)?compose\/(?:post|tweet)(?:\/|$)/i.test(location.pathname)||/\/status\/\d+\/(?:photo|video)\/\d+(?:\/|$)/i.test(location.pathname))return true;
+    const fullscreen=document.fullscreenElement||document.webkitFullscreenElement;
+    if(fullscreen&&fullscreen!==overlay&&!overlay.contains(fullscreen))return true;
+    const rendered=element=>{
+      if(!element.isConnected||element===overlay||overlay.contains(element))return false;
+      for(let node=element;node;node=node.parentElement){
+        const local=node!==document.body&&node!==document.documentElement;
+        if(node.hidden||local&&(node.getAttribute('aria-hidden')==='true'||node.hasAttribute('inert')))return false;
+        const style=getComputedStyle(node);
+        if(style.display==='none'||['hidden','collapse'].includes(style.visibility)||style.contentVisibility==='hidden'||Number.parseFloat(style.opacity)===0)return false;
+      }
+      const rect=element.getBoundingClientRect();
+      if(rect.width>0&&rect.height>0&&rect.right>0&&rect.bottom>0&&rect.left<innerWidth&&rect.top<innerHeight)return true;
+      // Semantic portal wrappers may use display:contents and own no box.
+      return getComputedStyle(element).display==='contents'&&Array.from(element.children).some(rendered);
+    };
+    return Array.from(document.querySelectorAll('[role="dialog"], [role="alertdialog"], [aria-modal="true"], dialog[open], [data-testid="sheetDialog"], [data-testid="swipe-to-dismiss"]')).some(rendered);
+  }
+  function syncXModalVisibility() {
+    const blocked=hasBlockingXModal();
+    if(blocked!==xModalBlocked){
+      xModalBlocked=blocked;
+      // Hide the host immediately, before the next layout frame, so none of
+      // its pointer-enabled children can cover a newly opened X dialog.
+      if(blocked){overlay.hidden=true;pauseUnseenRailQueue();}
+      scheduleLayout();
+    }
+    return blocked;
+  }
   function scheduleLayout(){if(layoutFrame!==null)return;layoutFrame=requestAnimationFrame(()=>{layoutFrame=null;positionCards();});}
   function opaqueColor(value) {
     if(typeof value!=='string')return null;
@@ -634,7 +668,7 @@
     const values={
       '--gf-bg':bg?.value||palette.bg,'--gf-fg':opaqueColor(type.color)?.value||palette.fg,
       '--gf-muted':opaqueColor(computed(article?.querySelector('time')).color)?.value||palette.muted,
-      '--gf-border':border?.value||palette.border,'--gf-accent':opaqueColor(computed(text?.querySelector('a[href]')).color)?.value||'#1d9bf0',
+      '--gf-border':border?.value||palette.border,'--gf-accent':light?'#0072b1':'#1d9bf0',
       '--gf-font':type.fontFamily||'system-ui,-apple-system,"Segoe UI",sans-serif',
       '--gf-size':type.fontSize||'15px','--gf-leading':type.lineHeight&&type.lineHeight!=='normal'?type.lineHeight:'1.4',
       '--gf-scheme':light?'light':'dark'
@@ -758,6 +792,7 @@
     return {top:0,height:Math.min(53,viewport.height),borderWidth};
   }
   function currentRailBounds() {
+    if(syncXModalVisibility())return {hidden:true,reason:'x-modal-open',left:0,top:0,width:0,height:0};
     const viewport={width:document.documentElement.clientWidth||innerWidth,height:innerHeight};
     const primary=document.querySelector('[data-testid="primaryColumn"]'),sidebar=document.querySelector('[data-testid="sidebarColumn"]');
     return Layout.railBounds(primary?.getBoundingClientRect(),sidebar?.getBoundingClientRect(),viewport);
@@ -776,8 +811,12 @@
     }
   }
   function positionCards() {
-    overlay.hidden=document.hidden || !settings.enabled || !supportedPage();
-    if(overlay.hidden){syncNativeCells(null,null);return;}
+    const blocked=syncXModalVisibility();
+    overlay.hidden=document.hidden || !settings.enabled || !supportedPage()||blocked;
+    if(overlay.hidden){
+      if(blocked){rail.hidden=railHeader.hidden=railExpand.hidden=railSeparators.hidden=true;for(const entry of entries.values())entry.card.hidden=true;pauseUnseenRailQueue();}
+      syncNativeCells(null,null);return;
+    }
     // Focusing a descendant can scroll an overflow-hidden ancestor. Only each
     // answer box should scroll; keep the fixed rail and row hosts stationary.
     if(overlay.scrollTop)overlay.scrollTop=0;
@@ -842,6 +881,7 @@
     entry.card.remove();entries.delete(article);
   }
   function scan() {
+    if(syncXModalVisibility()){scheduleLayout();return;}
     if(location.pathname!==lastPath){cancelDwellTimer();historySeen.clear();historyPending.clear();historyRetryAt=0;lastPath=location.pathname;queue.clear();post({type:'CANCEL_ALL'});requests.clear();for(const entry of entries.values()){entry.since=0;entry.pending=false;if(['queued','running'].includes(entry.status)){entry.status='new';renderAnswer(entry,'',true);refreshCard(entry);}if(['queued','running'].includes(entry.commentStatus)){entry.commentStatus='error';entry.commentError='status.cancelled';refreshComments(entry);}}}
     for(const [article,entry] of entries)if(!article.isConnected)removeEntry(article,entry);
     if(!supportedPage()){scheduleLayout();return;}
@@ -930,7 +970,9 @@
     dwellTimer=setTimeout(()=>{dwellTimer=undefined;dwellDeadline=0;tick();},Math.max(1,deadline-Date.now()));
   }
   function tick() {
+    const blocked=syncXModalVisibility();
     recordHistory();
+    if(blocked){pauseUnseenRailQueue();return;}
     if(document.hidden || collapsed || !settings.enabled || !providerReady || limited || capacityPaused || !supportedPage()){resetDwellWaits();return;}
     if(currentRailBounds().hidden){pauseUnseenRailQueue();return;}
     if(location.pathname!==lastPath){scheduleScan();return;}
@@ -988,6 +1030,7 @@
     if(!historyEnabled){historySeen.clear();historyPending.clear();historyRetryAt=0;}
   }
   function recordHistory() {
+    if(xModalBlocked)return;
     // Record visibility independently of paid work, without polling writes for
     // stationary posts. A clear does not immediately re-add the current view.
     if(!historyLoaded||!historyEnabled||!settings.enabled||document.hidden||!supportedPage()){historySeen.clear();historyPending.clear();return;}

@@ -194,6 +194,10 @@ function fixture({postCount=2,connectError=null,historyAck=true}={}) {
     if (selector === 'article[data-testid="tweet"]') return node.tagName === 'ARTICLE' && node.getAttribute('data-testid') === 'tweet';
     const testId = selector.match(/^\[data-testid=["']([^"']+)["']\]$/)?.[1];
     if (testId) return node.getAttribute('data-testid') === testId;
+    const attribute = selector.match(/^\[([\w-]+)=["']([^"']+)["']\]$/);
+    if(attribute)return node.getAttribute(attribute[1])===attribute[2];
+    if(selector==='dialog[open]')return node.tagName==='DIALOG'&&node.hasAttribute('open');
+    if(selector==='a[href]')return node.tagName==='A'&&(node.hasAttribute('href')||typeof node.href==='string');
     if (selector.startsWith('#')) return node.id === selector.slice(1);
     if (selector.startsWith('.')) return node.classList.contains(selector.slice(1));
     return node.tagName.toLowerCase() === selector;
@@ -317,6 +321,95 @@ function railLines(page) {
     thickness:Number.parseFloat(line.style.height),color:line.style.background
   }));
 }
+
+function xModal(page,{role='dialog',ariaModal=false,testId='',tag='div'}={}) {
+  const portal=page.document.createElement('div');portal.id='layers';const modal=page.document.createElement(tag);
+  if(role)modal.setAttribute('role',role);if(ariaModal)modal.setAttribute('aria-modal','true');if(testId)modal.setAttribute('data-testid',testId);if(tag==='dialog')modal.setAttribute('open','');
+  portal.append(modal);page.document.body.append(portal);return {portal,modal};
+}
+
+test('a visible X composer hides the entire SuperX hit area and restores a fresh dwell after closing',()=>{
+  const page=fixture({postCount:1});page.configure({dwellMs:1000});page.elapse(700);const before=page.port.sent.length,extractions=page.extractionCount();
+  const {portal,modal}=xModal(page,{ariaModal:true}),composer=page.document.createElement('div');composer.setAttribute('data-testid','tweetTextarea_0');modal.append(composer);page.mutate([{type:'childList',target:page.document.body}]);
+  const overlay=page.nodes.find(node=>node.id==='grokfirst-overlay');assert.equal(overlay.hidden,true);
+  for(const name of ['rail','rail-head','rail-expand','rail-separators'])assert.equal(page.nodes.find(node=>node.className===name).hidden,true,name);
+  assert.equal(page.displayedCards().length,0);assert.deepEqual(page.pendingTimeouts(),[]);page.elapse(30000);page.tick();
+  assert.equal(page.port.sent.slice(before).some(message=>['ANALYZE','CANCEL_ALL','HISTORY_VISIT'].includes(message.type)),false);assert.equal(page.extractionCount(),extractions,'A composer portal does not rescan its background posts');
+  portal.remove();page.mutate([{type:'childList',target:page.document.body}]);assert.equal(overlay.hidden,false);assert.equal(page.nodes.find(node=>node.className==='rail-head').hidden,false);
+  page.elapse(999);assert.equal(page.port.sent.some(message=>message.type==='ANALYZE'),false);page.elapse(1);assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,1);assert.deepEqual(page.writes,[]);
+});
+
+test('X modal detection covers portal ARIA, alert dialogs, open native dialogs and media sheets',()=>{
+  for(const options of [{role:'alertdialog'},{role:'',ariaModal:true},{role:'',tag:'dialog'},{role:'',testId:'sheetDialog'},{role:'',testId:'swipe-to-dismiss'}]){
+    const page=fixture({postCount:1});page.configure();const {portal}=xModal(page,options);page.mutate([{type:'childList',target:page.document.body}]);const overlay=page.nodes.find(node=>node.id==='grokfirst-overlay');assert.equal(overlay.hidden,true,JSON.stringify(options));
+    portal.remove();page.mutate([{type:'childList',target:page.document.body}]);assert.equal(overlay.hidden,false,JSON.stringify(options));
+  }
+});
+
+test('background hidden, transparent, inert, offscreen and own-overlay dialogs do not hide the feed rail',()=>{
+  for(const kind of ['hidden','ancestor-hidden','aria-hidden','inert','display','visibility','opacity','content-visibility','offscreen','zero-size','closed-native','owned']){
+    const page=fixture({postCount:1});page.configure();const {portal,modal}=xModal(page,{tag:kind==='closed-native'?'dialog':'div',role:kind==='closed-native'?'':'dialog'});
+    if(kind==='hidden')modal.hidden=true;
+    if(kind==='ancestor-hidden')portal.hidden=true;
+    if(kind==='aria-hidden')portal.setAttribute('aria-hidden','true');
+    if(kind==='inert')portal.setAttribute('inert','');
+    if(kind==='display')portal.computed={display:'none'};
+    if(kind==='visibility')modal.computed={visibility:'hidden'};
+    if(kind==='opacity')portal.computed={opacity:'0'};
+    if(kind==='content-visibility')portal.computed={contentVisibility:'hidden'};
+    if(kind==='offscreen')modal.style.top='1200px';
+    if(kind==='zero-size'){modal.style.width='0';modal.style.height='0';Object.defineProperty(modal,'offsetWidth',{get:()=>0});Object.defineProperty(modal,'offsetHeight',{get:()=>0});}
+    if(kind==='closed-native')modal.removeAttribute('open');
+    if(kind==='owned')page.nodes.find(node=>node.id==='grokfirst-overlay').append(portal);
+    page.mutate([{type:'childList',target:page.document.body}]);assert.equal(page.nodes.find(node=>node.id==='grokfirst-overlay').hidden,false,kind);
+  }
+});
+
+test('modal visibility and semantic attribute changes update interception without a route change',()=>{
+  const page=fixture({postCount:1});page.configure();const {portal,modal}=xModal(page,{role:''});page.mutate([{type:'childList',target:page.document.body}]);const overlay=page.nodes.find(node=>node.id==='grokfirst-overlay');assert.equal(overlay.hidden,false);
+  modal.setAttribute('aria-modal','true');page.mutate([{type:'attributes',attributeName:'aria-modal',target:modal}]);assert.equal(overlay.hidden,true);
+  portal.setAttribute('aria-hidden','true');page.mutate([{type:'attributes',attributeName:'aria-hidden',target:portal}]);assert.equal(overlay.hidden,false);
+  portal.removeAttribute('aria-hidden');page.mutate([{type:'attributes',attributeName:'aria-hidden',target:portal}]);assert.equal(overlay.hidden,true);
+  modal.removeAttribute('aria-modal');modal.setAttribute('role','dialog');page.mutate([{type:'attributes',attributeName:'role',target:modal}]);assert.equal(overlay.hidden,true);
+  modal.setAttribute('role','region');page.mutate([{type:'attributes',attributeName:'role',target:modal}]);assert.equal(overlay.hidden,false);
+});
+
+test('global body accessibility flags do not conceal a genuinely rendered portal dialog from SuperX',()=>{
+  const page=fixture({postCount:1});page.configure();page.document.body.setAttribute('aria-hidden','true');page.document.body.setAttribute('inert','');const {portal}=xModal(page,{ariaModal:true});page.mutate([{type:'childList',target:page.document.body}]);
+  assert.equal(page.nodes.find(node=>node.id==='grokfirst-overlay').hidden,true);portal.remove();page.mutate([{type:'childList',target:page.document.body}]);assert.equal(page.nodes.find(node=>node.id==='grokfirst-overlay').hidden,false);
+});
+
+test('composer and photo/video SPA routes preserve started paid work and close back to the original feed',()=>{
+  for(const route of ['/compose/post','/compose/tweet','/i/compose/post','/test/status/100/photo/1','/test/status/100/video/1']){
+    const page=fixture({postCount:1});page.configure();const request=page.port.sent.find(message=>message.type==='ANALYZE');page.port.onMessage.emit({type:'START',requestId:request.requestId});const before=page.port.sent.length;
+    page.location.pathname=route;page.tick();const overlay=page.nodes.find(node=>node.id==='grokfirst-overlay');assert.equal(overlay.hidden,true,route);assert.equal(page.port.sent.slice(before).some(message=>['CANCEL','CANCEL_ALL'].includes(message.type)),false,route);
+    page.port.onMessage.emit({type:'RESULT',requestId:request.requestId,result:{provider:'api',text:'Paid result completed while X was open.',verificationStatus:'completed',usage:{total_tokens:42},sources:[]}});page.flush();assert.equal(overlay.hidden,true);
+    page.location.pathname='/home';page.tick();assert.equal(overlay.hidden,false,route);assert.equal(page.cards()[0].testShadow.querySelector('.answer').textContent,'Paid result completed while X was open.');assertTokenCount(page.cards()[0],42);assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,1);
+  }
+});
+
+test('X modal queue cancellation is race-safe and never cancels already-started analysis or comments',()=>{
+  const page=fixture();page.configure();const [running,waiting]=page.port.sent.filter(message=>message.type==='ANALYZE');page.port.onMessage.emit({type:'START',requestId:running.requestId});
+  page.cards()[0].testShadow.querySelector('.generate-comments').emit('click');const comments=page.port.sent.find(message=>message.type==='GENERATE_COMMENTS');page.port.onMessage.emit({type:'COMMENT_START',requestId:comments.requestId});
+  const before=page.port.sent.length,{portal}=xModal(page,{ariaModal:true});page.mutate([{type:'childList',target:page.document.body}]);page.tick(500);
+  const cancellations=page.port.sent.slice(before).filter(message=>message.type==='CANCEL_IF_QUEUED');assert.deepEqual(cancellations.map(message=>message.requestId),[waiting.requestId]);assert.equal(page.port.sent.slice(before).some(message=>['CANCEL','CANCEL_ALL'].includes(message.type)),false);
+  page.port.onMessage.emit({type:'START',requestId:waiting.requestId});page.port.onMessage.emit({type:'UPDATE',requestId:waiting.requestId,phase:'verify',text:'The paid task had already started.'});page.port.onMessage.emit({type:'RESULT',requestId:running.requestId,result:{provider:'api',text:'Finished first check.',verificationStatus:'completed',sources:[]}});page.flush();
+  portal.remove();page.mutate([{type:'childList',target:page.document.body}]);assert.equal(page.cards()[1].testShadow.querySelector('.answer').textContent,'The paid task had already started.');assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,2);assert.equal(page.port.sent.slice(before).filter(message=>message.type==='CANCEL_IF_QUEUED').length,1);
+});
+
+test('confirmed unstarted modal work waits anew after close and collapsed controls never cover the dialog',()=>{
+  const page=fixture({postCount:1});page.configure({dwellMs:1000});page.elapse(1000);const request=page.port.sent.find(message=>message.type==='ANALYZE'),{portal}=xModal(page);page.mutate([{type:'childList',target:page.document.body}]);
+  page.port.onMessage.emit({type:'ERROR',requestId:request.requestId,code:'CANCELLED'});page.flush();page.elapse(10000);assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,1);
+  portal.remove();page.mutate([{type:'childList',target:page.document.body}]);page.elapse(999);assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,1);page.elapse(1);assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,2);
+  const collapsed=fixture({postCount:1});collapsed.configure();collapsed.nodes.find(node=>node.className==='rail-collapse').emit('click');collapsed.flush();const sheet=xModal(collapsed);collapsed.mutate([{type:'childList',target:collapsed.document.body}]);assert.equal(collapsed.nodes.find(node=>node.className==='rail-expand').hidden,true);
+  sheet.portal.remove();collapsed.mutate([{type:'childList',target:collapsed.document.body}]);assert.equal(collapsed.nodes.find(node=>node.className==='rail-expand').hidden,false);assert.equal(collapsed.nodes.find(node=>node.className==='rail-head').hidden,true);
+});
+
+test('native fullscreen media yields the complete SuperX overlay and restores without replaying work',()=>{
+  const page=fixture({postCount:1});page.configure();const request=page.port.sent.find(message=>message.type==='ANALYZE');page.port.onMessage.emit({type:'START',requestId:request.requestId});const before=page.port.sent.length;
+  page.document.fullscreenElement=page.articles[0];page.document.emit('fullscreenchange');page.flush();assert.equal(page.nodes.find(node=>node.id==='grokfirst-overlay').hidden,true);assert.equal(page.port.sent.slice(before).some(message=>['CANCEL','CANCEL_ALL'].includes(message.type)),false);
+  page.document.fullscreenElement=null;page.document.emit('fullscreenchange');page.flush();assert.equal(page.nodes.find(node=>node.id==='grokfirst-overlay').hidden,false);assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,1);
+});
 function assertRailLine(page,top,thickness,color) {
   const line=railLines(page).find(line=>Math.abs(line.top-top)<1e-7);
   assert.ok(line,`A rail line must match native y=${top}`);
@@ -780,6 +873,18 @@ test('partially clipped headers preserve the visible bottom edge and dock contro
   assert.equal(head.style.top,'0px');assert.equal(head.style.height,'33px');assert.equal(head.getBoundingClientRect().bottom,tabs.rect.bottom);
   tabs.rect={...tabs.rect,top:-60,bottom:-7};page.mutate();assert.equal(head.style.top,'0px');assert.equal(head.style.height,'53px');
   assert.deepEqual(page.writes,[]);
+});
+
+test('SuperX links use stable theme blue rather than the first post link color',()=>{
+  const page=fixture({postCount:2}),body=page.articles[0].children[0],link=page.document.createElement('a');body.setAttribute('data-testid','tweetText');link.setAttribute('href','https://example.com/colored-post-link');link.computed={color:'rgb(128, 0, 128)'};body.append(link);
+  page.primary.computed={backgroundColor:'rgb(0, 0, 0)'};page.clearWrites();page.configure();const overlay=page.nodes.find(node=>node.id==='grokfirst-overlay'),request=page.port.sent.find(message=>message.type==='ANALYZE');
+  assert.equal(overlay.style.getPropertyValue('--gf-accent'),'#1d9bf0');
+  page.port.onMessage.emit({type:'RESULT',requestId:request.requestId,result:{provider:'api',text:'A useful finding with an [inline source](https://example.com/inline).',sources:[{url:'https://example.com/extra',title:'Additional source'}]}});page.flush();const card=page.cards()[0];
+  assert.equal(card.testShadow.querySelector('.answer').querySelectorAll('a').length,1);assert.equal(card.testShadow.querySelector('.sources').querySelectorAll('a').length,1);assert.match(card.testShadow.querySelector('style').textContent,/a\{color:var\(--gf-accent,#1d9bf0\)/);
+  for(const [background,accent] of [['rgb(255, 255, 255)','#0072b1'],['rgb(21, 32, 43)','#1d9bf0'],['rgb(0, 0, 0)','#1d9bf0']]){
+    link.computed={color:'rgb(255, 140, 0)'};page.primary.computed={backgroundColor:background};page.mutate([{type:'attributes',attributeName:'class',target:page.primary}]);assert.equal(overlay.style.getPropertyValue('--gf-accent'),accent);
+  }
+  link.remove();page.clearWrites();page.mutate();assert.equal(overlay.style.getPropertyValue('--gf-accent'),'#1d9bf0');page.articles[1].children[0].append(link);page.clearWrites();page.mutate();assert.equal(overlay.style.getPropertyValue('--gf-accent'),'#1d9bf0');assert.deepEqual(page.writes,[]);
 });
 
 test('rail colors and typography follow X page themes and do not change original nodes',()=>{

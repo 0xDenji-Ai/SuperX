@@ -236,7 +236,7 @@ function sanitizePost(raw) {
 }
 function cacheKey(post, s, inputFingerprint) {
   const mode=Core.explanationMode(s);
-  const prompts=['fact-check-prompts-v1',mode==='preset'?Core.DEFAULT_PROMPTS.verify:s.verifyPrompt];
+  const prompts=['fact-check-prompts-v2-deeper',mode==='preset'?Core.DEFAULT_PROMPTS.verify:s.verifyPrompt];
   return JSON.stringify(['GrokFirst-v1',s.provider,s.provider==='build'?['official-ws-v1',s.buildPort,s.buildModel]:s.apiModel,s.language,s.webSearch,s.xSearch,
     'api-v10-model-reasoning',mode,'only',
     Core.apiPostIdentity(post,s),...prompts,s.provider==='build'?s.buildReasoningEffort:Core.reasoningEffort(s.apiModel,s.apiReasoningEffort)]);

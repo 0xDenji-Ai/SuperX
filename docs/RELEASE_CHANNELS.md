@@ -14,7 +14,7 @@ Preview is a release status, not a second product or a second source repository.
 
 ## Versions and downloads
 
-Keep `package.json`, `extension/manifest.json` and the Git tag in agreement: `0.8.3` and `v0.8.3`, for example. Every changed installation candidate gets a new increasing numeric version. Do not put a `-beta` suffix in the Chrome `version` field or move a published tag to different code. GitHub's **Pre-release** flag identifies a preview.
+Keep `package.json`, `extension/manifest.json` and the Git tag in agreement: `0.8.3` and `v0.8.3`, for example. Batch related fixes into one reviewable installation candidate; individual development commits and local checks do not require a version bump. Increment the patch version when handing off a distinct candidate or publishing a release, and reserve a minor-version change for a substantial feature milestone. Once a candidate has been distributed for acceptance or published, changed packaged code needs a new increasing version. Do not put a `-beta` suffix in the Chrome `version` field or move a published tag to different code. GitHub's **Pre-release** flag identifies a preview.
 
 Each release provides:
 
@@ -47,7 +47,7 @@ GitHub's `/releases/latest` excludes previews and drafts. Until the first stable
 2. Build the complete release bundle with `npm run package:release`. Check the installation ZIP, source ZIP, inventories and checksums. This local command does not publish anything.
 3. After authorization to publish, push the reviewed commit and matching `vMAJOR.MINOR.PATCH` tag. The release workflow validates the source and prepares a **draft preview**, explicitly excluded from Latest.
 4. Review the release notes and attachments. Publish the draft explicitly as a **Pre-release**, with known limitations and manual installation/update instructions. A successful workflow alone does not publish a release.
-5. Collect reports against that version and installation channel. Fixes to packaged code require a new version and tag; leave existing published attachments unchanged.
+5. Collect reports against that version and installation channel. Batch related fixes before handing off the next candidate; changes to an already distributed package require a new version, and a new tag when published. Leave existing published attachments unchanged.
 
 The workflow refuses to overwrite a published release. CI also produces reviewable build artifacts; they are not the main download entry for users.
 
@@ -102,6 +102,8 @@ Edge installed-extension acceptance and advanced manual credential, storage, del
 一套源码，两条渠道：GitHub 是代码、文档、预览下载与 Issues 支持的项目主页；Chrome 商店提供稳定安装与自动更新。GitHub 同时保留稳定版的原始安装包与源码存档，验收结果及待测范围单独记录。
 
 所有安装候选都使用递增的数字版本及匹配 tag，预览身份用 GitHub 的 Pre-release 标记表示。新 tag 只生成预览草稿，审核附件后再主动公开；通过验收的同一份 ZIP 原样上传商店，商店实际发布后再将对应 GitHub Release 晋升为 Stable/Latest，保留附件和 SHA-256。GitHub `latest` 不含预览版，最新预览入口必须单独指向 Releases 列表。
+
+相关修正先合并成一批再验收、递增版本号，不为每次开发提交或本地检查单独加号。一般修复只递增末位；较大的功能阶段才调整次版本号。已交付验收或公开发布的包不覆盖，后续改动使用新版本，以便追溯。
 
 GitHub 解压版需要手动更新，商店版由 Chrome 更新。当前不同安装 ID 之间不自动迁移 Key 和设置，切换渠道时先停用旧版，避免重复分析。官网 [superx.vip](https://superx.vip/) 独立维护，源码不纳入扩展开源；隐私路径保持为 `/privacy/`。仓库、下载、Issues 及商店入口以实际公开状态为准，最终安装验收需单独完成。
 

@@ -80,11 +80,15 @@
   }
 
   const MAX_PROMPT_LENGTH = 12000;
+  // Recognize only our exact former default, including copies saved by the
+  // custom editor. Preserve every genuinely edited instruction verbatim.
+  const RETIRED_VERIFY_PROMPT = 'Fact-check the important, checkable claims in this post. Start directly with useful findings: what the evidence supports, contradicts or leaves unresolved, with corrections and clickable primary sources beside the relevant finding. Add only information the reader cannot already see in the post. Do not summarize, paraphrase, translate or repeat the original post; use at most a minimal identifying claim fragment when needed to make a correction clear. Keep the response concise and let the evidence determine its natural form, without a stock introduction, rigid checklist or generic disclaimer. If there is no meaningful checkable claim, say so briefly instead of manufacturing a fact check.';
   const DEFAULT_PROMPTS = Object.freeze({
-    verify: 'Fact-check the important, checkable claims in this post. Start directly with useful findings: what the evidence supports, contradicts or leaves unresolved, with corrections and clickable primary sources beside the relevant finding. Add only information the reader cannot already see in the post. Do not summarize, paraphrase, translate or repeat the original post; use at most a minimal identifying claim fragment when needed to make a correction clear. Keep the response concise and let the evidence determine its natural form, without a stock introduction, rigid checklist or generic disclaimer. If there is no meaningful checkable claim, say so briefly instead of manufacturing a fact check.',
+    verify: 'Go deeper into this post by investigating its explicit factual claims, reasonably implied factual premises and checkable details. Follow relevant leads in original sources, context, numbers, comparisons and causal reasoning. Start directly with useful findings: what the evidence supports, contradicts or leaves unresolved, with corrections and clickable primary sources beside the relevant finding. Add only information the reader cannot already see in the post. Do not summarize, paraphrase, translate or repeat the original post; use at most a minimal identifying claim fragment when needed to make a correction clear. Keep the response concise and let the evidence determine its natural form, without a stock introduction, rigid checklist or generic disclaimer.',
     comments: 'Draft exactly three distinct optional comments responding to the original X post. Each comment must be one concise natural sentence with a different useful angle. Offer natural and relevant perspectives suitable for the user to review and copy.'
   });
   function normalizePrompt(value, fallback) {
+    if (fallback === DEFAULT_PROMPTS.verify && typeof value === 'string' && value.trim() === RETIRED_VERIFY_PROMPT) return fallback;
     return typeof value === 'string' && value.trim() && value.length <= MAX_PROMPT_LENGTH ? value : fallback;
   }
   // Defensive presentation only: these values are never executed as commands.

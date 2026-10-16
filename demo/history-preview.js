@@ -30,7 +30,7 @@
   }};
   window.chrome = {
     runtime:{
-      getManifest:() => ({version:'0.9.8-preview'}),
+      getManifest:() => ({version:'0.9.9-preview'}),
       onMessage:{addListener:listener => runtimeListeners.push(listener)},
       async sendMessage(message) {
         if (message.type === 'GET_UI_LANGUAGE') return {ok:true,language};

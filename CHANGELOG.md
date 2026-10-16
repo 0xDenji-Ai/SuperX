@@ -2,6 +2,16 @@
 
 SuperX release history. The extension's `manifest.json` is the authoritative installed version. Test counts below describe those releases' recorded checks, not live provider or browser-store certification.
 
+## 0.9.9 — Go deeper into checkable details (unreleased candidate)
+
+- Remove the built-in and fixed application instructions that asked for a brief exit when there was no "meaningful checkable claim". Encourage investigating explicit claims, reasonably implied factual premises and checkable details, including relevant sources, context, numbers, comparisons and causal reasoning.
+- Retain concise findings without a duplicate post recap. Distinguish the author's actual claims from inferred premises; do not invent claims or evidence, force a correction, or treat missing evidence as proof of falsehood. API and official local Grok use the same rules.
+- Upgrade only exact copies of the retired default prompt, including untouched copies saved in the custom editor. Preserve edited custom instructions, comment prompts and browsing history. Version fact-check cache identity so new tasks do not reuse answers generated under the old rules; existing displayed/history answers remain until reanalysis or normal expiry.
+- Hide the complete SuperX interaction layer while X compose/reply dialogs, media viewers or external fullscreen content are open, including the header and collapsed expand button. Resume the feed after closing; preserve started requests and use confirmed queue-only cancellation for work not yet started. Temporary modal routes do not clear the underlying feed's answers or record covered posts as new history.
+- Use a stable blue accent for answer links, sources and controls instead of sampling an arbitrary post link's color. Align light-theme blue in the local setup and privacy pages with Settings and history.
+- Keep the 0.9.8 scrolling/dwell and concurrency defaults. Published Stable remains 0.7.26; no new live-provider quality comparison is claimed.
+- Batch related development fixes into the same candidate before handoff rather than increasing the version for every small edit. Preserve already distributed or published packages.
+
 ## 0.9.8 — Wait for reading and use three API slots by default (unreleased candidate)
 
 - Default API concurrency to 3, configurable from 1 to 8. Preserve the shared limit across tabs, fact checks, comments and cancellation cleanup.

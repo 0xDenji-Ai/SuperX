@@ -89,7 +89,9 @@ test('preset and custom Fact Check prompts exclude dormant explanation and put m
     assert.equal(JSON.stringify(request).includes(settingsWithDrafts.explainPrompt),false);assert.equal(request.instructions.includes(settingsWithDrafts.commentsPrompt),false);
     assert.match(request.instructions,/do not summarize, paraphrase, translate, quote at length or otherwise repeat it/);
     assert.match(request.instructions,/minimum identifying claim fragment/);
-    assert.match(request.instructions,/no meaningful checkable claim, give one brief, specific sentence/);
+    assert.match(request.instructions,/Look beyond the surface wording for verifiable angles and details/);
+    assert.match(request.instructions,/Do not invent claims or evidence, force a correction, or treat missing evidence as proof that a claim is false/);
+    assert.doesNotMatch(request.instructions,/no meaningful checkable claim|manufacturing a fact check|inventing a verification task/);
     assert.match(request.instructions,/Do not add a separate explanation or post-summary section, even if an editable task requests one/);
     assert.doesNotMatch(request.instructions,/earlier explanation|unverifiedExplanation|Separate facts, opinion/);
   }
@@ -107,6 +109,25 @@ test('missing and invalid custom prompts fall back consistently while exact limi
   }
   const text='x'.repeat(core.MAX_PROMPT_LENGTH);
   assert.ok(api.buildRequest(post,{...settings,verifyPrompt:text}).instructions.includes(text));
+});
+
+test('the retired no-claim default upgrades in saved and raw requests without rewriting edited tasks or comments',()=>{
+  const retired='Fact-check the important, checkable claims in this post. Start directly with useful findings: what the evidence supports, contradicts or leaves unresolved, with corrections and clickable primary sources beside the relevant finding. Add only information the reader cannot already see in the post. Do not summarize, paraphrase, translate or repeat the original post; use at most a minimal identifying claim fragment when needed to make a correction clear. Keep the response concise and let the evidence determine its natural form, without a stock introduction, rigid checklist or generic disclaimer. If there is no meaningful checkable claim, say so briefly instead of manufacturing a fact check.';
+  for(const explanationMode of ['preset','custom'])for(const verifyPrompt of [retired,' \n'+retired+'  ']){
+    const input={...settings,explanationMode,verifyPrompt};
+    assert.equal(core.normalizeSettings(input).verifyPrompt,core.DEFAULT_PROMPTS.verify);
+    const request=api.buildRequest(post,input);
+    assert.ok(request.instructions.includes(core.DEFAULT_PROMPTS.verify));
+    assert.match(request.instructions,/explicit factual claims, reasonably implied factual premises and checkable details/);
+    assert.match(request.instructions,/original sources, context, numbers, comparisons and causal reasoning/);
+    assert.doesNotMatch(request.instructions,/no meaningful checkable claim|manufacturing a fact check|inventing a verification task/);
+    assert.match(request.instructions,/do not summarize, paraphrase, translate, quote at length or otherwise repeat it/);
+  }
+  const edited=retired+'\nUser instruction: focus on the chronology.';
+  assert.equal(core.normalizeSettings({...settings,verifyPrompt:edited}).verifyPrompt,edited);
+  assert.ok(api.buildRequest(post,{...settings,verifyPrompt:edited}).instructions.includes(edited));
+  assert.equal(core.normalizeSettings({...settings,commentsPrompt:retired}).commentsPrompt,retired);
+  assert.ok(api.buildRequest(post,{...settings,commentsPrompt:retired},'comments').instructions.includes(retired));
 });
 
 test('invalid URL or absent retrieval tools fail before a streaming update or HTTP request',async()=>{

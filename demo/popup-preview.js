@@ -16,7 +16,7 @@
     .filter(key => Object.hasOwn(state,key)).map(key => [key,state[key]]));
   window.chrome = {
     runtime: {
-      getManifest: () => ({version:'0.9.8-preview'}),
+      getManifest: () => ({version:'0.9.9-preview'}),
       onMessage: {addListener: fn => runtimeListeners.push(fn)},
       async sendMessage(message) {
         if (message.type === 'GET_UI_LANGUAGE') return {ok:true,language:state.uiLanguage};
