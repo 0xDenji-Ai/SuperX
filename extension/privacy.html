@@ -73,8 +73,8 @@
 
     <article id="zh" lang="zh-CN" aria-labelledby="zh-title">
       <h2 id="zh-title">SuperX 隐私政策</h2>
-      <p class="date">最后更新：2026 年 10 月 7 日</p>
-      <p>本政策说明 SuperX 浏览器扩展在 xAI API 模式下的数据处理。SuperX 使用你自己的 xAI API Key，为 X／Twitter 帖子提供解释、事实主张分析和评论草稿。SuperX 是独立开发的扩展，与 X、Grok 或 xAI 没有官方隶属或背书关系。</p>
+      <p class="date">最后更新：2026 年 10 月 16 日 · 0.8.0</p>
+      <p>本政策说明 SuperX 0.8.0 的数据处理。SuperX 使用你自己的 xAI API Key，为 X／Twitter 帖子提供事实核查和可选评论草稿，不再先生成解释。SuperX 是独立开发的扩展，与 X、Grok 或 xAI 没有官方隶属或背书关系。</p>
 
       <h3>1. 配置与分析范围</h3>
       <p>在设置中填写自己的普通 xAI API Key、保存并启用 SuperX 后，可见且符合条件的帖子会进入分析队列。没有单独的数据同意勾选或 ZDR 声明步骤。暂停自动分析可停止新的自动请求；清除或更换 Key 会取消排队和正在进行的工作，并清除原会话 Key 与缓存。已经发送给 xAI 的数据无法通过这些操作收回。</p>
@@ -91,14 +91,14 @@
         <li>当前页面显示的正文、语言标记、作者标签和发布时间。</li>
         <li>媒体是否存在、最多四个符合条件的 X 图片 URL 及其可访问描述、可用的引用帖子上下文。图片 URL 或缩略图不代表模型一定实际查看了媒体。</li>
         <li>所选模型、回答语言、搜索设置、生成流程、实际生效的任务指令，以及你选用的自定义提示词。</li>
-        <li>后台求证所需的先前解释，或生成评论草稿所需的已有分析。</li>
+        <li>可选评论草稿请求所需的已有核查结果。事实核查本身只有一次生成请求，不附带先前解释。</li>
       </ul>
       <p>API Key 作为请求的认证凭据发送给 xAI。使用搜索功能时，请求会让 xAI 的工具检索原帖和相关证据，工具可能取得其他帖子、网页或媒体。SuperX 不会独立预加载每条完整帖子或视频。</p>
 
       <h3>3. 第三方处理与数据用途</h3>
       <p>SuperX 开发者不运营 API 中转、分析或遥测服务。分析和评论请求直接发送给 xAI；xAI 对请求、日志和工具数据的处理受其自身条款、政策与账号配置约束。</p>
       <p>请求设置 <code>store: false</code>，但这不能保证 xAI 不保留请求、日志或工具输入。<a href="https://docs.x.ai/developers/faq/security" rel="noopener noreferrer">xAI API 数据与安全说明</a>介绍默认保留和可选的团队级 ZDR；<a href="https://x.ai/legal/data-processing-addendum" rel="noopener noreferrer">数据处理附录</a>另行规定个人数据应使用启用 ZDR 的 API。公开帖子也可能含个人数据。扩展不检查或配置这些服务商条件，普通 Key 或 <code>store: false</code> 本身不代表符合其要求；另见 <a href="https://x.ai/legal/terms-of-service-enterprise" rel="noopener noreferrer">xAI 企业服务条款</a>。</p>
-      <p>SuperX 对用户数据的使用和传输遵守 <a href="https://developer.chrome.com/docs/webstore/program-policies/limited-use" rel="noopener noreferrer">Chrome 网上应用店用户数据政策及有限使用要求</a>。帖子内容及相关浏览活动仅用于公开说明的解释、求证、评论草稿和本机近期历史功能及必要缓存，不用于广告定向、数据交易、信用判断或无关画像。</p>
+      <p>SuperX 对用户数据的使用和传输遵守 <a href="https://developer.chrome.com/docs/webstore/program-policies/limited-use" rel="noopener noreferrer">Chrome 网上应用店用户数据政策及有限使用要求</a>。帖子内容及相关浏览活动仅用于事实核查、评论草稿和本机近期历史功能及必要缓存，不用于广告定向、数据交易、信用判断或无关画像。</p>
       <p>模型返回的 Markdown 在本机解析。扩展不执行模型 HTML，也不加载模型提供的图片。安全的 HTTP(S) 来源链接仅在你点击时打开；访问来源网站、API 控制台或帮助链接是单独的网站交互，适用其各自政策。X 自身仍独立进行正常的页面请求。</p>
 
       <h3>4. 本机保存的数据</h3>
@@ -147,8 +147,8 @@
 
     <article id="en" lang="en" aria-labelledby="en-title">
       <h2 id="en-title">SuperX Privacy Policy</h2>
-      <p class="date">Last updated: October 7, 2026</p>
-      <p>This policy describes data handling by the SuperX browser extension in xAI API mode. SuperX uses your own xAI API key to explain X/Twitter posts, analyze factual claims, and draft replies. It is independently developed and is not officially affiliated with or endorsed by X, Grok, or xAI.</p>
+      <p class="date">Last updated: October 16, 2026 · 0.8.0</p>
+      <p>This policy describes data handling by SuperX 0.8.0. SuperX uses your own xAI API key to fact-check X/Twitter posts and optionally draft replies, without first generating an explanation. It is independently developed and is not officially affiliated with or endorsed by X, Grok, or xAI.</p>
 
       <h3>1. Setup and analysis scope</h3>
       <p>Add your own normal xAI API key in settings, save it, and enable SuperX; visible eligible posts can then enter the analysis queue. There is no separate data-consent checkbox or ZDR-attestation step. Pause automatic analysis to stop new automatic requests. Clearing or replacing the key cancels queued and active work and clears the previous session key and cache. These controls cannot recall data already sent to xAI.</p>
@@ -165,14 +165,14 @@
         <li>The currently displayed text, language mark, author label, and timestamp.</li>
         <li>Media presence, up to four eligible X-hosted image URLs and accessible descriptions, and available quoted-post context. A URL or thumbnail does not guarantee that a model inspected the media.</li>
         <li>The selected model, answer language, search settings, generation flow, effective task instructions, and any selected custom prompts.</li>
-        <li>The earlier explanation for a background fact check, or existing analysis for a reply-drafting request.</li>
+        <li>The existing Fact Check for an optional reply-drafting request. Fact Check itself uses one generation request and does not include an earlier explanation.</li>
       </ul>
       <p>The API key is sent to xAI as the request's authentication credential. Search-enabled requests ask xAI tools to retrieve the original post and relevant evidence; those tools may retrieve further posts, pages, or media. SuperX does not independently preload every complete post or video.</p>
 
       <h3>3. Third parties and purposes</h3>
       <p>The SuperX developer operates no API relay, analytics service, or telemetry endpoint. Analysis and reply requests go directly to xAI. Its handling of requests, logs, and tool data is governed by its own terms, policies, and account configuration.</p>
       <p>Requests set <code>store: false</code>, which does not guarantee that xAI retains no requests, logs, or tool inputs. Its <a href="https://docs.x.ai/developers/faq/security" rel="noopener noreferrer">API security documentation</a> describes default retention and optional team-wide ZDR; its <a href="https://x.ai/legal/data-processing-addendum" rel="noopener noreferrer">Data Processing Addendum</a> separately requires ZDR-enabled processing for Personal Data. Public posts can contain Personal Data. SuperX does not check or configure these provider requirements, and a normal key or <code>store: false</code> does not establish compliance. See also the <a href="https://x.ai/legal/terms-of-service-enterprise" rel="noopener noreferrer">xAI enterprise terms</a>.</p>
-      <p>SuperX's use and transfer of user data adheres to the <a href="https://developer.chrome.com/docs/webstore/program-policies/limited-use" rel="noopener noreferrer">Chrome Web Store User Data Policy, including the Limited Use requirements</a>. Post content and related browsing activity are used only for the described explanation, claim-analysis, reply-drafting and on-device recent-history features and necessary caches, not for advertising targeting, data sales, credit decisions, or unrelated profiling.</p>
+      <p>SuperX's use and transfer of user data adheres to the <a href="https://developer.chrome.com/docs/webstore/program-policies/limited-use" rel="noopener noreferrer">Chrome Web Store User Data Policy, including the Limited Use requirements</a>. Post content and related browsing activity are used only for factual-claim analysis, reply-drafting and on-device recent-history features and necessary caches, not for advertising targeting, data sales, credit decisions, or unrelated profiling.</p>
       <p>Model Markdown is parsed locally. SuperX does not execute model HTML or load model-provided images. Safe HTTP(S) source links open only when clicked. Visiting a source, API console, or help link is a separate interaction subject to that site's policies. X continues its normal page requests independently.</p>
 
       <h3>4. Data stored on your device</h3>

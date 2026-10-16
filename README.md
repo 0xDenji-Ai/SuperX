@@ -4,13 +4,15 @@
 
 [Install for Chrome](https://chromewebstore.google.com/detail/superx/clcflilaihhnnglfamdblhopokpnlioo) · [Download ZIP](https://github.com/bwjoke/SuperX/releases/latest/download/SuperX.zip) · [Website](https://superx.vip/) · [Support](https://github.com/bwjoke/SuperX/issues) · [简体中文](README.zh-CN.md) · [Privacy](PRIVACY.md)
 
-SuperX is a Chrome / Edge extension that uses the xAI API to explain visible X posts and check their factual claims. Answers stream into a right-hand column that follows X's theme, font and interface language. Your left navigation and original feed keep their layout.
+SuperX is a Chrome / Edge extension that uses the xAI API to check factual claims in visible X posts. Answers stream into a right-hand column that follows X's theme, font and interface language. Your left navigation and original feed keep their layout.
+
+**Source candidate: 0.8.0 (not released).** This candidate temporarily removes the explanation step and runs Fact Check directly. It asks for concise findings, relevant evidence and sources rather than retelling the post beside its original text. The Chrome Web Store and GitHub stable download below remain **0.7.26**, which includes explanations. The behavior described under Features and Settings applies to the 0.8.0 candidate.
 
 The extension uses Manifest V3 and plain JavaScript. Installation needs no build step or package dependencies. This is a Beta: X's changing page structure, model behavior and API availability can affect results.
 
 ![SuperX on X with English explanations and fact checks](docs/assets/superx-preview-en.png)
 
-*SuperX on X, showing English explanations and fact checks.*
+*SuperX 0.7.26 on X, showing English explanations and fact checks. The 0.8.0 candidate uses Fact Check only.*
 
 ## Downloads and support
 
@@ -31,11 +33,12 @@ The user confirmed 0.7.26's core features on Chrome for Windows 11, and confirme
 
 - Visible posts enter the analysis queue immediately, with configurable API concurrency.
 - A continuous right column replaces X's original sidebar; collapse it to restore that sidebar.
-- Built-in or editable prompts, with separate explanation, fact-check and comment instructions.
+- Fact Check starts directly in one streamed request, without a preceding explanation or a duplicate post summary. Findings lead with the useful conclusion, evidence and any relevant limits.
+- Built-in or editable fact-check and comment instructions.
 - Auto answers follow the post's currently displayed language, including translation / original switches. You can also choose a fixed language.
 - Streamed Markdown, clickable sources, per-post Token usage and model details.
 - Three optional one-line comment drafts, copied only when you click; SuperX does not post them.
-- Local result caching and specific failure details when a fact check cannot finish.
+- Local result caching and specific failure details when a fact check cannot finish; any available partial findings remain readable.
 - A searchable, on-device history of posts viewed in the last 24 hours, including already generated answers and comments; available after browser restart.
 
 SuperX's AI features require your own xAI API Key; local browsing history works without one. The X built-in Grok mode and URL-only interpretation mode were removed in version 0.7.0. SuperX is an independent project and is not affiliated with X or xAI.
@@ -77,13 +80,9 @@ Requests go directly from the extension's background worker to `api.x.ai`; the p
 
 The current default model is `grok-4.3`, with 4 concurrent requests. The model name is editable and concurrency can be set from 1 to 8. Availability depends on your xAI account. At least one of **X search** or **Web search** must be enabled: both built-in and custom modes use the original post URL as their primary context and request its full text, including content hidden behind **Show more**. Retrieval can fail; the extension cannot guarantee that a model has obtained every part of a thread or inspected its media.
 
-| Generation flow | What it does |
-| --- | --- |
-| Explain, then fact-check in the background (default) | Streams an explanation first, then appends a separate fact check; preserves the explanation if that second request fails |
-| Single request | Explains and checks the post in one streamed answer |
-| Explain only | Explains the post without a separate fact-check request; enabled search tools may still be used |
+The 0.8.0 candidate runs **Fact Check only**. It retrieves the linked post and checks its material factual claims in one streamed generation request. It does not first generate an explanation, paraphrase the post or append a second fact-check request. Only quote the minimum needed to identify a disputed claim; if there is no checkable factual claim, say so briefly rather than inventing a verdict. A sourced answer can still be mistaken.
 
-Custom mode lets you edit all three prompts. Blank instructions use the defaults; each prompt accepts up to 12,000 characters. Saving new prompts affects new tasks. Use **Reanalyze** to apply them to an existing answer. Application rules still enforce the selected language, safe handling of source material and comment output format.
+Custom mode lets you edit the fact-check and comment prompts. Blank instructions use the defaults; each prompt accepts up to 12,000 characters. Saving new prompts affects new tasks. Use **Reanalyze** to apply them to an existing answer. Application rules still enforce the selected language, safe handling of source material, avoiding duplicate post recaps and comment output format. Earlier explanation settings no longer select a separate generation step; existing saved history, including earlier explanations, remains readable until its usual expiry or deletion.
 
 Language settings contain two independent choices, both **Auto** by default. **Grok answer language** first uses the valid language mark on X's currently displayed post text, then falls back to the author's displayed prose. Quoted posts and search results do not choose the language. A fixed answer language overrides translation / original switches. **SuperX interface language** follows X's UI language in Auto; before X has reported a language, it uses the browser interface language. You can choose a fixed interface language for the rail, Settings and popup. Twelve UI languages are supported, with English as fallback. Changing only the interface language preserves answers and in-progress requests.
 
@@ -91,9 +90,9 @@ Collapse the right column with its top chevron; click the SuperX symbol to expan
 
 ## Costs and cache
 
-Automatic analysis can generate paid requests for every visible post. All X tabs share the configured request slots; excess work queues. There is no extension-level post-count limit or spending cap. Faster scrolling, more tabs, search tools and **Reanalyze** can increase usage. Background fact checking normally uses two generation requests; comment suggestions use another request. A single request can invoke search tools multiple times. Check pricing and actual charges in the xAI console.
+Automatic analysis can generate paid requests for every visible post. All X tabs share the configured request slots; excess work queues. There is no extension-level post-count limit or spending cap. Faster scrolling, more tabs, search tools and **Reanalyze** can increase usage. The 0.8.0 candidate uses one generation request per fact check; comment suggestions use another request. Removing the separate explanation step avoids that extra request, but retrieval and model processing can still take time. A single request can invoke search tools multiple times. Check pricing and actual charges in the xAI console.
 
-The per-post Token display uses API-reported usage for the current explanation, fact check and comments. Hover it for model and stage details. It does not total earlier reanalyses or all account spending. Cached results show their original usage and that no new usage was incurred for that cache hit; partial or missing statistics are marked rather than estimated.
+The per-post Token display uses API-reported usage for the current fact check and comments. Hover it for model and stage details. It does not total earlier reanalyses or all account spending. Cached results show their original usage and that no new usage was incurred for that cache hit; partial or missing statistics are marked rather than estimated.
 
 Completed results are reusable for up to 24 hours within the current browser session, with a limit of 160 entries and approximately 4 MB. Cache identity includes the post, model, answer language, search options, generation flow and effective prompts. Cached results use trusted session storage and are removed when the browser session ends or credentials change. Old persistent caches are removed on upgrade. Expired entries are pruned when the worker starts and when new entries are saved; the 24 hours is a reuse limit, not an exact-time deletion timer within an open session. **Clear cache** removes the session cache. See [Privacy](PRIVACY.md) for what entries contain.
 
@@ -121,7 +120,7 @@ History is separate from the API result cache: **Clear cache**, clearing/replaci
 | Requests stop after a rate limit | Wait for your API allowance to recover, then reanalyze manually; SuperX does not automatically pay for retries |
 | Unusual sidebar layout | Reload the extension and refresh X; report the page type, browser version and a redacted screenshot |
 
-An answer with sources is not a guarantee of correctness. A fact-check failure preserves the explanation; it does not certify the post or necessarily mean the explanation itself was cut off.
+An answer with sources is not a guarantee of correctness. An incomplete fact check does not certify the post. Any partial findings are labelled incomplete; retry manually when appropriate.
 
 ## Development
 

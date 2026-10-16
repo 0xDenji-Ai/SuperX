@@ -22,12 +22,12 @@ test('explanation modes normalize consistently and reject unexpected mode types'
   }
 });
 
-test('switching styles preserves custom task drafts and independently selected language and search', () => {
+test('switching Fact Check styles preserves saved and dormant drafts and independent language and search', () => {
   let settings = core.normalizeSettings({explanationMode:'custom',language:'zh-TW',webSearch:false,xSearch:true,apiVerification:'off',explainPrompt:'\nMy explanation.\n',verifyPrompt:'My verification.'});
   for(const mode of ['preset','custom']) {
     settings=core.normalizeSettings({...settings,explanationMode:mode});
     assert.equal(settings.explainPrompt,'\nMy explanation.\n');assert.equal(settings.verifyPrompt,'My verification.');
-    assert.equal(settings.language,'zh-TW');assert.equal(settings.webSearch,false);assert.equal(settings.xSearch,true);assert.equal(settings.apiVerification,'off');
+    assert.equal(settings.language,'zh-TW');assert.equal(settings.webSearch,false);assert.equal(settings.xSearch,true);assert.equal(settings.apiVerification,'only');
   }
 });
 

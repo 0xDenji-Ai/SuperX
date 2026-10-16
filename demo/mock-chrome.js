@@ -3,7 +3,7 @@
   const query=new URLSearchParams(location.search);
   if(query.get('lang'))document.documentElement.lang=GrokFirstUI.normalizeLanguage(query.get('lang'));
   const keyState=query.get('security')==='migration'?'migration':query.get('security')==='missing'?'missing':'ready';
-  const config={settings:XGrokCore.normalizeSettings({provider:'api',interfaceLanguage:query.get('interface')||'auto'}),ready:keyState==='ready',keyState,used:0,collapsed:false};
+  const config={settings:XGrokCore.normalizeSettings({provider:'api',apiVerification:'only',interfaceLanguage:query.get('interface')||'auto'}),ready:keyState==='ready',keyState,used:0,collapsed:false};
   const listeners=[],pending=new Map(),analysisCache=new Map();let calls=0,commentCalls=0,cancelled=0,verificationPreview=false,citationsPreview=false,urlBoundaryPreview=false,markdownPreview=false,verificationFailurePreview='';
   const simulatedVerificationFailures={
     OUTPUT_LIMIT:{code:'OUTPUT_LIMIT',stage:'verify',errorCode:'API_INCOMPLETE',reason:'max_output_tokens'},
@@ -37,64 +37,56 @@
     hi:['पूरा संदर्भ इस विचार को समझने में मदद कर सकता है।','मैं पहले मूल स्रोत देखना चाहूँगा।','यहाँ सबसे महत्वपूर्ण धारणा कौन सी है?']
   };
   function begin(entry){
-    const {requestId,message,comments,language,provider,apiVerification,verificationFailureDemo}=entry;
+    const {requestId,message,comments,language,provider,verificationFailureDemo}=entry;
     if(comments){
       entry.timers.push(setTimeout(()=>{entry.started=true;emit({type:'COMMENT_START',requestId});},80));
       entry.timers.push(setTimeout(()=>{emit({type:'COMMENT_RESULT',requestId,comments:[...(drafts[GrokFirstUI.normalizeLanguage(language)]||drafts.en)],cached:false,usage:{input_tokens:180,output_tokens:90,total_tokens:270},model:entry.apiModel,usageComplete:true});finish(entry);},850));
       return;
     }
     const sample={
-      'zh-CN':`这是与「${message.post.author}」当前显示的中文正文对应的模拟回答。判断一项主张，需要看完整上下文和原始证据；单独一张图表不足以支持全面结论。\n\n现在切换「显示原文」，回答会恢复为英文；已有的英文结果可以直接复用。\n\n仅为界面演示，未向 Grok 发起请求。`,
-      en:'This simulated answer follows the currently displayed English post. A claim needs its full context and original evidence; a chart alone does not support a sweeping conclusion.\n\nSwitching the post to its Chinese translation also switches the answer. Returning to English reuses its completed answer.\n\nDemo only; no Grok request was made.',
-      ja:'現在表示されている投稿、または指定した言語に合わせた回答の表示例です。文脈と元の証拠を確認することで、主張を理解しやすくなります。\n\n日本語を指定した場合、投稿の翻訳を切り替えても回答は日本語のままです。\n\n画面のデモです。Grok へのリクエストは送信していません。'
+      'zh-CN':'**证据不足。** 图表未注明数据来源、样本与评测条件，不能据此判断结论是否适用于其他任务。\n\n需要原始报告、可复现方法和独立测试结果。\n\n*本地模拟核查，未联网检索或调用 Grok。*',
+      en:'**Insufficient evidence.** The chart omits its data source, sample and evaluation conditions, so the finding cannot be generalized to other tasks.\n\nThe original report, reproducible methods and independent test results are needed.\n\n*Simulated Fact Check; no search or Grok request was made.*',
+      ja:'**証拠が不十分です。** 図表にはデータの出典、標本、評価条件がなく、他の課題にも結論が当てはまるとは判断できません。\n\n元の報告、再現可能な方法、独立した試験結果が必要です。\n\n*ローカルの表示例です。検索や Grok へのリクエストは行っていません。*'
     };
     const citationUrls=['https://developer.chrome.com/docs/extensions','https://developer.chrome.com/docs/extensions/develop','https://developer.chrome.com/docs/extensions/mv3','https://developer.chrome.com/docs/extensions/reference','https://developer.chrome.com/docs/extensions/develop/concepts/content-scripts'];
-    const sources=urlBoundaryPreview?[{url:'https://t.co/dZ1jiqrxX',title:'1'}]:citationsPreview?[...citationUrls.map((url,index)=>({url,title:String(index+1)})),{url:'https://developer.chrome.com/docs/extensions/reference/api/runtime',title:'6'}]:[{url:'https://developer.chrome.com/docs/extensions',title:language==='zh-CN'?'Chrome 官方扩展文档':'Chrome extensions documentation'}];
+    const sources=urlBoundaryPreview?[{url:'https://t.co/dZ1jiqrxX',title:'1'}]:citationsPreview?[...citationUrls.map((url,index)=>({url,title:String(index+1)})),{url:'https://developer.chrome.com/docs/extensions/reference/api/runtime',title:'6'}]:markdownPreview?[{url:'https://developer.chrome.com/docs/extensions',title:language==='zh-CN'?'Chrome 官方扩展文档':'Chrome extensions documentation'}]:[];
     const citationNames=['扩展概览','开发文档','Manifest V3','API 参考','内容脚本'];
-    const citationText='引用去重的模拟回答，未调用 Grok。\n\n正文已经提供这些出处，下面不会再重复显示编号：\n'+citationUrls.map((url,index)=>`[${citationNames[index]}](${url})`).join('\n')+'\n\n补充来源保留可点击的网站与页面名称。';
-    const boundaryText='链接边界的模拟回答，未调用 Grok。\n\n帖子附带两张图片，一张是主帖内容截图，另一张回复中附的链接图片（https://t.co/dZ1jiqrxX），可能为相关截图或证明材料，但内容未在文本中展开。回复中有人表示“原来打个电话付十刀就能直邮，学到了”，显示该信息对部分香港用户有实用参考价值。\n\n这里只能点击网址，后面的中文保持普通正文。';
-    const markdownText=message.post.id==='10001'?'### 看懂这条帖子\n\n**图表不等于完整证据。** 先看统计范围，再判断这条主张。\n\n- 核对数据的 **来源和时间**\n- 了解比较对象，避免以偏概全 [[1]](https://developer.chrome.com/docs/extensions)\n\n> 补充背景应当帮助理解这条帖子。\n\n*本地模拟回答，未调用 Grok。*':'### 代码与表格\n\n`URL` 是原帖上下文，代码按原样显示：\n\n```js\nconst post = "https://x.com/example/status/123";\n```\n\n| 内容 | 显示方式 |\n| --- | --- |\n| 重点 | **粗体** |\n| 出处 | [Chrome 文档](https://developer.chrome.com/docs/extensions) |\n\n*本地模拟回答，未调用 Grok。*';
+    const citationText='**引用呈现示例。** 正文已提供的出处不再重复列出编号：\n\n'+citationUrls.map((url,index)=>'['+citationNames[index]+']('+url+')').join('\n')+'\n\n额外来源保留页面名称。*本地模拟，未调用 Grok。*';
+    const boundaryText='**证据不足。** 附带的链接（https://t.co/dZ1jiqrxX），无法在本地演示中核实，其后的正文保持普通文字。\n\n*只有网址可点击；未联网检索或调用 Grok。*';
+    const markdownText=message.post.id==='10001'?'### 证据不足\n\n**缺少原始数据。** 图表本身不支持向所有任务外推。\n\n- 需要数据的 **来源和时间**\n- 需要独立复现与评测条件 [[1]](https://developer.chrome.com/docs/extensions)\n\n> 待补充的证据，不是已经验证的结论。\n\n*本地模拟核查，未调用 Grok。*':'### 待核实的证据\n\n`URL` 是来源线索，以下代码仅展示安全排版：\n\n```js\nconst source = "https://example.com/evidence";\n```\n\n| 证据 | 状态 |\n| --- | --- |\n| 原始方法 | **待提供** |\n| 演示出处 | [Chrome 文档](https://developer.chrome.com/docs/extensions) |\n\n*本地模拟核查，未调用 Grok。*';
     const text=markdownPreview?markdownText:urlBoundaryPreview?boundaryText:citationsPreview?citationText:message.post.id==='10004'?'Render test: <img src=x onerror=alert(1)>\nThis is literal text and cannot execute.':sample[language]||sample.en;
-    const checkText=language==='zh-CN'?'模拟求证：应核对原始来源、日期及完整背景。本地演示未联网检索，未实际核实这条帖子。':language==='ja'?'事実確認の表示例です。元の情報源、日付、背景の確認が必要です。このローカルデモは検索や実際の検証を行っていません。':'Simulated verification: check the original source, date and full context. This local demo did not search online or verify the post.';
-    const phase=apiVerification==='inline'?'inline':'explain';
-    const checking=apiVerification==='background';
-    const verificationStart=text.length+2;
-    const completeText=checking?text+'\n\n'+checkText:text;
-    if(checking&&verificationFailureDemo) {
-      const usage=message.post.id==='10001'?{input_tokens:850,output_tokens:384,total_tokens:1234}:{input_tokens:125,output_tokens:48,total_tokens:173};
+    const usage=message.post.id==='10001'?{input_tokens:850,output_tokens:384,total_tokens:1234}:{input_tokens:125,output_tokens:48,total_tokens:173};
+    const resultFor=output=>({text:output,sources,provider,apiVerification:'only',searched:false,verified:false,verificationStatus:'unverified',warning:'Local preview only; no sources were searched.',usage,usageByStage:{verify:{...usage}},model:entry.apiModel,usageComplete:true});
+    if(verificationFailureDemo) {
+      const partial=text.split('\n\n')[0];
       entry.timers.push(
         setTimeout(()=>{entry.started=true;emit({type:'START',requestId,used:config.used});},80),
-        setTimeout(()=>emit({type:'UPDATE',requestId,text:text.slice(0,70),phase:'explain',apiVerification:'background'}),380),
-        setTimeout(()=>emit({type:'UPDATE',requestId,text,phase:'verification_queued',apiVerification:'background',verificationText:''}),650),
-        setTimeout(()=>emit({type:'UPDATE',requestId,text,phase:'verify',apiVerification:'background',verificationText:''}),900),
+        setTimeout(()=>emit({type:'UPDATE',requestId,text:'',phase:'verify',apiVerification:'only'}),180),
+        setTimeout(()=>emit({type:'UPDATE',requestId,text:partial,phase:'verify',apiVerification:'only'}),650),
         setTimeout(()=>{
-          const result={text,sources,provider,apiVerification:'background',searched:false,verified:false,verificationStatus:'incomplete',verificationFailure:{...simulatedVerificationFailures[verificationFailureDemo]},warning:'Demo only: the explanation is retained after a simulated fact-check failure; no API request was made.',usage,model:entry.apiModel,usageComplete:verificationFailureDemo!=='CONNECTION'};
+          const result={...resultFor(partial),verificationStatus:'incomplete',verificationFailure:{...simulatedVerificationFailures[verificationFailureDemo]},warning:'Local preview only: Fact Check was interrupted; available partial findings are retained.',usageComplete:verificationFailureDemo!=='CONNECTION'};
           if(entry.cacheKey)analysisCache.set(entry.cacheKey,result);
           emit({type:'RESULT',requestId,result,cached:false});finish(entry);
         },1300)
       );return;
     }
     if(verificationPreview) {
-      entry.verificationDemoStage=1;entry.explanation=text.split('\n\n')[0];
-      entry.checkText=checkText;entry.verificationStart=entry.explanation.length+2;
+      entry.verificationDemoStage=1;entry.checkText=text;entry.demoResult=resultFor;
       entry.timers.push(
         setTimeout(()=>{entry.started=true;emit({type:'START',requestId,used:config.used});},80),
-        setTimeout(()=>emit({type:'UPDATE',requestId,text:entry.explanation,phase:'explain',apiVerification:'background'}),180),
-        setTimeout(()=>emit({type:'UPDATE',requestId,text:entry.explanation,phase:'verification_queued',verificationText:'',apiVerification:'background',verificationStart:entry.verificationStart}),300),
-        setTimeout(()=>emit({type:'UPDATE',requestId,text:entry.explanation+'\n\n',phase:'verify',verificationText:'',apiVerification:'background',verificationStart:entry.verificationStart}),450)
+        setTimeout(()=>emit({type:'UPDATE',requestId,text:'',phase:'verify',apiVerification:'only'}),180)
       );return;
     }
     entry.timers.push(
       setTimeout(()=>{entry.started=true;emit({type:'START',requestId,used:config.used});},80),
-      setTimeout(()=>emit({type:'UPDATE',requestId,text:text.slice(0,70),phase,apiVerification,...(citationsPreview||urlBoundaryPreview||markdownPreview?{sources}:{})}),380),
-      setTimeout(()=>emit({type:'UPDATE',requestId,text,phase:checking?'verification_queued':phase,apiVerification,...(checking?{verificationText:'',verificationStart}:{})}),650),
-      setTimeout(()=>emit({type:'UPDATE',requestId,text:checking?text+'\n\n'+checkText.slice(0,35):text,phase:checking?'verify':phase,apiVerification,...(checking?{verificationText:checkText.slice(0,35),verificationStart}:{})}),900),
-      setTimeout(()=>emit({type:'UPDATE',requestId,text:completeText,phase:checking?'verify':phase,apiVerification,...(checking?{verificationText:checkText,verificationStart}:{})}),1100),
-      setTimeout(()=>{const result={text:completeText,sources,provider,apiVerification,...(checking?{verificationStart}:{}),searched:false,verified:false,verificationStatus:apiVerification==='off'?'off':'unverified',warning:'仅为界面演示，未联网核查。',usage:message.post.id==='10001'?{input_tokens:850,output_tokens:384,total_tokens:1234}:{input_tokens:125,output_tokens:48,total_tokens:173},model:entry.apiModel,usageComplete:true};if(entry.cacheKey)analysisCache.set(entry.cacheKey,result);emit({type:'RESULT',requestId,result,cached:false});finish(entry);},1300)
+      setTimeout(()=>emit({type:'UPDATE',requestId,text:'',phase:'verify',apiVerification:'only'}),180),
+      setTimeout(()=>emit({type:'UPDATE',requestId,text:text.slice(0,70),phase:'verify',apiVerification:'only',...(citationsPreview||urlBoundaryPreview||markdownPreview?{sources}:{})}),380),
+      setTimeout(()=>emit({type:'UPDATE',requestId,text,phase:'verify',apiVerification:'only'}),900),
+      setTimeout(()=>{const result=resultFor(text);if(entry.cacheKey)analysisCache.set(entry.cacheKey,result);emit({type:'RESULT',requestId,result,cached:false});finish(entry);},1300)
     );
   }
   window.chrome={runtime:{
-    id:'superx-demo',getManifest:()=>({version:'0.7.26-demo'}),getURL:asset=>`/extension/${asset}`,
+    id:'superx-demo',getManifest:()=>({version:'0.8.0-demo'}),getURL:asset=>`/extension/${asset}`,
     async sendMessage(message){if(message.type==='GET_UI_LANGUAGE')return{ok:true,language:document.documentElement.lang};if(message.type==='OPEN_SETTINGS'){if(query.get('connection')==='expired')throw new Error('Extension context invalidated');openPreviewSettings(message.focus);}if(message.type==='OPEN_HISTORY')location.assign(`/demo/history.html?lang=${encodeURIComponent(document.documentElement.lang)}`);return{ok:true};},
     connect:()=>{
       setTimeout(configure,20);
@@ -147,30 +139,29 @@
     document.getElementById('message').textContent='模拟链接边界：中文右括号和后文保持普通正文，出处不重复。不调用 Grok。';
   };
   document.getElementById('verify-wait').onclick=()=>{
-    cancelAll();verificationPreview=true;citationsPreview=false;urlBoundaryPreview=false;markdownPreview=false;verificationFailurePreview='';analysisCache.clear();config.settings=XGrokCore.normalizeSettings({...config.settings,provider:'api',explanationMode:'preset',apiVerification:'background',enabled:true});configure();
-    document.getElementById('message').textContent='求证等待演示：点击「推进模拟求证」显示首字，再点击一次完成。仅模拟 UI，不调用 Grok。';
+    cancelAll();verificationPreview=true;citationsPreview=false;urlBoundaryPreview=false;markdownPreview=false;verificationFailurePreview='';analysisCache.clear();config.settings=XGrokCore.normalizeSettings({...config.settings,provider:'api',explanationMode:'preset',apiVerification:'only',enabled:true});configure();
+    document.getElementById('message').textContent='Fact Check 等待演示：点击「推进模拟 Fact Check」显示首字，再点击一次完成。仅模拟 UI，不调用 Grok。';
   };
   document.getElementById('verify-advance').onclick=()=>{
     for(const entry of [...pending.values()]) {
       if(!entry.verificationDemoStage)continue;
       entry.timers.forEach(clearTimeout);
-      const text=entry.explanation+'\n\n'+entry.checkText;
-      if(entry.verificationDemoStage===1){entry.verificationDemoStage=2;emit({type:'UPDATE',requestId:entry.requestId,phase:'verify',text,verificationText:entry.checkText,apiVerification:'background',verificationStart:entry.verificationStart});}
-      else {emit({type:'RESULT',requestId:entry.requestId,result:{provider:'api',text,sources:[],apiVerification:'background',verificationStart:entry.verificationStart,searched:false,verified:false,verificationStatus:'unverified',warning:'Demo only; no Grok request was made.'}});finish(entry);}
+      if(entry.verificationDemoStage===1){entry.verificationDemoStage=2;emit({type:'UPDATE',requestId:entry.requestId,phase:'verify',text:entry.checkText.slice(0,70),apiVerification:'only'});}
+      else {emit({type:'RESULT',requestId:entry.requestId,result:entry.demoResult(entry.checkText)});finish(entry);}
     }
   };
   function restartFailurePreview(code) {
     cancelAll();verificationFailurePreview=code;verificationPreview=false;citationsPreview=false;urlBoundaryPreview=false;markdownPreview=false;analysisCache.clear();
     // These explicit demo controls reset completed cards through the existing
     // configuration channel. No product setting or real API is involved.
-    config.settings=XGrokCore.normalizeSettings({...config.settings,apiVerification:'background',explanationMode:'preset',enabled:false});configure();
+    config.settings=XGrokCore.normalizeSettings({...config.settings,apiVerification:'only',explanationMode:'preset',enabled:false});configure();
     config.settings=XGrokCore.normalizeSettings({...config.settings,enabled:true});configure();
   }
   document.getElementById('verify-failure-demo').onclick=()=>{
     const code=document.getElementById('verify-failure-reason').value;
     if(!Object.hasOwn(simulatedVerificationFailures,code))return;
     restartFailurePreview(code);
-    document.getElementById('message').textContent=`仅模拟 Fact Check 失败：${code}。解释保留；悬停状态可看原因，展开诊断可看详情。不调用 API。`;
+    document.getElementById('message').textContent=`仅模拟 Fact Check 失败：${code}。部分核查结果保留；悬停状态可看原因，展开诊断可看详情。不调用 API。`;
   };
   document.getElementById('verify-failure-reset').onclick=()=>{
     restartFailurePreview('');

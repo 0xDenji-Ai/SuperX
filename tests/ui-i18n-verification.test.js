@@ -10,13 +10,14 @@ test('English UI consistently names the feature fact check while internal locali
   assert.equal(ui.t('common.verification','en'),'Fact check');
   assert.equal(ui.t('status.verifying','en'),'Fact-checking…');
   assert.equal(ui.t('status.verificationQueued','en'),'Fact check queued');
-  assert.equal(ui.t('status.inline','en'),'Explaining and fact-checking…');
+  assert.equal(ui.t('status.inline','en'),'Fact-checking…');
+  assert.equal(ui.t('status.explaining','en'),'Fact-checking…');
   assert.equal(ui.t('status.unverified','en'),'Not fact-checked');
   assert.equal(ui.t('options.verification','en'),'Fact check');
   assert.equal(ui.t('options.verifyPrompt','en'),'Fact-check prompt');
-  assert.match(ui.t('options.background','en'),/fact-check/);
-  assert.match(ui.t('options.inline','en'),/fact-check/);
-  assert.match(ui.t('options.verificationHelp','en'),/Background fact-checking/);
+  assert.equal(ui.t('options.explanationMode','en'),'Fact-check style');
+  assert.match(ui.t('options.verificationHelp','en'),/Fact checks read the full linked post/);
+  for (const key of ['options.background','options.inline','options.off','options.explainPrompt']) assert.equal(ui.catalog.en[key],undefined);
   for (const [key,value] of Object.entries(ui.catalog.en)) {
     assert.doesNotMatch(value,/\b(?:verify|verifies|verified|verifying|verification|unverified)\b/i,`${key}: English UI should use fact check`);
   }
@@ -24,11 +25,11 @@ test('English UI consistently names the feature fact check while internal locali
   assert.equal(ui.t('options.verifyPrompt','zh-CN'),'事实求证');
 });
 
-test('incomplete verification describes the unfinished fact check and current retained explanation', () => {
+test('incomplete verification describes the unfinished fact check without claiming an explanation was retained', () => {
   assert.equal(ui.t('status.incomplete','en'),'Fact check incomplete');
-  assert.equal(ui.t('note.preserved','en'),'Explanation retained.');
+  assert.equal(ui.t('note.preserved','en'),'Partial result retained.');
   assert.equal(ui.t('status.incomplete','zh-CN'),'求证未完成');
-  assert.equal(ui.t('note.preserved','zh-CN'),'本条解释已保留。');
+  assert.equal(ui.t('note.preserved','zh-CN'),'已保留部分结果。');
   assert.equal(ui.t('verification.outputLimit','en'),'Response reached its output limit.');
   assert.equal(ui.t('verification.languageMismatch','en'),'Fact-check output did not match the requested language.');
   assert.equal(ui.t('verification.unknown','en'),'The service did not return a specific failure reason.');
@@ -36,6 +37,20 @@ test('incomplete verification describes the unfinished fact check and current re
   assert.equal(ui.t('verification.timeout','zh-CN'),'求证请求超时。');
   assert.doesNotMatch(ui.t('status.incomplete','en'),/Partial answer/);
   assert.doesNotMatch(ui.t('note.preserved','en'),/previous/i);
+});
+
+test('all locales describe a single fact-check task and independent comment generation', () => {
+  const keys=['options.providerAPI','options.verificationHelp','options.explanationMode','options.presetModeHelp','options.customModeHelp','popup.apiHint','comments.placeholder','comments.pending'];
+  for(const language of ui.SUPPORTED_LANGUAGES) {
+    for(const key of keys) {
+      assert.ok(ui.catalog[language][key]?.trim(),`${language}: ${key}`);
+      if(language!=='en')assert.notEqual(ui.catalog[language][key],ui.catalog.en[key],`${language}: ${key} should be localized`);
+    }
+    assert.equal(ui.t('status.explaining',language),ui.t('status.verifying',language));
+    assert.equal(ui.t('status.inline',language),ui.t('status.verifying',language));
+  }
+  assert.doesNotMatch(keys.map(key=>ui.t(key,'en')).join(' '),/explain|second request|background fact-check/i);
+  assert.doesNotMatch(keys.map(key=>ui.t(key,'zh-CN')).join(' '),/解释|第二次请求|后台求证/);
 });
 
 test('all supported X UI languages supply distinct, concise verification failure reasons', () => {

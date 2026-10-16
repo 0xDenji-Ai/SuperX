@@ -5,7 +5,7 @@
   const listeners = [];
   const runtimeListeners = [];
   const state = {
-    settings: XGrokCore.normalizeSettings({...XGrokCore.DEFAULT_SETTINGS,apiConcurrency:Number(query.get('count')) || 4,interfaceLanguage:query.get('interface') || 'auto',language:query.get('answer') || 'auto'}),
+    settings: XGrokCore.normalizeSettings({...XGrokCore.DEFAULT_SETTINGS,apiVerification:'only',apiConcurrency:Number(query.get('count')) || 4,interfaceLanguage:query.get('interface') || 'auto',language:query.get('answer') || 'auto'}),
     uiLanguage: GrokFirstUI.normalizeLanguage(query.get('lang') || 'en'),
   };
   const receipt = document.createElement('output');
@@ -16,7 +16,7 @@
     .filter(key => Object.hasOwn(state,key)).map(key => [key,state[key]]));
   window.chrome = {
     runtime: {
-      getManifest: () => ({version:'0.7.26-preview'}),
+      getManifest: () => ({version:'0.8.0-preview'}),
       onMessage: {addListener: fn => runtimeListeners.push(fn)},
       async sendMessage(message) {
         if (message.type === 'GET_UI_LANGUAGE') return {ok:true,language:state.uiLanguage};

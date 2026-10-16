@@ -2,6 +2,14 @@
 
 SuperX release history. The extension's `manifest.json` is the authoritative installed version. Test counts below describe those releases' recorded checks, not live provider or browser-store certification.
 
+## 0.8.0 — Fact Check only (unreleased candidate)
+
+- Temporarily remove the explanation stage and its Settings controls. Run a single streamed Fact Check directly for each visible post, using its original URL and enabled search tools. Older generation-flow preferences no longer start an explanation or second request.
+- Make built-in and fixed application instructions ask for concise findings, supporting or conflicting evidence and sources, without repeating the post, adding a summary or reproducing its full claims list. Identify a disputed claim only as briefly as necessary; state briefly when there is no checkable factual claim.
+- Keep editable fact-check and comment prompts, independent answer/interface languages, translation following, comment drafts, Token/model details, encrypted Key storage and local browsing history. Existing saved answers, including earlier explanations, remain readable under normal history retention.
+- Update isolated demos to show one Fact Check stream, including its waiting and incomplete-result states. Removing the separate explanation avoids an extra generation request; retrieval time, model latency and factual accuracy still depend on the provider and evidence.
+- This is a local candidate awaiting installed-extension acceptance. The published Chrome Web Store and GitHub stable version remains 0.7.26; no 0.8.0 release or store update is implied.
+
 ## 0.7.26 — Public release preparation
 
 - Connect project, website, Preview downloads and support destinations, and refresh installation and privacy documentation for the current password-free setup and local browsing history.

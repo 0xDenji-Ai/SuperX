@@ -1,6 +1,6 @@
 # Privacy and data handling
 
-This document describes SuperX's current data flow. It applies to the xAI API mode, not the removed X built-in Grok mode. Last updated: 2026-10-07.
+This document describes SuperX 0.8.0's Fact Check data flow. It applies to the xAI API mode, not the removed X built-in Grok mode. Last updated: 2026-10-16. The currently published 0.7.26 stable release retains its earlier explanation-then-check flow.
 
 ## Setup and control
 
@@ -13,8 +13,8 @@ When analysis is enabled, the Key is available and a visible post enters the que
 - The canonical original post URL and post ID.
 - The author's currently displayed post text, its language mark, author label and timestamp.
 - Media presence and up to four eligible X-hosted image URLs with their accessible descriptions, plus available quoted-post context. A URL or thumbnail is not a promise that the model inspected the media.
-- Your selected model, answer language, search settings, generation flow and effective task instructions, including custom prompts if selected.
-- The earlier explanation for a background fact check, or the existing analysis for a comment-drafting request.
+- Your selected model, answer language, search settings and effective fact-check instructions, including custom prompts if selected.
+- The existing Fact Check for an optional comment-drafting request. Fact Check itself uses one generation request and does not receive an earlier explanation.
 
 The API Key is sent as the request's authentication credential. Search-enabled requests ask xAI's tools to retrieve the original post and relevant evidence; provider tools may retrieve further posts, pages or media. SuperX does not independently preload every complete post or video.
 
@@ -26,7 +26,7 @@ Direct-message and standalone Grok pages are excluded from analysis and history 
 
 The project does not operate an API relay, analytics service or telemetry endpoint. That does not mean no data leaves your device: analysis and comment requests go to xAI, whose handling is governed by its own terms, policies and account configuration.
 
-SuperX's use and transfer of user data adheres to the Chrome Web Store User Data Policy, including its Limited Use requirements. Post content and related browsing activity are used only for the described explanation, factual-claim analysis, reply-drafting and on-device recent-history features and necessary caches; they are not used for advertising, data sales, credit decisions or unrelated profiling.
+SuperX's use and transfer of user data adheres to the Chrome Web Store User Data Policy, including its Limited Use requirements. Post content and related browsing activity are used only for factual-claim analysis, reply-drafting and on-device recent-history features and necessary caches; they are not used for advertising, data sales, credit decisions or unrelated profiling.
 
 Requests set `store: false` in the xAI Responses payload. This describes the extension's request option; **it is not a guarantee that xAI retains no request data, logs or tool inputs**. Review the provider's current policies for your account before using non-public or sensitive material.
 

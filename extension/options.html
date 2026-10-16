@@ -40,7 +40,7 @@
         <section class="settings-section" aria-labelledby="source-heading">
           <div class="section-heading">
             <h2 id="source-heading" data-i18n="options.source">Answer source</h2>
-            <p class="section-description" data-i18n="options.providerAPI">xAI API · Parallel explanations</p>
+            <p class="section-description" data-i18n="options.providerAPI">xAI API · Parallel fact checks</p>
           </div>
           <label class="switch-label"><span data-i18n="options.enable">Enable</span><input id="enabled" type="checkbox" role="switch"><span class="switch-track" aria-hidden="true"></span></label>
           <div id="api-fields">
@@ -68,16 +68,8 @@
                 <label for="api-concurrency" data-i18n="options.concurrency">Maximum concurrent API requests</label>
                 <input id="api-concurrency" type="number" min="1" max="8" step="1" required>
               </div>
-              <div id="api-verification-field" class="field">
-                <label for="api-verification" data-i18n="options.verification">Fact check</label>
-                <select id="api-verification">
-                  <option value="background" data-i18n="options.background">Explain first, then fact-check in background</option>
-                  <option value="inline" data-i18n="options.inline">Explain and fact-check together</option>
-                  <option value="off" data-i18n="options.off">Explanation only, no live fact check</option>
-                </select>
-              </div>
             </div>
-            <p id="api-verification-help" class="help" data-i18n="options.verificationHelp">Background fact-checking adds a second request. Searching may use multiple tool calls.</p>
+            <p class="help" data-i18n="options.verificationHelp">Fact checks read the full linked post. Search tool calls may add cost.</p>
             <div class="checkbox-row">
               <label class="checkbox-label"><input id="web-search" type="checkbox"><span data-i18n="options.webSearch">Search web sources</span></label>
               <label class="checkbox-label"><input id="x-search" type="checkbox"><span data-i18n="options.xSearch">Search X posts</span></label>
@@ -107,23 +99,16 @@
             <button id="reset-prompts" class="secondary-button" type="button" data-i18n="options.restorePrompts">Restore all defaults</button>
           </div>
           <div id="explanation-mode-field" class="field mode-field">
-            <label for="explanation-mode" data-i18n="options.explanationMode">Explanation style</label>
+            <label for="explanation-mode" data-i18n="options.explanationMode">Fact-check style</label>
             <select id="explanation-mode" aria-describedby="explanation-mode-help">
               <option value="preset" data-i18n="options.presetMode">SuperX built-in prompts</option>
               <option value="custom" data-i18n="options.customMode">Custom prompts</option>
             </select>
             <p id="explanation-mode-help" class="help"></p>
           </div>
-          <p class="prompt-description" data-i18n="options.promptsHelp" data-i18n-vars='{"limit":12000}'>Edit the task instructions for explanations, fact checks and comments. Save applies to new requests; use Reanalyze to update an existing result. Each field allows up to 12000 characters; leave it blank to use the default.</p>
+          <p class="prompt-description" data-i18n="options.promptsHelp" data-i18n-vars='{"limit":12000}'>Edit the task instructions for fact checks and comments. Save applies to new requests; use Reanalyze to update an existing result. Each field allows up to 12000 characters; leave it blank to use the default.</p>
           <p id="prompt-rules-help" class="help" data-i18n="options.promptFixedRules">Answer language, search availability, untrusted post data and the three-comment output format are applied automatically.</p>
           <div id="analysis-prompts">
-            <div id="explain-prompt-field" class="field prompt-field">
-              <div class="prompt-label">
-                <label for="explain-prompt" data-i18n="options.explainPrompt">Post explanation</label>
-                <button id="reset-explain-prompt" class="text-button" type="button" data-i18n="options.restorePrompt">Restore default</button>
-              </div>
-              <textarea id="explain-prompt" rows="4" maxlength="12000" spellcheck="false" dir="auto" aria-describedby="prompt-rules-help"></textarea>
-            </div>
             <div class="field prompt-field">
               <div class="prompt-label">
                 <label for="verify-prompt" data-i18n="options.verifyPrompt">Fact-check prompt</label>

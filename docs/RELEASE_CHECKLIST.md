@@ -2,6 +2,17 @@
 
 This checklist separates reproducible checks from manual browser and service checks. A passing mock test suite is not evidence that a particular X account, browser installation, or paid API request works.
 
+## 0.8.0 local candidate — Fact Check only
+
+- [x] Remove live explanation generation and the explanation/settings flow selector; each automatic task makes one streamed Fact Check request.
+- [x] Apply concise, non-repetitive fact-check instructions in built-in and custom modes; keep the original URL and full-post retrieval as context.
+- [x] Migrate retired flow settings to Fact Check only, preserve saved credentials and valid custom drafts, and partition new answers from 0.7.26 explanation-plus-check caches.
+- [x] Keep existing browsing history readable, including older answers. Preserve comment drafts, independent language choices and Token/model details.
+- [ ] Confirm the installed 0.8.0 candidate on real X posts: no explanation step, useful concise findings rather than a post recap, Auto original/translation following, custom prompts, comments and Key restoration.
+- [ ] Explicitly publish a new GitHub Preview after candidate acceptance; keep the existing 0.7.26 Stable tag and attachments unchanged. Store submission and Stable promotion remain separate.
+
+The 0.8.0 source and local package are candidates. The published Chrome Web Store and GitHub Stable/Latest remain 0.7.26 until a later release is deliberately published and accepted.
+
 ## Before the first GitHub Preview
 
 - [x] Review and publish the first public Git commit: no credentials, browser profiles, private screenshots, workstation paths, temporary SDKs or unrelated production files. The independently maintained website and internal store-preparation files are excluded. The `v0.7.26` release contains 76 public source files.

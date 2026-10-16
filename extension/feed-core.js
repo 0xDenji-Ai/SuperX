@@ -24,8 +24,7 @@
 
   const MAX_PROMPT_LENGTH = 12000;
   const DEFAULT_PROMPTS = Object.freeze({
-    explain: 'Explain what is interesting, confusing or missing in this post, adding only context that helps the reader understand it. Start directly with the useful explanation and keep it concise. Let the post determine the form; avoid a generic post-summary, classification checklist or disclaimer section.',
-    verify: 'Check the specific claims that matter for understanding this post and add only useful findings or corrections. Keep the update concise, cite evidence beside the relevant finding, and place any necessary caveat beside its claim. Do not repeat the earlier explanation or add a stock fact-check or disclaimer section. The earlier explanation may be wrong; correct it when the evidence warrants.',
+    verify: 'Fact-check the important, checkable claims in this post. Start directly with useful findings: what the evidence supports, contradicts or leaves unresolved, with corrections and clickable primary sources beside the relevant finding. Add only information the reader cannot already see in the post. Do not summarize, paraphrase, translate or repeat the original post; use at most a minimal identifying claim fragment when needed to make a correction clear. Keep the response concise and let the evidence determine its natural form, without a stock introduction, rigid checklist or generic disclaimer. If there is no meaningful checkable claim, say so briefly instead of manufacturing a fact check.',
     comments: 'Draft exactly three distinct optional comments responding to the original X post. Each comment must be one concise natural sentence with a different useful angle. Offer natural and relevant perspectives suitable for the user to review and copy.'
   });
   function normalizePrompt(value, fallback) {
@@ -44,11 +43,10 @@
     interfaceLanguage: 'auto',
     apiModel: 'grok-4.3',
     apiConcurrency: 4,
-    apiVerification: 'background',
+    apiVerification: 'only',
     webSearch: true,
     xSearch: true,
     explanationMode: 'preset',
-    explainPrompt: DEFAULT_PROMPTS.explain,
     verifyPrompt: DEFAULT_PROMPTS.verify,
     commentsPrompt: DEFAULT_PROMPTS.comments
   });
@@ -128,11 +126,14 @@
       interfaceLanguage: LANGUAGES.find(item => item.value.toLowerCase() === interfaceLanguage)?.value || DEFAULT_SETTINGS.interfaceLanguage,
       apiModel: /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(model) ? model : DEFAULT_SETTINGS.apiModel,
       apiConcurrency: boundedNumber(value.apiConcurrency, DEFAULT_SETTINGS.apiConcurrency, 1, 8),
-      apiVerification: ['background', 'inline', 'off'].includes(value.apiVerification) ? value.apiVerification : DEFAULT_SETTINGS.apiVerification,
+      // Legacy explanation/combined/off choices all become one fact-check task.
+      apiVerification: 'only',
       webSearch: typeof value.webSearch === 'boolean' ? value.webSearch : DEFAULT_SETTINGS.webSearch,
       xSearch: typeof value.xSearch === 'boolean' ? value.xSearch : DEFAULT_SETTINGS.xSearch,
       explanationMode: explanationMode(value),
-      explainPrompt: normalizePrompt(value.explainPrompt, DEFAULT_PROMPTS.explain),
+      // A temporarily retired editor must not erase a user's existing draft.
+      // This dormant field has no default and is never used by live requests.
+      ...(typeof value.explainPrompt === 'string' && value.explainPrompt.trim() && value.explainPrompt.length <= MAX_PROMPT_LENGTH ? {explainPrompt: value.explainPrompt} : {}),
       verifyPrompt: normalizePrompt(value.verifyPrompt, DEFAULT_PROMPTS.verify),
       commentsPrompt: normalizePrompt(value.commentsPrompt, DEFAULT_PROMPTS.comments)
     };

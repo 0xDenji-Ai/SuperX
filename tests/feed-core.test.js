@@ -370,16 +370,16 @@ test('native parent identity tolerates preview hydration but distinguishes edits
   assert.notEqual(core.nativePostIdentity(post),core.nativePostIdentity({...post,id:'999',url:'https://x.com/person/status/999'}));
 });
 
-test('API defaults use bounded parallelism and early explanation while preserving explicit model choices',()=>{
+test('API defaults use bounded parallelism and only Fact Check while preserving explicit model choices',()=>{
   const settings=core.normalizeSettings({});
   assert.equal(settings.provider,'api');assert.equal(settings.apiModel,'grok-4.3');
-  assert.equal(settings.apiConcurrency,4);assert.equal(settings.apiVerification,'background');
+  assert.equal(settings.apiConcurrency,4);assert.equal(settings.apiVerification,'only');
   assert.equal(settings.dwellMs,0);assert.equal(settings.cooldownMs,0);assert.equal(settings.maxPerSession,0);
   assert.equal(core.normalizeSettings({provider:'native'}).provider,'api');
   assert.equal(core.normalizeSettings({apiModel:'grok-4.7'}).apiModel,'grok-4.7');
   assert.equal(core.normalizeSettings({apiConcurrency:999,apiVerification:'made-up'}).apiConcurrency,8);
   assert.equal(core.normalizeSettings({apiConcurrency:0,apiVerification:'off'}).apiConcurrency,1);
-  assert.equal(core.normalizeSettings({apiVerification:'off'}).apiVerification,'off');
+  assert.equal(core.normalizeSettings({apiVerification:'off'}).apiVerification,'only');
 });
 
 test('default and explicit infinite queues retain every visible post beyond the old capacity', () => {
@@ -437,7 +437,7 @@ test('UI locale follows interface language variants with safe English fallback',
     assert.equal(ui.normalizeLanguage(input),expected,String(input));
   }
   assert.equal(ui.t('common.retry','en'),'Reanalyze');
-  assert.equal(ui.t('status.analyzing','en'),'Analyzing Post...');
+  assert.equal(ui.t('status.analyzing','en'),'Fact-checking…');
   assert.equal(ui.t('status.thinking','zh-CN'),'正在思考你的请求');
   assert.equal(ui.t('common.generateComments','en'),'Generate one-line comments');
   assert.equal(ui.t('common.comments','zh-CN'),'评论建议');
@@ -757,7 +757,7 @@ test('interface language preview retains all drafts and Auto uses the latest obs
   const fixture=uiPageFixture('options',core.normalizeSettings({language:'ja',explanationMode:'custom'}));
   await settleUI();await settleUI();
   fixture.ids.get('api-key').value='unsaved-fixture-key';fixture.ids.get('api-key').listeners.input();
-  fixture.ids.get('explain-prompt').value='Keep this explanation draft.';
+  fixture.ids.get('verify-prompt').value='Keep this explanation draft.';
   const choice=fixture.ids.get('interface-language');choice.value='zh-CN';choice.listeners.change();
   assert.equal(fixture.document.documentElement.lang,'zh-CN');
   assert.equal(fixture.ids.get('status').textContent,ui.t('options.unsavedChanges','zh-CN'));
@@ -768,7 +768,7 @@ test('interface language preview retains all drafts and Auto uses the latest obs
   assert.equal(fixture.document.documentElement.dir,'rtl');
   assert.equal(fixture.ids.get('api-key').value,'unsaved-fixture-key');
   assert.equal(fixture.ids.get('language').value,'ja');
-  assert.equal(fixture.ids.get('explain-prompt').value,'Keep this explanation draft.');
+  assert.equal(fixture.ids.get('verify-prompt').value,'Keep this explanation draft.');
   assert.deepEqual(uiMessageTypes(fixture),['GET_UI_LANGUAGE']);
 });
 
@@ -790,14 +790,14 @@ test('open Settings and popup apply saved interface choices without replacing Se
   for(const file of ['options','popup']) {
     const fixture=uiPageFixture(file,core.normalizeSettings({language:'ja'}));
     await settleUI();await settleUI();
-    if(file==='options')fixture.ids.get('explain-prompt').value='Keep my unsaved draft';
+    if(file==='options')fixture.ids.get('verify-prompt').value='Keep my unsaved draft';
     const next=core.normalizeSettings({language:'ja',interfaceLanguage:'zh-CN'});
     fixture.storageListeners.forEach(listener=>listener({settings:{newValue:next}},'local'));
     assert.equal(fixture.document.documentElement.lang,'zh-CN',file);
     if(file==='options') {
       assert.equal(fixture.ids.get('interface-language').value,'zh-CN');
       assert.equal(fixture.ids.get('language').value,'ja');
-      assert.equal(fixture.ids.get('explain-prompt').value,'Keep my unsaved draft');
+      assert.equal(fixture.ids.get('verify-prompt').value,'Keep my unsaved draft');
     }
   }
 });
@@ -822,7 +822,6 @@ test('live options locale changes preserve drafts and never save settings or sen
   fixture.ids.get('api-concurrency').value=7;
   fixture.ids.get('explanation-mode').value='custom';fixture.ids.get('explanation-mode').listeners.change();
   fixture.ids.get('language').value='ko';
-  fixture.ids.get('explain-prompt').value='  Explain only the unfamiliar references.\nDo not change this draft.  ';
   fixture.ids.get('verify-prompt').value='核实最重要的一条事实。';
   fixture.ids.get('comments-prompt').value='Give three friendly replies.';
   fixture.runtimeListeners.forEach(listener=>listener({type:'UI_LANGUAGE_CHANGED',language:'ja-JP'}));
@@ -837,7 +836,6 @@ test('live options locale changes preserve drafts and never save settings or sen
   assert.equal(fixture.ids.get('analysis-prompts').hidden,false);
   assert.equal(fixture.ids.get('explanation-mode-help').textContent,ui.t('options.customModeHelp','ar'));
   assert.equal(fixture.ids.get('language').value,'ko');
-  assert.equal(fixture.ids.get('explain-prompt').value,'  Explain only the unfamiliar references.\nDo not change this draft.  ');
   assert.equal(fixture.ids.get('verify-prompt').value,'核实最重要的一条事实。');
   assert.equal(fixture.ids.get('comments-prompt').value,'Give three friendly replies.');
   assert.deepEqual(uiMessageTypes(fixture),['GET_UI_LANGUAGE']);
@@ -959,97 +957,72 @@ test('Key storage preferences and credentials cannot become normalized feed sett
   assert.equal(JSON.stringify(settings).includes('fixture-only-secret'),false);
 });
 
-test('options prompt editors load the active instructions with accessible labels and bounded input', async () => {
+test('options expose only Fact Check and comments editors with accessible labels and bounded input',async()=>{
   const fixture=uiPageFixture('options');await settleUI();await settleUI();
-  for(const name of ['explain','verify','comments']) {
+  for(const name of ['verify','comments']){
     const editor=fixture.ids.get(`${name}-prompt`);
-    assert.equal(editor.value,core.DEFAULT_PROMPTS[name]);
-    assert.equal(editor.getAttribute('maxlength'),String(core.MAX_PROMPT_LENGTH));
-    assert.equal(editor.getAttribute('spellcheck'),'false');
-    assert.equal(editor.getAttribute('dir'),'auto');
-    assert.equal(editor.getAttribute('aria-describedby'),'prompt-rules-help');
+    assert.equal(editor.value,core.DEFAULT_PROMPTS[name]);assert.equal(editor.getAttribute('maxlength'),String(core.MAX_PROMPT_LENGTH));
+    assert.equal(editor.getAttribute('spellcheck'),'false');assert.equal(editor.getAttribute('dir'),'auto');assert.equal(editor.getAttribute('aria-describedby'),'prompt-rules-help');
   }
-  assert.equal(fixture.ids.has('provider'),false);
+  for(const id of ['provider','explain-prompt','reset-explain-prompt','api-verification'])assert.equal(fixture.ids.has(id),false,id);
   assert.ok(!fixture.ids.get('api-fields').hidden);
   fixture.ids.get('explanation-mode').value='custom';fixture.ids.get('explanation-mode').listeners.change();
-  assert.equal(fixture.ids.get('analysis-prompts').hidden,false,'Custom prompt editors remain available for API tasks');
+  assert.equal(fixture.ids.get('analysis-prompts').hidden,false);
   assert.deepEqual(uiMessageTypes(fixture),['GET_UI_LANGUAGE']);
 });
 
-test('options save and reload custom prompts without stripping whitespace or extra model requests', async () => {
+test('options save and reload custom Fact Check and comments without stripping whitespace or extra requests',async()=>{
   const fixture=uiPageFixture('options');await settleUI();await settleUI();
   fixture.ids.get('explanation-mode').value='custom';fixture.ids.get('explanation-mode').listeners.change();
-  const drafts={
-    explain:'  Explain the background first.\nUse a short example.  ',
-    verify:'只核实原帖中可验证的断言。\n保留来源。\n',
-    comments:'\nOffer three distinct, natural replies. 🙂\n',
-  };
-  for(const [name,value] of Object.entries(drafts))fixture.ids.get(`${name}-prompt`).value=value;
-  const form=fixture.ids.get('settings-form');
-  await form.listeners.submit({preventDefault(){},currentTarget:form});
-  const saved=fixture.messages.find(message=>message.type==='SAVE_SETTINGS');
-  assert.ok(saved);
-  assert.equal(saved.settings.explanationMode,'custom');
-  for(const [name,value] of Object.entries(drafts))assert.equal(saved.settings[`${name}Prompt`],value);
+  const drafts={verify:'只核实原帖中可验证的断言。\n保留来源。\n',comments:'\nOffer three distinct, natural replies. 🙂\n'};
+  for(const [name,value]of Object.entries(drafts))fixture.ids.get(`${name}-prompt`).value=value;
+  const form=fixture.ids.get('settings-form');await form.listeners.submit({preventDefault(){},currentTarget:form});
+  const saved=fixture.messages.find(message=>message.type==='SAVE_SETTINGS');assert.ok(saved);assert.equal(saved.settings.explanationMode,'custom');assert.equal(saved.settings.apiVerification,'only');
+  for(const [name,value]of Object.entries(drafts))assert.equal(saved.settings[`${name}Prompt`],value);
   assert.deepEqual(uiMessageTypes(fixture),['GET_UI_LANGUAGE','SAVE_SETTINGS']);
   const reopened=uiPageFixture('options',saved.settings);await settleUI();await settleUI();
-  assert.equal(reopened.ids.get('explanation-mode').value,'custom');
-  assert.equal(reopened.ids.get('analysis-prompts').hidden,false);
-  for(const [name,value] of Object.entries(drafts))assert.equal(reopened.ids.get(`${name}-prompt`).value,value);
+  assert.equal(reopened.ids.get('explanation-mode').value,'custom');assert.equal(reopened.ids.get('analysis-prompts').hidden,false);
+  for(const [name,value]of Object.entries(drafts))assert.equal(reopened.ids.get(`${name}-prompt`).value,value);
 });
 
-test('restoring one or all prompts edits the form only and requires Save to apply', async () => {
-  const fixture=uiPageFixture('options',core.normalizeSettings({explanationMode:'custom',explainPrompt:'Explain draft',verifyPrompt:'Verify draft',commentsPrompt:'Comments draft'}));
-  await settleUI();await settleUI();
+test('restoring Fact Check or all active prompts edits the form only and leaves the dormant legacy draft unchanged',async()=>{
+  const settings=core.normalizeSettings({explanationMode:'custom',explainPrompt:'Dormant explanation draft',verifyPrompt:'Verify draft',commentsPrompt:'Comments draft'});
+  const fixture=uiPageFixture('options',settings);await settleUI();await settleUI();
   fixture.ids.get('reset-verify-prompt').listeners.click();
-  assert.equal(fixture.ids.get('verify-prompt').value,core.DEFAULT_PROMPTS.verify);
-  assert.equal(fixture.ids.get('explain-prompt').value,'Explain draft');
-  assert.equal(fixture.ids.get('comments-prompt').value,'Comments draft');
-  assert.equal(fixture.ids.get('status').textContent,ui.t('options.promptsReset','en'));
-  assert.deepEqual(uiMessageTypes(fixture),['GET_UI_LANGUAGE']);
-  fixture.ids.get('reset-prompts').listeners.click();
-  assert.equal(fixture.ids.get('explanation-mode').value,'custom','Restoring defaults only edits prompt fields, keeping the selected mode');
-  for(const name of ['explain','verify','comments'])assert.equal(fixture.ids.get(`${name}-prompt`).value,core.DEFAULT_PROMPTS[name]);
+  assert.equal(fixture.ids.get('verify-prompt').value,core.DEFAULT_PROMPTS.verify);assert.equal(fixture.ids.get('comments-prompt').value,'Comments draft');
+  assert.equal(fixture.ids.get('status').textContent,ui.t('options.promptsReset','en'));assert.deepEqual(uiMessageTypes(fixture),['GET_UI_LANGUAGE']);
+  fixture.ids.get('reset-prompts').listeners.click();assert.equal(fixture.ids.get('explanation-mode').value,'custom');
+  for(const name of ['verify','comments'])assert.equal(fixture.ids.get(`${name}-prompt`).value,core.DEFAULT_PROMPTS[name]);
   assert.deepEqual(uiMessageTypes(fixture),['GET_UI_LANGUAGE']);
   const form=fixture.ids.get('settings-form');await form.listeners.submit({preventDefault(){},currentTarget:form});
   const saved=fixture.messages.find(message=>message.type==='SAVE_SETTINGS');
-  for(const name of ['explain','verify','comments'])assert.equal(saved.settings[`${name}Prompt`],core.DEFAULT_PROMPTS[name]);
+  for(const name of ['verify','comments'])assert.equal(saved.settings[`${name}Prompt`],core.DEFAULT_PROMPTS[name]);
+  assert.equal(saved.settings.explainPrompt,'Dormant explanation draft');assert.equal(saved.settings.apiVerification,'only');
 });
 
-test('preset and custom switches preserve all drafts and verification choices', async () => {
-  const fixture=uiPageFixture('options',core.normalizeSettings({explanationMode:'custom',apiVerification:'inline',nativeVerification:true}));
-  await settleUI();await settleUI();
-  const drafts={explain:'  Context only.\nKeep this draft.  ',verify:'Verify draft',comments:'Three short replies.'};
-  for(const [name,value] of Object.entries(drafts))fixture.ids.get(`${name}-prompt`).value=value;
-  for(const mode of ['preset','custom']) {
+test('preset and custom Fact Check switches preserve active drafts without exposing retired explanation choices',async()=>{
+  const fixture=uiPageFixture('options',core.normalizeSettings({explanationMode:'custom',apiVerification:'inline',nativeVerification:true}));await settleUI();await settleUI();
+  const drafts={verify:'Verify draft',comments:'Three short replies.'};
+  for(const [name,value]of Object.entries(drafts))fixture.ids.get(`${name}-prompt`).value=value;
+  for(const mode of ['preset','custom']){
     fixture.ids.get('explanation-mode').value=mode;fixture.ids.get('explanation-mode').listeners.change();
-    assert.equal(fixture.ids.get('analysis-prompts').hidden,mode!=='custom');
-    assert.ok(!fixture.ids.get('api-verification-field').hidden);
-    assert.ok(!fixture.ids.get('api-verification-help').hidden);
-    assert.equal(fixture.ids.get('api-verification').value,'inline');
+    assert.equal(fixture.ids.get('analysis-prompts').hidden,mode!=='custom');assert.equal(fixture.ids.has('api-verification'),false);
     assert.equal(fixture.ids.get('explanation-mode-help').textContent,ui.t(`options.${mode}ModeHelp`,'en'));
-    for(const [name,value] of Object.entries(drafts))assert.equal(fixture.ids.get(`${name}-prompt`).value,value);
+    for(const [name,value]of Object.entries(drafts))assert.equal(fixture.ids.get(`${name}-prompt`).value,value);
     assert.ok(!fixture.ids.get('comments-prompt').hidden);
   }
   assert.deepEqual(uiMessageTypes(fixture),['GET_UI_LANGUAGE']);
 });
 
-test('saving preset mode retains custom drafts for the next mode switch', async () => {
-  for(const mode of ['preset']) {
-    const fixture=uiPageFixture('options',core.normalizeSettings({explanationMode:'custom',explainPrompt:'My explain instructions',verifyPrompt:'My verify instructions',commentsPrompt:'My comments instructions'}));
-    await settleUI();await settleUI();
-    fixture.ids.get('explanation-mode').value=mode;fixture.ids.get('explanation-mode').listeners.change();
-    const form=fixture.ids.get('settings-form');await form.listeners.submit({preventDefault(){},currentTarget:form});
-    const saved=fixture.messages.find(message=>message.type==='SAVE_SETTINGS');
-    assert.equal(saved.settings.explanationMode,mode);
-    assert.equal(saved.settings.explainPrompt,'My explain instructions');
-    assert.equal(saved.settings.verifyPrompt,'My verify instructions');
-    assert.equal(saved.settings.commentsPrompt,'My comments instructions');
-    const reopened=uiPageFixture('options',saved.settings);await settleUI();await settleUI();
-    reopened.ids.get('explanation-mode').value='custom';reopened.ids.get('explanation-mode').listeners.change();
-    assert.equal(reopened.ids.get('explain-prompt').value,'My explain instructions');
-    assert.equal(reopened.ids.get('verify-prompt').value,'My verify instructions');
-  }
+test('saving preset Fact Check retains custom active drafts and optional archived explanation for future use',async()=>{
+  const fixture=uiPageFixture('options',core.normalizeSettings({explanationMode:'custom',explainPrompt:'My archived explanation',verifyPrompt:'My verify instructions',commentsPrompt:'My comments instructions'}));await settleUI();await settleUI();
+  fixture.ids.get('explanation-mode').value='preset';fixture.ids.get('explanation-mode').listeners.change();
+  const form=fixture.ids.get('settings-form');await form.listeners.submit({preventDefault(){},currentTarget:form});
+  const saved=fixture.messages.find(message=>message.type==='SAVE_SETTINGS');assert.equal(saved.settings.explanationMode,'preset');
+  assert.equal(saved.settings.explainPrompt,'My archived explanation');assert.equal(saved.settings.verifyPrompt,'My verify instructions');assert.equal(saved.settings.commentsPrompt,'My comments instructions');
+  const reopened=uiPageFixture('options',saved.settings);await settleUI();await settleUI();
+  reopened.ids.get('explanation-mode').value='custom';reopened.ids.get('explanation-mode').listeners.change();
+  assert.equal(reopened.ids.get('verify-prompt').value,'My verify instructions');assert.equal(reopened.ids.has('explain-prompt'),false);
 });
 
 test('every API mode requires a full-post retrieval tool before saving and accepts either search', async () => {
@@ -1074,7 +1047,7 @@ test('retired URL selection loads preset and restoring defaults keeps preset sel
   await settleUI();await settleUI();fixture.ids.get('reset-prompts').listeners.click();
   assert.equal(fixture.ids.get('explanation-mode').value,'preset');
   assert.equal(fixture.ids.get('analysis-prompts').hidden,true);
-  assert.equal(fixture.ids.get('explain-prompt').value,core.DEFAULT_PROMPTS.explain);
+  assert.equal(fixture.ids.get('verify-prompt').value,core.DEFAULT_PROMPTS.verify);
   assert.deepEqual(uiMessageTypes(fixture),['GET_UI_LANGUAGE']);
 });
 
@@ -1310,7 +1283,7 @@ test('local encrypted Key changes update untouched input while preserving edited
       {local:{apiKeyEncrypted:oldEnvelope,rememberApiKey:true},session:{apiKey:undefined}});
     await settleUI();await settleUI();
     fixture.ids.get('api-model').value='draft-model';fixture.ids.get('api-model').listeners.input();
-    fixture.ids.get('explain-prompt').value='Keep my prompt draft.';
+    fixture.ids.get('verify-prompt').value='Keep my prompt draft.';
     if(edited) {
       fixture.ids.get('api-key').value='replacement-c-fixture';fixture.ids.get('api-key').listeners.input();
     }
@@ -1320,12 +1293,12 @@ test('local encrypted Key changes update untouched input while preserving edited
     assert.equal(fixture.session.apiKey,'account-b-fixture');
     assert.equal(fixture.ids.get('api-key').value,edited?'replacement-c-fixture':'account-b-fixture');
     assert.equal(fixture.ids.get('api-model').value,'draft-model');
-    assert.equal(fixture.ids.get('explain-prompt').value,'Keep my prompt draft.');
+    assert.equal(fixture.ids.get('verify-prompt').value,'Keep my prompt draft.');
     assert.ok(!fixture.messages.some(message=>['SAVE_KEY','SAVE_SETTINGS'].includes(message.type)));
     const form=fixture.ids.get('settings-form');await form.listeners.submit({preventDefault(){},currentTarget:form});
     assertUIRememberedKey(fixture,edited?'replacement-c-fixture':'account-b-fixture');
     assert.equal(fixture.local.settings.apiModel,'draft-model');
-    assert.equal(fixture.local.settings.explainPrompt,'Keep my prompt draft.');
+    assert.equal(fixture.local.settings.verifyPrompt,'Keep my prompt draft.');
     assert.deepEqual(uiMessageTypes(fixture),['GET_UI_LANGUAGE',edited?'SAVE_KEY':'SAVE_SETTINGS']);
     if(!edited)assert.equal(fixture.local.apiKeyEncrypted,nextEnvelope,'Ordinary Settings saves do not rotate or replace ciphertext');
   }

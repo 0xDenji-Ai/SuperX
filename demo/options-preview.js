@@ -6,7 +6,7 @@
   const query=new URLSearchParams(location.search);
   let state;
   try {state=JSON.parse(sessionStorage.getItem('grokfirst-options-preview')||'null');} catch {state=null;}
-  state={settings:XGrokCore.normalizeSettings({...state?.settings,
+  state={settings:XGrokCore.normalizeSettings({...state?.settings,apiVerification:'only',
     ...(query.has('interface')?{interfaceLanguage:query.get('interface')}:{}),
     ...(query.has('answer')?{language:query.get('answer')}:{})}),rememberApiKey:typeof state?.rememberApiKey==='boolean'?state.rememberApiKey:true,hasSavedKey:state?.hasSavedKey===true,migration:state?.migration===true,uiLanguage:GrokFirstUI.normalizeLanguage(query.get('lang')||'zh-CN')};
   if(query.get('security')==='migration'){state.hasSavedKey=true;state.migration=true;}
@@ -38,7 +38,7 @@
   const pick=keys=>Object.fromEntries((Array.isArray(keys)?keys:[keys]).filter(key=>Object.hasOwn(state,key)).map(key=>[key,state[key]]));
   window.chrome={
     runtime:{
-      getManifest:()=>({version:'0.7.26-preview'}),reload:()=>location.reload(),
+      getManifest:()=>({version:'0.8.0-preview'}),reload:()=>location.reload(),
       onMessage:{addListener:fn=>runtimeListeners.push(fn)},
       async sendMessage(message){
         if(message.type==='GET_UI_LANGUAGE')return {ok:true,language:state.uiLanguage};

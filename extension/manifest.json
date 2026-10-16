@@ -1,9 +1,9 @@
 {
   "manifest_version": 3,
   "name": "SuperX",
-  "version": "0.7.26",
+  "version": "0.8.0",
   "homepage_url": "https://superx.vip/",
-  "description": "浏览 X 时，通过 xAI API 自动在帖子右侧展示 Grok 的解释与事实求证。",
+  "description": "浏览 X 时，通过 xAI API 自动核查帖子中的事实主张，在右栏展示简洁结论与证据。",
   "minimum_chrome_version": "120",
   "permissions": ["storage", "alarms"],
   "host_permissions": ["https://x.com/*", "https://twitter.com/*", "https://api.x.ai/*"],

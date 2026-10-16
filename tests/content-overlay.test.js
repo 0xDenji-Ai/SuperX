@@ -1226,6 +1226,40 @@ function beginVerification(page,request,card) {
   page.flush();return verificationUI(card);
 }
 
+test('fact-check-only requests stream directly into one answer with no explanation divider',()=>{
+  const page=fixture({postCount:1});page.configure({apiVerification:'only'});
+  const request=page.port.sent.find(message=>message.type==='ANALYZE'),card=page.cards()[0],progress=verificationUI(card);
+  page.port.onMessage.emit({type:'START',requestId:request.requestId});page.flush();
+  assert.equal(progress.status.textContent,ui.t('status.verifying','zh-CN'));
+  page.port.onMessage.emit({type:'UPDATE',requestId:request.requestId,phase:'verify',text:''});page.flush();
+  assert.equal(progress.wait.hidden,false);assert.equal(progress.status.classList.contains('shimmer'),true);
+  assert.equal(progress.divider,null);assert.equal(progress.answer.textContent,'');
+  const text='**The figure is outdated.** [Current evidence](https://example.com/current) gives 8.2%.';
+  page.port.onMessage.emit({type:'UPDATE',requestId:request.requestId,phase:'verify',text});page.flush();
+  assert.equal(progress.wait.hidden,true);assert.equal(progress.divider,null);
+  assert.equal(progress.explanation,null);assert.equal(progress.verification,null);
+  assert.equal(progress.answer.querySelector('strong').textContent,'The figure is outdated.');
+  page.port.onMessage.emit({type:'RESULT',requestId:request.requestId,result:{provider:'api',apiVerification:'only',text,sources:[],searched:true,verificationStatus:'completed'}});page.flush();
+  assert.equal(progress.divider,null);assert.equal(progress.status.classList.contains('shimmer'),false);
+  assert.equal(progress.box.getAttribute('aria-busy'),'false');
+  assert.equal(progress.answer.querySelectorAll('a').length,1);
+  assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,1);assert.deepEqual(page.writes,[]);
+});
+
+test('a partial single fact check shows its actual findings without a previous-answer narrative',()=>{
+  for(const type of ['RESULT','ERROR']) {
+    const page=fixture({postCount:1});page.configure({apiVerification:'only'});
+    const request=page.port.sent.find(message=>message.type==='ANALYZE'),card=page.cards()[0],progress=verificationUI(card);
+    const partial={provider:'api',apiVerification:'only',text:'The available evidence supports the date.',verificationStatus:'incomplete',verificationFailure:{stage:'verify',code:'CONNECTION'},sources:[]};
+    page.port.onMessage.emit(type==='RESULT'?{type,requestId:request.requestId,result:partial}:{type,requestId:request.requestId,code:'NETWORK_ERROR',partialResult:partial});page.flush();
+    assert.equal(progress.answer.textContent,partial.text);assert.equal(progress.divider,null);
+    assert.equal(progress.wait.hidden,true);assert.equal(progress.status.textContent,ui.t('status.incomplete','zh-CN'));
+    assert.equal(card.testShadow.querySelector('.note').textContent,'');
+    assert.equal(card.testShadow.querySelector('.retry').hidden,false);
+    assert.deepEqual(page.writes,[]);
+  }
+});
+
 test('API verification queues and waits at the answer tail, then keeps its status animated while text streams',()=>{
   const page=fixture();page.configure({explanationMode:'preset'});
   const [request,other]=page.port.sent.filter(message=>message.type==='ANALYZE');
@@ -1473,14 +1507,14 @@ test('parallel API results are independently attributed and rendering frames can
   assert.deepEqual(page.writes,[]);
 });
 
-test('rate limits retain complete early explanation and stay paused after prompt edits on new API cards',()=>{
+test('rate limits retain available fact-check findings and stay paused after prompt edits on new API cards',()=>{
   const page=fixture({postCount:3});page.articles[2].rect={...page.articles[2].rect,top:1200,bottom:1480};
   page.configure({dwellMs:120});page.intersect();page.tick();page.tick(130);
   const request=page.port.sent.find(m=>m.type==='ANALYZE');
-  page.port.onMessage.emit({type:'ERROR',requestId:request.requestId,code:'RATE_LIMIT',error:'API 已限速',partialResult:{text:'Complete early explanation',sources:[],warning:'联网求证未完成'}});page.flush();
-  assert.match(page.cards().map(c=>c.testShadow.textContent).join(''),/Complete early explanation/);
-  assert.ok(page.cards().map(c=>c.testShadow.textContent).join('').includes(ui.t('note.preserved','zh-CN')));
-  page.configure({explainPrompt:'A new explanation style for future requests'});
+  page.port.onMessage.emit({type:'ERROR',requestId:request.requestId,code:'RATE_LIMIT',error:'API 已限速',partialResult:{apiVerification:'only',text:'Available evidence supports the date.',sources:[],warning:'联网求证未完成'}});page.flush();
+  assert.match(page.cards().map(c=>c.testShadow.textContent).join(''),/Available evidence supports the date/);
+  assert.equal(page.cards()[0].testShadow.querySelector('.note').textContent,'');
+  page.configure({verifyPrompt:'A new fact-check style for future requests'});
   page.articles[2].rect={...page.articles[2].rect,top:650,bottom:930};page.tick(1000);
   assert.equal(page.port.sent.filter(m=>m.type==='ANALYZE').length,2);
   assert.ok(page.cards()[2].testShadow.textContent.includes(ui.t('status.rateLimited','zh-CN')));

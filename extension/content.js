@@ -236,6 +236,12 @@
   function status(entry,key,vars={}) {entry.statusKey=key;entry.statusVars=vars;renderStatusText(entry,key,vars);syncLoading(entry);refreshVerificationFailure(entry);}
   function note(entry,key) {entry.noteKey=key;entry.ui.note.textContent=key?t(key):'';}
   const verificationFailureKeys={OUTPUT_LIMIT:'verification.outputLimit',INCOMPLETE:'verification.incomplete',CONNECTION:'verification.connection',TIMEOUT:'verification.timeout',LANGUAGE_MISMATCH:'verification.languageMismatch',RATE_LIMIT:'verification.rateLimit',ACCESS:'verification.access',SERVER:'verification.server',UNKNOWN:'verification.unknown'};
+  function partialResultNote(result) {
+    // Older cached responses may have retained an explanation after their
+    // second stage failed. A current fact check is one response, with no
+    // previous-answer narrative to show beneath its partial output.
+    return result?.apiVerification==='only'?'':'note.preserved';
+  }
   function setVerificationFailure(entry,value,incomplete) {
     const valid=value?.stage==='verify'&&typeof value.code==='string'&&Object.hasOwn(verificationFailureKeys,value.code),code=valid?value.code:'UNKNOWN';
     const failure={stage:'verify',code};
@@ -320,6 +326,8 @@
       const nextSettings=Core.normalizeSettings(message.settings),previousOptions={...settings},nextOptions={...nextSettings};
       // Editing prompts affects new requests. Interface language only relabels
       // controls; accepted jobs and visible answers retain their task snapshot.
+      // An archived explanation draft can survive upgrades, but never changes
+      // current fact-check jobs or their visible results.
       for(const field of ['explainPrompt','verifyPrompt','commentsPrompt','interfaceLanguage']){delete previousOptions[field];delete nextOptions[field];}
       const allChanged=JSON.stringify(previousOptions)!==JSON.stringify(nextOptions);
       const presentationOrPromptsOnlyChanged=!allChanged&&JSON.stringify(settings)!==JSON.stringify(nextSettings);
@@ -403,7 +411,7 @@
       finishRequest(message);scheduleLayout();return;
     }
     if(message.type==='QUEUED'){entry.status='queued';status(entry,'status.queued');}
-    if(message.type==='START'){request.railCancellation=false;entry.status='running';used=Math.max(used,message.used||0);status(entry,'status.analyzing');}
+    if(message.type==='START'){request.railCancellation=false;entry.status='running';used=Math.max(used,message.used||0);status(entry,'status.verifying');}
     if(message.type==='UPDATE'){
       captureUsage(entry,'analysis',message,request,false);
       entry.status='running';
@@ -425,8 +433,8 @@
         if(checkText.trim())entry.verificationStarted=true;
       }
       entry.phase=request.phase=message.phase;
-      const phases={starting:'status.analyzing',explain:'status.explaining',verification_queued:'status.verificationQueued',verify:'status.verifying',inline:'status.inline'};
-      status(entry,phases[message.phase]||'status.analyzing');
+      const phases={starting:'status.verifying',explain:'status.explaining',verification_queued:'status.verificationQueued',verify:'status.verifying',inline:'status.inline'};
+      status(entry,phases[message.phase]||'status.verifying');
       if(message.text)renderAnswer(entry,message.text);
       else if(verifying&&entry.latestText)renderAnswer(entry,entry.latestText);
       if(message.sources)renderSources(entry,message.sources);
@@ -440,7 +448,7 @@
       setVerificationFailure(entry,message.result.verificationFailure,incomplete);
       const sourceKey=incomplete?'status.incomplete':message.result.searched?'status.searched':'status.unverified';
       entry.cached=Boolean(message.cached);status(entry,sourceKey);
-      note(entry,incomplete?'note.preserved':'note.possibleErrors');entry.ui.retry.hidden=false;
+      note(entry,incomplete?partialResultNote(message.result):'note.possibleErrors');entry.ui.retry.hidden=false;
       finishRequest(message);
     }
     if(message.type==='ERROR') {
@@ -449,7 +457,7 @@
       setVerificationFailure(entry,message.partialResult?.verificationFailure,Boolean(partialVerification));
       entry.status='error';entry.errorCode=message.code;status(entry,partialVerification?'status.incomplete':errorKey(message.code));note(entry,'');entry.ui.retry.hidden=false;
       if(message.code==='API_LANGUAGE_MISMATCH'){entry.cached=false;entry.result=null;renderAnswer(entry,'',true);renderSources(entry,[]);}
-      if(message.partialResult){entry.verificationStart=message.partialResult.verificationStart;renderAnswer(entry,message.partialResult.text,true);renderSources(entry,message.partialResult.sources||[]);note(entry,'note.preserved');}
+      if(message.partialResult){entry.verificationStart=message.partialResult.verificationStart;renderAnswer(entry,message.partialResult.text,true);renderSources(entry,message.partialResult.sources||[]);note(entry,partialResultNote(message.partialResult));}
       if(!partialVerification) {
         entry.ui.diagnostics.hidden=!message.diagnostics&&!message.error;
         entry.ui.diagnosticText.textContent=JSON.stringify({code:message.code,error:message.error,...message.diagnostics,...(message.usage?{usage:message.usage}:{})},null,2).slice(0,4000);

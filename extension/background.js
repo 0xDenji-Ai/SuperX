@@ -9,7 +9,7 @@ const clients = new Set();
 const jobs = new Map();
 const runningJobs = new Set();
 const apiSlots = new Set();
-let queue = [], verifyQueue = [], pumping = false, primaryBurst = 0, settings, cache = {}, quotas = {}, railStates = {}, revision = 0, cacheEpoch = 0;
+let queue = [], pumping = false, settings, cache = {}, quotas = {}, railStates = {}, revision = 0, cacheEpoch = 0;
 let ratePaused = false, uiLanguage = UI.browserLanguage(globalThis);
 let quotaWrites = Promise.resolve(), cacheWrites = Promise.resolve(), railStateWrites = Promise.resolve(), uiLanguageWrites = Promise.resolve();
 let securityWrites = Promise.resolve(), securityPending = 0, securityGeneration = 0;
@@ -132,9 +132,9 @@ function sanitizePost(raw) {
 }
 function cacheKey(post, s, inputFingerprint) {
   const mode=Core.explanationMode(s);
-  const prompts=['prompts-v1',mode==='preset'?Core.DEFAULT_PROMPTS.explain:s.explainPrompt,mode==='preset'?Core.DEFAULT_PROMPTS.verify:s.verifyPrompt];
+  const prompts=['fact-check-prompts-v1',mode==='preset'?Core.DEFAULT_PROMPTS.verify:s.verifyPrompt];
   return JSON.stringify(['GrokFirst-v1','api',s.apiModel,s.language,s.webSearch,s.xSearch,
-    'api-v7-reader-output',mode,s.apiVerification || 'background',
+    'api-v8-fact-check-only',mode,'only',
     Core.apiPostIdentity(post,s),...prompts]);
 }
 function sanitizeAnalysis(raw) {
@@ -152,9 +152,8 @@ function commentsJob(job) { return job.settings.task==='comments'; }
 function billingMetadata(value,provider) { return provider==='api'?GrokFirstAPI.sanitizedMetadata(value):{}; }
 function verificationMetadata(value,mode,text=String(value?.text||'').slice(0,30000)) {
   const start=value?.verificationStart;
-  if(mode!=='background')return {};
-  const failure=GrokFirstAPI.sanitizedVerificationFailure(value?.verificationFailure);
-  return {...(Number.isSafeInteger(start)&&start>=2&&start<=text.length&&text.slice(start-2,start)==='\n\n'?{verificationStart:start}:{}),
+  const failure=['only','background'].includes(mode)?GrokFirstAPI.sanitizedVerificationFailure(value?.verificationFailure):undefined;
+  return {...(mode==='background'&&Number.isSafeInteger(start)&&start>=2&&start<=text.length&&text.slice(start-2,start)==='\n\n'?{verificationStart:start}:{}),
     ...(failure?{verificationFailure:failure}:{})};
 }
 function withBillingMetadata(value,provider,verificationMode) {
@@ -321,40 +320,6 @@ function startAPIDeadline(job) {
     ...(stage==='verify'?{verificationFailure:{code:'TIMEOUT',stage:'verify',errorCode:'TIMEOUT'}}:{})})),150000);
 }
 function releaseAPISlot(job) { clearAPIDeadline(job);apiSlots.delete(job);job.slotHeld=false;job.slotPhase=null; }
-function scheduleVerification(job,task) {
-  releaseAPISlot(job);
-  if(!liveJob(job))return Promise.reject(job.controller.signal.reason || new DOMException('Cancelled','AbortError'));
-  if(ratePaused){pump();return Promise.reject(rateLimitError());}
-  return new Promise((resolve,reject)=>{
-    const entry={job,task,resolve,reject};
-    entry.cancel=()=>{
-      verifyQueue=verifyQueue.filter(value=>value!==entry);
-      job.controller.signal.removeEventListener('abort',entry.cancel);
-      reject(job.controller.signal.reason || new DOMException('Cancelled','AbortError'));pump();
-    };
-    job.controller.signal.addEventListener('abort',entry.cancel,{once:true});
-    verifyQueue.push(entry);pump();
-  });
-}
-async function executeVerification(entry) {
-  const {job}=entry;
-  job.controller.signal.removeEventListener('abort',entry.cancel);
-  try {
-    if(!liveJob(job))throw job.controller.signal.reason || new DOMException('Cancelled','AbortError');
-    startAPIDeadline(job);
-    const result=await waitForAbort(Promise.resolve().then(()=>{
-      if(!liveJob(job))throw job.controller.signal.reason || new DOMException('Cancelled','AbortError');
-      return entry.task();
-    }),job.controller.signal);
-    entry.resolve(result);
-  } catch(e) {
-    // Pause before freeing this HTTP slot. Otherwise a waiting explanation could
-    // start between the verify rejection and the provider attaching its partial.
-    if(e.code==='RATE_LIMIT' && liveJob(job))pauseWaitingJobs();
-    entry.reject(e);
-  }
-  finally {releaseAPISlot(job);pump();}
-}
 function pauseWaitingJobs() {
   ratePaused=true;
   for(const waiting of queue) {
@@ -362,39 +327,20 @@ function pauseWaitingJobs() {
     removeJob(waiting);
   }
   queue=[];
-  const waitingVerification=verifyQueue;verifyQueue=[];
-  for(const entry of waitingVerification) {
-    entry.job.controller.signal.removeEventListener('abort',entry.cancel);
-    // The provider attaches the completed first explanation to this error.
-    entry.reject(rateLimitError());
-  }
 }
 function pump() {
   if(pumping || !securityAllowsCalls())return;
   pumping=true;
   try {
     queue=queue.filter(job=>jobs.get(job.key)===job && !job.controller.signal.aborted && job.revision===revision && job.clientEpoch===job.client.cancelEpoch && clients.has(job.client));
-    if(!verifyQueue.length)primaryBurst=0;
-    while(queue.length || verifyQueue.length) {
-      // First text is prioritized, but a continuous feed cannot starve checks.
-      // Count only new tasks dispatched while a check is actually waiting.
-      if(!verifyQueue.length)primaryBurst=0;
-      const next=queue[0]||verifyQueue[0]?.job;
-      const limit=apiLimit(next.settings);
-      const checkRoom=limit===1||[...apiSlots].filter(value=>value.slotPhase==='verify').length<limit-1;
-      const verification=verifyQueue.length&&checkRoom&&(!queue.length||primaryBurst>=limit)?verifyQueue[0]:null;
-      const job=verification?verification.job:queue[0];
-      if(!job)break;
-      const running=apiSlots.size;
-      if(running>=limit)break;
-      // Keep one API slot ready for newly visible posts while long background
-      // checks continue. Single-slot users retain the original serial behavior.
-      if(verification && limit>1 && [...apiSlots].filter(value=>value.slotPhase==='verify').length>=limit-1)break;
-      if(verification){verifyQueue.shift();primaryBurst=0;}
-      else {if(verifyQueue.length)primaryBurst++;queue.shift();runningJobs.add(job);}
-      // Dispatch immediately when an API concurrency slot is free.
-      job.slotHeld=true;job.slotPhase=verification?'verify':commentsJob(job)?'comments':'explain';apiSlots.add(job);
-      if(verification)void executeVerification(verification);else void executeJob(job);
+    while(queue.length) {
+      const job=queue[0];
+      if(apiSlots.size>=apiLimit(job.settings))break;
+      queue.shift();runningJobs.add(job);
+      // Every post now owns one Fact Check request; all configured slots can
+      // serve visible posts instead of reserving capacity for a second stage.
+      job.slotHeld=true;job.slotPhase=commentsJob(job)?'comments':'verify';apiSlots.add(job);
+      void executeJob(job);
     }
   } finally { pumping=false; }
 }
@@ -412,12 +358,10 @@ async function executeJob(job) {
     const onUpdate=update=>{
       job.billing=billingMetadata(update,job.settings.provider);
       const text=String(update.text||'').slice(0,30000);
-      if(job.settings.apiVerification==='background'&&text.trim()&&(update.phase==='verification_queued'||update.phase==='verify'&&update.verificationText==='')) {
-        job.retainedExplanation={...sanitizeAnalysis(update),provider:'api',apiVerification:'background',verified:false,searched:update.searched===true};
-        if(liveJob(job)&&!job.historyExplanationSaved){job.historyExplanationSaved=true;rememberHistoryResult(job.historyTicket,{...job.retainedExplanation,...job.billing,verificationStatus:'incomplete',completedAt:Date.now()},false,job.historyLanguage);}
+      if(!commentsJob(job)&&text.trim()) {
+        job.retainedFactCheck={...sanitizeAnalysis(update),...job.billing,provider:'api',apiVerification:'only',verified:false,searched:update.searched===true};
       }
       if(liveJob(job)&&!commentsJob(job))send(client.port,{type:'UPDATE',requestId,text,phase:update.phase,
-        ...(job.settings.apiVerification==='background'&&typeof update.verificationText==='string'?{verificationText:update.verificationText.slice(0,30000)}:{}),
         verificationStatus:update.verificationStatus,warning:update.warning,sources:update.sources,...job.billing,...verificationMetadata(update,job.settings.apiVerification,text)});
     };
     const result=withBillingMetadata(await waitForAbort(runAPI(job,onUpdate),signal),job.settings.provider,commentsJob(job)?undefined:job.settings.apiVerification);
@@ -444,12 +388,12 @@ async function executeJob(job) {
       if(e.code==='RATE_LIMIT')pauseWaitingJobs();
     } else if(signal.aborted && clients.has(client) && job.revision===revision && (!jobs.has(job.key)||jobs.get(job.key)===job)) {
       const reason=signal.reason;
-      const explained=reason?.code==='TIMEOUT';
-      const partialResult=explained&&job.retainedExplanation?withBillingMetadata({...job.retainedExplanation,...job.billing,verificationStatus:'incomplete',
+      const timedOut=reason?.code==='TIMEOUT';
+      const partialResult=timedOut&&job.retainedFactCheck?withBillingMetadata({...job.retainedFactCheck,...job.billing,verificationStatus:'incomplete',
         ...verificationMetadata(reason,job.settings.apiVerification)},job.settings.provider,job.settings.apiVerification):undefined;
       if(partialResult)rememberHistoryResult(job.historyTicket,{...partialResult,completedAt:Date.now()},false,job.historyLanguage);
-      jobError(job,explained?GrokFirstAPI.publicError(reason).error:'请求已取消；可手动重试。',explained?reason.code:'CANCELLED',
-        {...job.billing,...(partialResult?{partialResult,...verificationMetadata(reason,job.settings.apiVerification)}:{})});
+      jobError(job,timedOut?GrokFirstAPI.publicError(reason).error:'请求已取消；可手动重试。',timedOut?reason.code:'CANCELLED',
+        {...job.billing,...(timedOut&&!commentsJob(job)?verificationMetadata(reason,job.settings.apiVerification):{}),...(partialResult?{partialResult}:{} )});
     }
   } finally {
     clearAPIDeadline(job);removeJob(job);runningJobs.delete(job);
@@ -464,7 +408,7 @@ async function runAPI(job,onUpdate) {
   if(!liveJob(job))throw signal.reason || new DOMException('Cancelled','AbortError');
   if(!validKey(key))throw Object.assign(new Error('请打开设置并输入 API Key。'),{code:'NEEDS_KEY'});
   if(commentsJob(job))return GrokFirstAPI.generateComments(job.post,job.settings,key,{analysis:job.analysis,signal});
-  return GrokFirstAPI.run(job.post,job.settings,key,{signal:job.controller.signal,onUpdate,scheduleVerification:task=>scheduleVerification(job,task)});
+  return GrokFirstAPI.run(job.post,job.settings,key,{signal:job.controller.signal,onUpdate});
 }
 function invalidateSecurityJobs() {
   revision++;

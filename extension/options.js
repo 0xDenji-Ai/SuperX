@@ -5,7 +5,6 @@
   const ui = globalThis.GrokFirstUI;
   const $ = id => document.getElementById(id);
   const promptFields = [
-    {name:"explain",setting:"explainPrompt"},
     {name:"verify",setting:"verifyPrompt"},
     {name:"comments",setting:"commentsPrompt"},
   ];
@@ -77,7 +76,6 @@
       || $("explanation-mode").value !== currentSettings.explanationMode
       || $("api-model").value !== currentSettings.apiModel
       || Number($("api-concurrency").value) !== currentSettings.apiConcurrency
-      || $("api-verification").value !== currentSettings.apiVerification
       || $("web-search").checked !== currentSettings.webSearch
       || $("x-search").checked !== currentSettings.xSearch
       || $("language").value !== currentSettings.language
@@ -163,7 +161,6 @@
     $("explanation-mode").value = settings.explanationMode === "custom" ? "custom" : "preset";
     $("api-model").value = settings.apiModel;
     $("api-concurrency").value = settings.apiConcurrency;
-    $("api-verification").value = settings.apiVerification;
     $("web-search").checked = settings.webSearch;
     $("x-search").checked = settings.xSearch;
     for (const field of promptFields) $(field.name + "-prompt").value = settings[field.setting];
@@ -198,7 +195,7 @@
   }
   $("explanation-mode").addEventListener("change",() => { showExplanationMode();markDraft(); });
   $("interface-language").addEventListener("change",() => { renderLanguage();markDraft(); });
-  for (const id of ["enabled","api-model","api-concurrency","api-verification","web-search","x-search","language",...promptFields.map(field => field.name + "-prompt")]) {
+  for (const id of ["enabled","api-model","api-concurrency","web-search","x-search","language",...promptFields.map(field => field.name + "-prompt")]) {
     $(id).addEventListener("input",markDraft);
     $(id).addEventListener("change",markDraft);
   }
@@ -218,7 +215,7 @@
   });
   $("fast-preset").addEventListener("click",() => {
     $("api-model").value = "grok-4.3";
-    $("api-concurrency").value = 4;$("api-verification").value = "background";
+    $("api-concurrency").value = 4;
     showExplanationMode();setStatus("options.presetReady");
   });
   $("reload-extension").addEventListener("click",() => {
@@ -252,12 +249,11 @@
       explanationMode:$("explanation-mode").value,
       apiModel:$("api-model").value.trim(),
       apiConcurrency:Number($("api-concurrency").value),
-      apiVerification:$("api-verification").value,
+      apiVerification:"only",
       webSearch:$("web-search").checked,
       xSearch:$("x-search").checked,
       language:$("language").value,
       interfaceLanguage:$("interface-language").value,
-      explainPrompt:$("explain-prompt").value,
       verifyPrompt:$("verify-prompt").value,
       commentsPrompt:$("comments-prompt").value,
     });
