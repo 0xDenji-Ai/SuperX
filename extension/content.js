@@ -14,6 +14,7 @@
   let settings = Core.DEFAULT_SETTINGS, providerReady = false, connected = false, port, used = 0, collapsed = false;
   let lastPath = location.pathname, scanTimer, reconnectTimer, handshakeTimer, dwellTimer, dwellDeadline=0, needsPageRefresh = false;
   let hasConfig=false,workerSleeping=false,awaitingConfig=false,reconnectFailures=0,xModalBlocked=false;
+  let oauthState={},credentialIdentity='';
   const wakeActions=new Map(),wakeControls=new Map();
   const entries = new Map(), detachedEntries = new Set(), requests = new Map(), visible = new Set();
   // X virtualizes the timeline. Keep live subscriptions and a bounded set of
@@ -192,9 +193,18 @@
   }
   function usableConnection(){return !needsPageRefresh&&providerReady&&(connected||workerSleeping||awaitingConfig);}
   let buildErrorCode='';
-  function needsProvider(){return settings.provider==='build'?(buildErrorCode.startsWith('BUILD_')?errorKey(buildErrorCode):'build.unknown'):'status.needsKey';}
+  function needsProvider(){
+    if(settings.provider==='oauth'){
+      if(oauthState.connected&&oauthState.modelAvailable===false)return 'oauth.modelUnavailable';
+      if(oauthState.state==='restoring'||oauthState.state==='refreshing')return 'oauth.refreshing';
+      if(['starting','authorizing','awaiting_authorization'].includes(oauthState.state))return 'oauth.authorizing';
+      if(oauthState.state==='reauth_required')return 'oauth.reauthRequired';
+      return oauthState.errorCode?errorKey(oauthState.errorCode):'oauth.needsLogin';
+    }
+    return settings.provider==='build'?(buildErrorCode.startsWith('BUILD_')?errorKey(buildErrorCode):'build.unknown'):'status.needsKey';
+  }
   async function openSettings() {
-    const message={type:'OPEN_SETTINGS',focus:settings.provider==='build'?'build':'api-key'};
+    const message={type:'OPEN_SETTINGS',focus:settings.provider==='oauth'?'oauth':settings.provider==='build'?'build':'api-key'};
     // Settings can add or replace a Key. Restore the feed subscription so its
     // updated CONFIG can reach a tab that previously had no usable credential.
     if(workerSleeping)connect();
@@ -217,11 +227,11 @@
     railHeader.setAttribute('lang',uiLanguage);railHeader.setAttribute('dir',direction);
     rail.setAttribute('aria-label',t('aria.rail'));railLanguage.setAttribute('aria-label',t('aria.outputLanguage'));
     const auto=Array.from(railLanguage.children).find(option=>option.value==='auto');if(auto)auto.textContent=t('lang.auto').split(' · ')[0];railLanguage.title=t(settings.language==='auto'?'lang.auto':'aria.outputLanguage');
-    railOptions.setAttribute('aria-label',t('common.settings'));railOptions.title=t(needsPageRefresh?'status.refreshRequired':!providerReady?(settings.provider==='build'?'popup.setupBuild':'common.enterKey'):'common.settings');
+    railOptions.setAttribute('aria-label',t('common.settings'));railOptions.title=t(needsPageRefresh?'status.refreshRequired':!providerReady?(settings.provider==='oauth'?'oauth.login':settings.provider==='build'?'popup.setupBuild':'common.enterKey'):'common.settings');
     railHistory.setAttribute('aria-label',t('common.history'));railHistory.title=t('common.history');
     railCollapse.setAttribute('aria-label',t('common.collapse'));railCollapse.title=t('tooltip.collapse');
     railExpand.setAttribute('aria-label',t('common.expand'));railExpand.title=t('tooltip.expand');
-    railHeader.title=settings.provider==='build'?t('popup.buildLabel',{transport:settings.buildTransport.toUpperCase()}):t('tooltip.apiMode',{count:settings.apiConcurrency});
+    railHeader.title=settings.provider==='oauth'?t('oauth.modeLabel',{count:settings.apiConcurrency}):settings.provider==='build'?t('popup.buildLabel',{transport:settings.buildTransport.toUpperCase()}):t('tooltip.apiMode',{count:settings.apiConcurrency});
   }
   function syncUILanguage() {
     const observed=UI.normalizeLanguage(document.documentElement.getAttribute('lang') || navigator.language || 'en');
@@ -233,6 +243,10 @@
   }
   function renderStatusText(entry,key,vars={}) {
     const target=entry.ui.status;
+    if(key.startsWith('oauth.')){
+      const button=node('button','status-settings',t('common.settings'));button.type='button';button.addEventListener('click',()=>openSettings());
+      target.replaceChildren(document.createTextNode(t(key,{model:settings.oauthModel,...vars})+' '),button);return;
+    }
     if(key==='status.refreshRequired') {
       const marker='\uFFFC',parts=t('status.refreshRequiredAction',{refresh:marker}).split(marker),button=node('button','status-settings',t('common.refreshPage'));
       button.type='button';button.addEventListener('click',()=>location.reload());
@@ -307,13 +321,18 @@
     entry.ui.box.setAttribute('aria-busy',String(active||entry.status==='retry-wait'));
   }
   function errorKey(code,failure) {
+    if(typeof code==='string'&&code.startsWith('OAUTH_'))return ({
+      OAUTH_LOGIN_REQUIRED:'oauth.needsLogin',OAUTH_REAUTH_REQUIRED:'oauth.reauthRequired',OAUTH_ACCOUNT_CHANGED:'oauth.reauthRequired',OAUTH_REFRESH_UNCERTAIN:'oauth.reauthRequired',
+      OAUTH_ACCESS_DENIED:'oauth.denied',OAUTH_DEVICE_EXPIRED:'oauth.expired',OAUTH_CANCELLED:'oauth.canceled',
+      OAUTH_MODEL_UNAVAILABLE:'oauth.modelUnavailable',OAUTH_STORAGE_ERROR:'oauth.storageError',OAUTH_CATALOG_UNAVAILABLE:'oauth.catalogUnavailable',OAUTH_AUTH_UNAVAILABLE:'oauth.networkError'
+    })[code]||'oauth.unavailable';
     if(isCapacityFailure(code,failure))return 'error.apiCapacity';
     if(code?.startsWith('BUILD_'))return ({BUILD_LOGIN_REQUIRED:'build.login',BUILD_CANCEL_UNCONFIRMED:'build.cancelUnconfirmed',BUILD_CONNECTION_REQUIRED:'build.codeRequired',BUILD_AUTH_FAILED:'build.codeInvalid',BUILD_UNAVAILABLE:'build.missing',BUILD_DISCONNECTED:'build.missing',BUILD_NATIVE_MISSING:'build.missing',BUILD_VERSION_UNSUPPORTED:'build.unsupported',BUILD_MODEL_UNSUPPORTED:'build.unsupported',BUILD_EFFORT_UNSUPPORTED:'build.unsupported'})[code]||'build.unavailable';
     const http=failure?.httpStatus,provider=Core.apiFailureProviderCode(failure?.providerCode);
     if(code==='API_ERROR'){
-      if(http===401||['invalid_api_key','authentication_error','unauthenticated'].includes(provider))return 'error.apiKeyRejected';
-      if(http===402||['insufficient_quota','insufficient_credits','spending_limit','usage_limit_exceeded'].includes(provider))return 'error.apiUsage';
-      if(http===403||['permission_error','permission_denied','forbidden'].includes(provider))return 'error.apiAccess';
+      if(http===401||['invalid_api_key','authentication_error','unauthenticated'].includes(provider))return settings.provider==='oauth'?'oauth.reauthRequired':'error.apiKeyRejected';
+      if(http===402||['insufficient_quota','insufficient_credits','spending_limit','usage_limit_exceeded'].includes(provider))return settings.provider==='oauth'?'oauth.usageError':'error.apiUsage';
+      if(http===403||['permission_error','permission_denied','forbidden'].includes(provider))return settings.provider==='oauth'?'oauth.permissionError':'error.apiAccess';
       if(http===429||failure?.code==='RATE_LIMIT')return 'status.rateLimited';
       if(failure?.code==='CONNECTION')return 'error.apiConnection';
       if(http>=500||failure?.code==='SERVER')return 'error.apiServer';
@@ -328,7 +347,7 @@
   }
   function requestSnapshot(entry,requestId,task='analysis') {
     return {requestId,task,entry,postSnapshot:entry.post,apiIdentity:Core.apiPostIdentity(entry.post,task==='comments'?undefined:settings),path:location.pathname,provider:settings.provider,
-      language:settings.language,apiModel:settings.provider==='build'?settings.buildModel:settings.apiModel,
+      language:settings.language,apiModel:settings.provider==='oauth'?settings.oauthModel:settings.provider==='build'?settings.buildModel:settings.apiModel,
       verifyPrompt:settings.verifyPrompt,commentsPrompt:settings.commentsPrompt};
   }
   function isAccountLimit(failure) {return settings.provider==='api'&&(failure?.httpStatus===402||['spending_limit','insufficient_credits','insufficient_quota','usage_limit_exceeded'].includes(Core.apiFailureProviderCode(failure?.providerCode)));}
@@ -396,13 +415,15 @@
       // controls; accepted jobs and visible answers retain their task snapshot.
       // An archived explanation draft can survive upgrades, but never changes
       // current fact-check jobs or their visible results.
-      for(const field of ['explainPrompt','verifyPrompt','commentsPrompt','interfaceLanguage','dwellMs','analysisDefaultsVersion']){delete previousOptions[field];delete nextOptions[field];}
-      const allChanged=JSON.stringify(previousOptions)!==JSON.stringify(nextOptions);
+      for(const field of ['explainPrompt','verifyPrompt','commentsPrompt','interfaceLanguage','dwellMs','analysisDefaultsVersion','oauthRemember']){delete previousOptions[field];delete nextOptions[field];}
+      const accountChanged=credentialIdentity!==(message.credentialIdentity||'');
+      const allChanged=accountChanged||JSON.stringify(previousOptions)!==JSON.stringify(nextOptions);
       const presentationOrPromptsOnlyChanged=!allChanged&&JSON.stringify(settings)!==JSON.stringify(nextSettings);
-      const identity=value=>JSON.stringify([value.provider,value.apiModel,value.apiReasoningEffort,value.buildModel,value.buildReasoningEffort,value.buildTransport,value.buildPort,value.language,value.webSearch,value.xSearch,value.apiVerification,value.explanationMode]);
+      const identity=value=>JSON.stringify([value.provider,value.apiModel,value.apiReasoningEffort,value.oauthModel,value.oauthReasoningEffort,value.buildModel,value.buildReasoningEffort,value.buildTransport,value.buildPort,value.language,value.webSearch,value.xSearch,value.apiVerification,value.explanationMode]);
       const previous=identity(settings),dwellChanged=settings.dwellMs!==nextSettings.dwellMs;
       const wasReady=providerReady;
       settings=nextSettings;
+      credentialIdentity=message.credentialIdentity||'';oauthState=message.oauthStatus||{};
       if(dwellChanged)resetDwellWaits();
       configureHistory(message.historyEnabled,message.historyEpoch);
       providerReady=Boolean(message.ready);used=message.used || 0;
@@ -415,7 +436,7 @@
       if(!Core.LANGUAGES.some(item=>item.value===settings.language)&&!Array.from(railLanguage.children).some(item=>item.value===settings.language)){const option=node('option','',settings.language);option.value=settings.language;railLanguage.append(option);}
       railLanguage.value=settings.language;railLanguage.disabled=false;
       refreshHeaderLanguage();
-      const changed=previous!==identity(settings);
+      const changed=accountChanged||previous!==identity(settings);
       // Per-answer failures never freeze other posts, including legacy
       // worker pause flags restored from an older browser session.
       if(!presentationOrPromptsOnlyChanged)queue.clear();

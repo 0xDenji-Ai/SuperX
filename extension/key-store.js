@@ -19,8 +19,8 @@
     error.code = 'KEY_STORE_INVALID_KEY';
     return error;
   }
-  function validRaw(value) {
-    return typeof value === 'string' && value.length <= MAX_KEY_LENGTH && Boolean(value.trim()) && !/[\r\n]/.test(value);
+  function validRaw(value, maxLength = MAX_KEY_LENGTH) {
+    return typeof value === 'string' && value.length <= maxLength && Boolean(value.trim()) && !/[\r\n]/.test(value);
   }
   function bytesToBase64(bytes) {
     let text = '';
@@ -34,13 +34,13 @@
     if (bytes.length > maxLength || bytesToBase64(bytes) !== text) throw unavailable();
     return bytes;
   }
-  function isEnvelope(value) {
+  function isEnvelope(value, maxCiphertextBytes = MAX_CIPHERTEXT_BYTES) {
     try {
       if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).length !== 4 ||
         !['version', 'algorithm', 'iv', 'ciphertext'].every(key => Object.hasOwn(value, key)) ||
         value.version !== 1 || value.algorithm !== 'AES-GCM') return false;
       const iv = base64ToBytes(value.iv, 12);
-      const ciphertext = base64ToBytes(value.ciphertext, MAX_CIPHERTEXT_BYTES);
+      const ciphertext = base64ToBytes(value.ciphertext, maxCiphertextBytes);
       return iv.length === 12 && ciphertext.length >= 17;
     } catch { return false; }
   }
@@ -52,8 +52,11 @@
   }
 
   function create(options = {}) {
-    const record = options.purpose === 'build-connection' ? 'build-connection-aes-gcm-v1' : RECORD;
-    const context = options.purpose === 'build-connection' ? 'SuperX local connection storage/v1 AES-256-GCM' : CONTEXT;
+    const oauth = options.purpose === 'oauth-refresh';
+    const record = oauth ? 'oauth-refresh-aes-gcm-v1' : options.purpose === 'build-connection' ? 'build-connection-aes-gcm-v1' : RECORD;
+    const context = oauth ? 'SuperX OAuth refresh token storage/v1 AES-256-GCM' : options.purpose === 'build-connection' ? 'SuperX local connection storage/v1 AES-256-GCM' : CONTEXT;
+    const maxLength = oauth ? 16384 : MAX_KEY_LENGTH, maxCiphertextBytes = maxLength * 3 + 16;
+    const validEnvelope = value => isEnvelope(value, maxCiphertextBytes);
     const idb = options.indexedDB || root.indexedDB;
     const crypto = options.crypto || root.crypto;
     const setTimer = options.setTimeout || root.setTimeout.bind(root);
@@ -174,16 +177,16 @@
       return durable;
     }
     async function decrypt(envelope, key) {
-      if (!isEnvelope(envelope) || !validCryptoKey(key)) throw unavailable();
+      if (!validEnvelope(envelope) || !validCryptoKey(key)) throw unavailable();
       const iv = base64ToBytes(envelope.iv, 12);
-      const ciphertext = base64ToBytes(envelope.ciphertext, MAX_CIPHERTEXT_BYTES);
+      const ciphertext = base64ToBytes(envelope.ciphertext, maxCiphertextBytes);
       const plaintext = await crypto.subtle.decrypt({ name: 'AES-GCM', iv, additionalData: new TextEncoder().encode(context), tagLength: 128 }, key, ciphertext);
       const raw = new TextDecoder('utf-8', { fatal: true }).decode(plaintext);
-      if (!validRaw(raw) || raw !== raw.trim()) throw unavailable();
+      if (!validRaw(raw, maxLength) || raw !== raw.trim()) throw unavailable();
       return raw;
     }
     function seal(apiKey) {
-      if (!validRaw(apiKey)) return Promise.reject(invalidKey());
+      if (!validRaw(apiKey, maxLength)) return Promise.reject(invalidKey());
       const raw = apiKey.trim();
       return serialize(async () => {
         try {
@@ -199,7 +202,7 @@
     function open(envelope) {
       return serialize(async () => {
         try {
-          if (!isEnvelope(envelope)) throw unavailable();
+          if (!validEnvelope(envelope)) throw unavailable();
           const key = await readKey();
           if (!key) throw unavailable();
           return await decrypt(envelope, key);
@@ -212,7 +215,7 @@
         catch { throw unavailable(); }
       });
     }
-    return Object.freeze({ seal, open, clear, isEnvelope, envelopePresent });
+    return Object.freeze({ seal, open, clear, isEnvelope:validEnvelope, envelopePresent });
   }
   const api = Object.freeze({ ...create(), create });
   root.SuperXKeyStore = api;

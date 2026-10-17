@@ -45,6 +45,17 @@
     return ['none','minimal','low','medium','high','xhigh'].includes(value)?value:
       ['grok-4.3','grok-4.3-latest'].includes(model)?'none':'low';
   }
+  function oauthReasoningEffort(value) {
+    // The signed-in account's live catalog decides availability. Preserve an
+    // explicit level rather than substituting another model's API default.
+    return ['auto','none','minimal','low','medium','high','xhigh'].includes(value)?value:'none';
+  }
+  function providerModel(settings) {
+    return settings?.provider==='oauth'?settings.oauthModel||'grok-4.3':settings?.provider==='build'?settings.buildModel||'grok-4.3':settings?.apiModel||'grok-4.3';
+  }
+  function providerEffort(settings) {
+    return settings?.provider==='oauth'?oauthReasoningEffort(settings.oauthReasoningEffort):settings?.provider==='build'?buildReasoningEffort(providerModel(settings),settings.buildReasoningEffort):reasoningEffort(providerModel(settings),settings?.apiReasoningEffort);
+  }
   const API_FAILURE_PROVIDER_CODES=new Set(['invalid_request_error','invalid_request','bad_request','invalid_api_key','authentication_error','unauthenticated','permission_error','permission_denied','forbidden','insufficient_quota','insufficient_credits','spending_limit','usage_limit_exceeded','rate_limit_exceeded','rate_limit_error','too_many_requests','resource_exhausted','model_not_found','model_not_supported','unsupported_model','unsupported_parameter','invalid_parameter','invalid_argument','context_length_exceeded','server_error','internal_server_error','internal_error','service_unavailable','service_unavailable_error','overloaded_error','timeout','request_timeout','gateway_timeout','tool_error','tool_unavailable','search_error','search_unavailable','content_filter']);
   function apiFailureProviderCode(value){
     if(typeof value!=='string'||value.length>64)return undefined;
@@ -76,6 +87,9 @@
     if(providers.some(code=>RETRY_ACCESS_CODES.has(code)))return {retryable:false,reason:'request_rejected'};
     if(statuses.some(status=>status<500&&![408,425,429].includes(status)))return {retryable:false,reason:'request_rejected'};
     if(failures.some(item=>item.code==='ACCESS'))return {retryable:false,reason:'request_rejected'};
+    // OAuth refresh is owned by the credential manager. A model request whose
+    // result is unknown must never be replayed by the generic retry scheduler.
+    if(values.some(item=>item.provider==='oauth')||codes.some(code=>typeof code==='string'&&code.startsWith('OAUTH_')))return {retryable:false,reason:'oauth_no_replay'};
     if(codes.includes('API_CAPACITY'))return {retryable:true,reason:'capacity'};
     if(codes.some(code=>['RATE_LIMIT','BUILD_RATE_LIMIT','BUILD_QUOTA','BUILD_BUSY'].includes(code))||statuses.includes(429)||failures.some(item=>item.code==='RATE_LIMIT'))return {retryable:true,reason:'rate_limit'};
     if(statuses.some(status=>status>=500))return {retryable:true,reason:'server'};
@@ -221,6 +235,9 @@
     interfaceLanguage: 'auto',
     apiModel: 'grok-4.3',
     apiReasoningEffort: 'none',
+    oauthModel: 'grok-4.3',
+    oauthReasoningEffort: 'none',
+    oauthRemember: true,
     buildDefaultsVersion: 1,
     buildTransport: 'acp',
     buildPort: 2419,
@@ -298,6 +315,8 @@
     const interfaceLanguage = typeof value.interfaceLanguage === 'string' ? value.interfaceLanguage.trim().toLowerCase() : '';
     const model = typeof value.apiModel === 'string' ? value.apiModel.trim() : '';
     const normalizedModel = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(model) ? model : DEFAULT_SETTINGS.apiModel;
+    const oauthModel = typeof value.oauthModel === 'string' ? value.oauthModel.trim() : '';
+    const normalizedOAuthModel = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(oauthModel) ? oauthModel : DEFAULT_SETTINGS.oauthModel;
     const buildModel = typeof value.buildModel === 'string' ? value.buildModel.trim() : '';
     // Former records did not track whether 4.7/low was manually selected.
     // Migrate only that exact former default once. The marker preserves a
@@ -309,7 +328,7 @@
     const concurrency=boundedNumber(value.apiConcurrency,DEFAULT_SETTINGS.apiConcurrency,1,8);
     return {
       // The retired page automation provider is unrelated to Grok Build.
-      provider: value.provider === 'build' ? 'build' : 'api',
+      provider: ['build','oauth'].includes(value.provider) ? value.provider : 'api',
       enabled: typeof value.enabled === 'boolean' ? value.enabled : DEFAULT_SETTINGS.enabled,
       // Upgrade former zero-delay/default-four records once. The versioned
       // output preserves later explicit selections of zero or four.
@@ -322,6 +341,9 @@
       interfaceLanguage: LANGUAGES.find(item => item.value.toLowerCase() === interfaceLanguage)?.value || DEFAULT_SETTINGS.interfaceLanguage,
       apiModel: normalizedModel,
       apiReasoningEffort: reasoningEffort(normalizedModel,value.apiReasoningEffort),
+      oauthModel: normalizedOAuthModel,
+      oauthReasoningEffort: oauthReasoningEffort(value.oauthReasoningEffort),
+      oauthRemember: typeof value.oauthRemember==='boolean'?value.oauthRemember:DEFAULT_SETTINGS.oauthRemember,
       buildDefaultsVersion: DEFAULT_SETTINGS.buildDefaultsVersion,
       buildTransport: DEFAULT_SETTINGS.buildTransport,
       buildPort: boundedNumber(value.buildPort, DEFAULT_SETTINGS.buildPort, 1024, 65535),
@@ -533,7 +555,7 @@
   function apiPostIdentity(post, settings) {
     // Comments still pass no settings because they use their visible snapshot
     // and analysis context. Native tasks keep their existing local attribution.
-    if(post&&settings&&settings.task!=='comments')return JSON.stringify(['post-input-v3-full-url',canonicalPostUrl(post.url),resolvePostLanguage(settings.language,post)]);
+    if(post&&settings&&settings.task!=='comments')return JSON.stringify(['post-input-v4-source-full-url',['build','oauth'].includes(settings.provider)?settings.provider:'api',canonicalPostUrl(post.url),resolvePostLanguage(settings.language,post)]);
     return post ? JSON.stringify([nativePostIdentity(post),
       (Array.isArray(post.quotedContext) ? post.quotedContext : []).map(nativePostIdentity)]) : '';
   }
@@ -606,5 +628,5 @@
     clear() { this.items.clear(); }
   }
 
-  return Object.freeze({ LANGUAGES, API_MODELS, modelProfile, reasoningEffort, buildReasoningEffort, apiFailureProviderCode, AUTO_RETRY_DELAY_MS, AUTO_RETRY_LIMIT, autoRetryDecision, sanitizedRequestDiagnostics, DEFAULT_SETTINGS, DEFAULT_PROMPTS, MAX_PROMPT_LENGTH, normalizePrompt, readerOutput, explanationMode, normalizeSettings, resolvePostLanguage, canonicalPostUrl, extractPost, postFingerprint, nativePostIdentity, apiPostIdentity, visibilityEligibility, BoundedPostQueue });
+  return Object.freeze({ LANGUAGES, API_MODELS, modelProfile, reasoningEffort, buildReasoningEffort, oauthReasoningEffort, providerModel, providerEffort, apiFailureProviderCode, AUTO_RETRY_DELAY_MS, AUTO_RETRY_LIMIT, autoRetryDecision, sanitizedRequestDiagnostics, DEFAULT_SETTINGS, DEFAULT_PROMPTS, MAX_PROMPT_LENGTH, normalizePrompt, readerOutput, explanationMode, normalizeSettings, resolvePostLanguage, canonicalPostUrl, extractPost, postFingerprint, nativePostIdentity, apiPostIdentity, visibilityEligibility, BoundedPostQueue });
 });

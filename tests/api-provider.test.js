@@ -1321,3 +1321,113 @@ test('comment capacity failures expose neither partial JSON drafts nor an automa
   assert.equal(publicFailure.code,'API_CAPACITY');assert.doesNotMatch(publicFailure.error,/PRIVATE/);
   assert.deepEqual(api.sanitizedVerificationFailure({stage:'verify',code:'SERVER',errorCode:'API_CAPACITY',providerCode:'service_unavailable_error'}),{stage:'verify',code:'SERVER',errorCode:'API_CAPACITY',providerCode:'service_unavailable_error'});
 });
+
+const oauthSettings={...settings,provider:'oauth',language:'en',oauthModel:'grok-4.3',oauthReasoningEffort:'none',apiModel:'grok-4.7',apiReasoningEffort:'xhigh'};
+const oauthTokens={old:'old.oauth.access-private-01',fresh:'new.oauth.access-private-02'};
+function oauthHTTP(status,data={error:{code:'invalid_api_key',message:'Access rejected'}}){return new Response(JSON.stringify(data),{status,headers:{'Content-Type':'application/json'}});}
+function oauthAuth(extra={}){return {async getAccessToken(){return oauthTokens.old;},async onUnauthorized(){return oauthTokens.fresh;},...extra};}
+
+test('OAuth request builders preserve independent explicit choices and reuse full-post tools and strict comments schema',()=>{
+  const check=api.buildRequest(post,oauthSettings),comments=api.buildCommentsRequest(post,oauthSettings);
+  for(const request of [check,comments]){assert.equal(request.model,'grok-4.3');assert.deepEqual(request.reasoning,{effort:'none'});assert.equal(request.input[0].content,post.url);assert.equal(request.store,false);}
+  assert.equal(check.tool_choice,'required');assert.deepEqual(check.tools.map(tool=>tool.type),['web_search','x_search']);assert.equal(check.tools[1].enable_image_understanding,true);
+  assert.deepEqual(comments.tools,[]);assert.equal(comments.text.format.type,'json_schema');assert.equal(comments.text.format.strict,true);assert.equal(comments.text.format.schema.minItems,3);
+  assert.deepEqual(api.buildRequest(post,{...oauthSettings,oauthModel:'grok-4.7',oauthReasoningEffort:'none'}).reasoning,{effort:'none'});
+  assert.equal(api.buildRequest(post,{...oauthSettings,oauthModel:'grok-future-model',oauthReasoningEffort:'high'}).reasoning.effort,'high');
+});
+
+test('OAuth Fact Check uses only direct Bearer authorization and retains native citations and terminal billing',async()=>{
+  const calls=[],updates=[];let lookups=0,recoveries=0;
+  const native=completed('A checked original finding.',{model:'grok-4.3',usage:{input_tokens:3,output_tokens:4,total_tokens:7},output:[{type:'x_search_call',status:'completed'},{type:'message',role:'assistant',content:[{type:'output_text',text:'A checked original finding.',annotations:[{type:'url_citation',url:'https://x.com/example/status/100',title:'Original source'}]}]}]});
+  const result=await api.run(post,oauthSettings,'STATIC_KEY_MUST_NOT_BE_USED',{authorization:oauthAuth({async getAccessToken(signal){assert.equal(signal,undefined);lookups++;return oauthTokens.old;},async onUnauthorized(){recoveries++;return oauthTokens.fresh;}}),onUpdate:update=>updates.push(update),fetchImpl:async(url,options)=>{calls.push({url,options});return {...responseFor([native]),status:200};}});
+  assert.equal(calls.length,1);assert.equal(lookups,1);assert.equal(recoveries,0);assert.equal(calls[0].url,'https://api.x.ai/v1/responses');assert.deepEqual(Object.keys(calls[0].options.headers).sort(),['Authorization','Content-Type']);assert.equal(calls[0].options.headers.Authorization,'Bearer '+oauthTokens.old);assert.equal(calls[0].options.credentials,'omit');assert.equal(calls[0].options.redirect,'error');
+  assert.equal(JSON.stringify(JSON.parse(calls[0].options.body)).includes(oauthTokens.old),false);assert.equal(calls[0].options.body.includes('STATIC_KEY_MUST_NOT_BE_USED'),false);
+  assert.equal(result.provider,'oauth');assert.equal(result.searched,true);assert.equal(result.usage.total_tokens,7);assert.equal(result.usageComplete,true);assert.equal(result.sources[0].url,'https://x.com/example/status/100');assert.equal(updates.every(update=>update.provider==='oauth'),true);
+});
+
+test('OAuth comment generation reuses strict schema and final client validation without search tools',async()=>{
+  let body;const values=['A useful question?','A different perspective.','Another concise angle.'];
+  const result=await api.generateComments(post,oauthSettings,undefined,{authorization:oauthAuth(),fetchImpl:async(url,options)=>{body=JSON.parse(options.body);return responseFor([completed(JSON.stringify(values),{model:'grok-4.3',usage:{total_tokens:8}})]);}});
+  assert.equal(result.provider,'oauth');assert.deepEqual(result.comments,values);assert.deepEqual(body.tools,[]);assert.equal(body.text.format.strict,true);assert.equal(body.model,'grok-4.3');assert.equal(result.usage.total_tokens,8);
+  await assert.rejects(api.generateComments(post,oauthSettings,undefined,{authorization:oauthAuth(),fetchImpl:async()=>responseFor([completed('["Duplicate.","Duplicate.","Another."]')])}),error=>{assert.equal(error.code,'COMMENTS_INVALID_RESPONSE');assert.equal(error.provider,'oauth');return true;});
+});
+
+test('OAuth cannot fall back to a static Key and API mode never invokes OAuth authorization callbacks',async()=>{
+  let calls=0;
+  for(const run of [api.run,api.generateComments])await assert.rejects(run(post,oauthSettings,'AVAILABLE_STATIC_KEY',{fetchImpl:async()=>{calls++;return responseFor([completed()]);}}),error=>{assert.equal(error.code,'OAUTH_LOGIN_REQUIRED');assert.equal(error.provider,'oauth');return true;});
+  assert.equal(calls,0);
+  await api.run(post,{...settings,provider:'api',language:'en'},'STATIC_KEY',{authorization:oauthAuth({getAccessToken(){assert.fail('API mode must not read OAuth credentials');}}),fetchImpl:async(url,options)=>{assert.equal(options.headers.Authorization,'Bearer STATIC_KEY');assert.equal(options.credentials,undefined);return responseFor([completed()]);}});
+});
+
+test('OAuth recovers one pre-response HTTP 401 with a fresh token and the same request body for both tasks',async()=>{
+  for(const comments of [false,true]){
+    const calls=[],controller=new AbortController();let lookups=0,recoveries=0;
+    const result=await (comments?api.generateComments:api.run)(post,oauthSettings,undefined,{signal:controller.signal,authorization:oauthAuth({async getAccessToken(signal){lookups++;assert.equal(signal,controller.signal);return oauthTokens.old;},async onUnauthorized(token,signal){recoveries++;assert.equal(token,oauthTokens.old);assert.equal(signal,controller.signal);return oauthTokens.fresh;}}),fetchImpl:async(url,options)=>{calls.push(options);return calls.length===1?oauthHTTP(401):responseFor([completed(comments?'["First.","Second.","Third."]':'Recovered useful finding.',{usage:{total_tokens:9},model:'grok-4.3'})]);}});
+    assert.equal(calls.length,2);assert.equal(lookups,1);assert.equal(recoveries,1);assert.equal(calls[0].body,calls[1].body);assert.equal(calls[0].headers.Authorization,'Bearer '+oauthTokens.old);assert.equal(calls[1].headers.Authorization,'Bearer '+oauthTokens.fresh);assert.equal(result.provider,'oauth');assert.equal(result.usage.total_tokens,9);
+  }
+});
+
+test('a second OAuth HTTP 401 is terminal and cannot start a refresh or request loop',async()=>{
+  let calls=0,recoveries=0;
+  await assert.rejects(api.run(post,oauthSettings,undefined,{authorization:oauthAuth({async onUnauthorized(){recoveries++;return oauthTokens.fresh;}}),fetchImpl:async()=>{calls++;return oauthHTTP(401);}}),error=>{assert.equal(error.code,'OAUTH_REAUTH_REQUIRED');assert.equal(error.provider,'oauth');assert.equal(error.verificationFailure.httpStatus,401);assert.equal(error.requestDiagnostics.transportStatus,401);assert.equal(core.autoRetryDecision(error).retryable,false);return true;});
+  assert.equal(calls,2);assert.equal(recoveries,1);
+});
+
+test('a successful OAuth HTTP response followed by a stream authorization error is not refreshed or replayed',async()=>{
+  let calls=0,recoveries=0;
+  await assert.rejects(api.run(post,oauthSettings,undefined,{authorization:oauthAuth({onUnauthorized(){recoveries++;return oauthTokens.fresh;}}),fetchImpl:async()=>{calls++;return {...responseFor([{type:'error',error:{code:'authentication_error',http_status:401,message:'The access token was rejected.'}}]),status:200};}}),error=>{assert.equal(error.provider,'oauth');assert.equal(error.code,'API_ERROR');assert.equal(error.verificationFailure.httpStatus,401);assert.equal(error.requestDiagnostics.transportStatus,200);assert.equal(core.autoRetryDecision(error).retryable,false);return true;});
+  assert.equal(calls,1);assert.equal(recoveries,0);
+});
+
+test('OAuth preserves 402 403 429 and server diagnostics without credential refresh or automatic replay',async()=>{
+  for(const status of [402,403,429,500,503]){
+    let calls=0,recoveries=0;const providerCode=status===402?'spending_limit':status===429?'rate_limit_exceeded':status>=500?'server_error':'permission_denied';
+    await assert.rejects(api.run(post,oauthSettings,undefined,{authorization:oauthAuth({onUnauthorized(){recoveries++;return oauthTokens.fresh;}}),fetchImpl:async()=>{calls++;return oauthHTTP(status,{error:{code:providerCode,message:'The requested service operation failed.'}});}}),error=>{assert.equal(error.provider,'oauth');assert.equal(error.verificationFailure.httpStatus,status);assert.equal(error.verificationFailure.providerCode,providerCode);assert.equal(error.requestDiagnostics.transportStatus,status);assert.equal(core.autoRetryDecision(error).retryable,false);return true;});
+    assert.equal(calls,1);assert.equal(recoveries,0);
+  }
+});
+
+test('OAuth interrupted or incomplete streams keep real partial findings and billing without replay',async()=>{
+  for(const events of [[{type:'response.output_text.delta',delta:'A retained source finding.'}],[{type:'response.output_text.delta',delta:'A retained source finding.'},{type:'response.incomplete',response:{status:'incomplete',incomplete_details:{reason:'max_output_tokens'},usage:{total_tokens:13}}}]]){
+    let calls=0,recoveries=0;
+    const result=await api.run(post,oauthSettings,undefined,{authorization:oauthAuth({onUnauthorized(){recoveries++;return oauthTokens.fresh;}}),fetchImpl:async()=>{calls++;return {...responseFor(events),status:200};}});
+    assert.equal(result.provider,'oauth');assert.equal(result.text,'A retained source finding.');assert.equal(result.verificationStatus,'incomplete');assert.equal(core.autoRetryDecision(result).retryable,false);assert.equal(calls,1);assert.equal(recoveries,0);
+  }
+});
+
+test('OAuth auth callback failures retain only fixed safe codes and never expose callback prose or credentials',async()=>{
+  for(const code of ['OAUTH_LOGIN_REQUIRED','OAUTH_REAUTH_REQUIRED','OAUTH_REFRESH_UNCERTAIN','OAUTH_STORAGE_ERROR','OAUTH_ACCOUNT_CHANGED','OAUTH_DEVICE_EXPIRED','OAUTH_ACCESS_DENIED','OAUTH_AUTH_UNAVAILABLE','OAUTH_DEVICE_INVALID','OAUTH_CATALOG_UNAVAILABLE','UNTRUSTED_RAW_CODE']){
+    let calls=0;
+    await assert.rejects(api.run(post,oauthSettings,undefined,{authorization:oauthAuth({async getAccessToken(){throw Object.assign(new Error('PRIVATE_CALLBACK '+oauthTokens.old),{code,accessToken:oauthTokens.old});}}),fetchImpl:async()=>{calls++;return responseFor([completed()]);}}),error=>{assert.equal(error.code,code==='UNTRUSTED_RAW_CODE'?'OAUTH_LOGIN_REQUIRED':code);assert.equal(error.provider,'oauth');assert.doesNotMatch(error.message,/PRIVATE_CALLBACK|old\.oauth/);assert.equal(JSON.stringify(error).includes(oauthTokens.old),false);assert.equal(core.autoRetryDecision(error).retryable,false);return true;});
+    assert.equal(calls,0);
+  }
+});
+
+test('OAuth refresh errors and invalid or unchanged replacement tokens fail closed after the first 401',async()=>{
+  for(const replacement of [oauthTokens.old,'',null,'invalid\r\nHeader']){
+    let calls=0;
+    await assert.rejects(api.run(post,oauthSettings,'STATIC_KEY',{authorization:oauthAuth({async onUnauthorized(){return replacement;}}),fetchImpl:async()=>{calls++;return oauthHTTP(401);}}),error=>{assert.ok(['OAUTH_PROTOCOL','OAUTH_REAUTH_REQUIRED'].includes(error.code));assert.equal(error.provider,'oauth');return true;});
+    assert.equal(calls,1);
+  }
+  let calls=0;
+  await assert.rejects(api.run(post,oauthSettings,undefined,{authorization:oauthAuth({async onUnauthorized(){throw Object.assign(new Error('PRIVATE_REFRESH '+oauthTokens.fresh),{code:'OAUTH_REFRESH_UNCERTAIN'});}}),fetchImpl:async()=>{calls++;return oauthHTTP(401);}}),error=>{assert.equal(error.code,'OAUTH_REFRESH_UNCERTAIN');assert.equal(error.message.includes(oauthTokens.fresh),false);return true;});assert.equal(calls,1);
+});
+
+test('all tokens seen during OAuth 401 recovery are redacted from subsequent error diagnostics',async()=>{
+  let calls=0;const old='old.oauth+secret/value=01',fresh='new.oauth+secret/value=02';
+  await assert.rejects(api.run(post,oauthSettings,undefined,{authorization:oauthAuth({async getAccessToken(){return old;},async onUnauthorized(){return fresh;}}),fetchImpl:async()=>{calls++;return calls===1?oauthHTTP(401):oauthHTTP(402,{error:{code:'spending_limit',message:`Rejected credentials ${old} ${fresh} ${encodeURIComponent(old)} ${encodeURIComponent(fresh)}.`}});}}),error=>{const published=JSON.stringify(error)+' '+error.message;for(const token of [old,fresh,encodeURIComponent(old),encodeURIComponent(fresh)])assert.equal(published.includes(token),false,token);assert.equal(error.verificationFailure.providerCode,'spending_limit');assert.match(error.requestDiagnostics.providerMessage,/\[redacted\]/);return true;});
+  assert.equal(calls,2);
+  calls=0;const prefix='opaque-token-prefix',extension=prefix+'-FRESH_SUFFIX_MARKER';
+  await assert.rejects(api.run(post,oauthSettings,undefined,{authorization:oauthAuth({async getAccessToken(){return prefix;},async onUnauthorized(){return extension;}}),fetchImpl:async()=>++calls===1?oauthHTTP(401):oauthHTTP(402,{error:{code:'spending_limit',message:'Credential '+extension+' was rejected.'}})}),error=>{assert.equal(JSON.stringify(error).includes('FRESH_SUFFIX_MARKER'),false);return true;});
+});
+
+test('OAuth cancellation during initial token lookup or 401 recovery never sends a late inference request',async()=>{
+  for(const phase of ['initial','recovery']){
+    const controller=new AbortController();let resolveToken,lookupStarted=false,calls=0;
+    const pending=new Promise(resolve=>{resolveToken=resolve;});
+    const authorization=oauthAuth({async getAccessToken(signal){assert.equal(signal,controller.signal);if(phase==='initial'){lookupStarted=true;return pending;}return oauthTokens.old;},async onUnauthorized(token,signal){assert.equal(signal,controller.signal);lookupStarted=true;return pending;}});
+    const result=api.run(post,oauthSettings,undefined,{signal:controller.signal,authorization,fetchImpl:async()=>{calls++;return oauthHTTP(401);}});
+    for(let i=0;i<50&&!lookupStarted;i++)await new Promise(resolve=>setImmediate(resolve));assert.equal(lookupStarted,true);controller.abort();resolveToken(oauthTokens.fresh);
+    await assert.rejects(result,error=>error.code==='CANCELED');assert.equal(calls,phase==='initial'?0:1);
+  }
+});

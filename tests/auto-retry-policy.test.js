@@ -107,3 +107,13 @@ test('completed answers malformed input and unknown local codes are not error re
     assert.deepEqual(decision(value),{retryable:false,reason:'not_failure'});
   }
 });
+
+test('OAuth model requests never replay automatically after submission or authentication uncertainty',()=>{
+  for(const code of ['API_ERROR','API_INCOMPLETE','API_STREAM_INTERRUPTED','API_CAPACITY','RATE_LIMIT','TIMEOUT']){
+    assert.equal(decision({provider:'oauth',code}).retryable,false,code);
+    assert.equal(decision({code,partialResult:{provider:'oauth',verificationStatus:'incomplete'}}).retryable,false,code);
+  }
+  for(const code of ['OAUTH_LOGIN_REQUIRED','OAUTH_REAUTH_REQUIRED','OAUTH_REFRESH_UNCERTAIN','OAUTH_STORAGE_ERROR','OAUTH_CANCELLED','OAUTH_ACCOUNT_CHANGED','OAUTH_DEVICE_EXPIRED','OAUTH_ACCESS_DENIED','OAUTH_AUTH_UNAVAILABLE','OAUTH_DEVICE_INVALID','OAUTH_CATALOG_UNAVAILABLE'])assert.equal(decision({code}).retryable,false,code);
+  assert.deepEqual(decision({provider:'oauth',code:'API_ERROR',verificationFailure:failure({httpStatus:402,providerCode:'spending_limit'})}),{retryable:false,reason:'account_limit'});
+  assert.deepEqual(decision({provider:'oauth',verificationStatus:'incomplete'}),{retryable:false,reason:'oauth_no_replay'});
+});

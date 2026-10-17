@@ -25,13 +25,13 @@ test('Settings and setup HTML have explicit balanced nesting and unique IDs',()=
 });
 
 test('provider panels are siblings and every provider-specific control belongs to its panel and settings form',()=>{
-  const {ids}=strictTree(source('options')),form=ids.get('settings-form'),api=ids.get('api-fields'),build=ids.get('build-fields');
-  assert.ok(form&&api&&build);assert.equal(api.parent,build.parent);assert.equal(api.parent.tag,'section');
-  for(const [panel,controls]of [[api,['api-key','remember-key','api-model','api-reasoning-effort','api-concurrency','fast-preset','clear-key']],[build,['build-platform','generate-build-command','build-port','build-secret','build-model','build-reasoning-effort','check-build','build-guide','clear-build-connection']]]){
-    for(const id of controls){assert.ok(ancestor(ids.get(id),panel),`#${id} escaped #${panel===api?'api-fields':'build-fields'}`);assert.ok(ancestor(ids.get(id),form),`#${id} escaped #settings-form`);}
+  const {ids}=strictTree(source('options')),form=ids.get('settings-form'),api=ids.get('api-fields'),build=ids.get('build-fields'),oauth=ids.get('oauth-fields');
+  assert.ok(form&&api&&build&&oauth);assert.equal(api.parent,build.parent);assert.equal(api.parent,oauth.parent);assert.equal(api.parent.tag,'section');
+  for(const [panel,controls]of [[api,['api-key','remember-key','api-model','api-reasoning-effort','fast-preset','clear-key']],[build,['build-platform','generate-build-command','build-port','build-secret','build-model','build-reasoning-effort','check-build','build-guide','clear-build-connection']],[oauth,['oauth-login','oauth-cancel','oauth-logout','oauth-remember','oauth-model','oauth-reasoning-effort','oauth-refresh-models']]]){
+    for(const id of controls){assert.ok(ancestor(ids.get(id),panel),`Provider control #${id} escaped its panel`);assert.ok(ancestor(ids.get(id),form),`#${id} escaped #settings-form`);}
   }
-  for(const id of ['provider','enabled','analysis-dwell','web-search','x-search','language','interface-language','verify-prompt','comments-prompt','history-enabled','clear-cache','reload-extension']){
-    assert.ok(ancestor(ids.get(id),form),`#${id} escaped #settings-form`);assert.equal(ancestor(ids.get(id),api)||ancestor(ids.get(id),build),false,`Shared #${id} is trapped in a provider panel`);
+  for(const id of ['provider','enabled','api-concurrency','analysis-dwell','web-search','x-search','language','interface-language','verify-prompt','comments-prompt','history-enabled','clear-cache','reload-extension']){
+    assert.ok(ancestor(ids.get(id),form),`#${id} escaped #settings-form`);assert.equal(ancestor(ids.get(id),api)||ancestor(ids.get(id),build)||ancestor(ids.get(id),oauth),false,`Shared #${id} is trapped in a provider panel`);
   }
 });
 

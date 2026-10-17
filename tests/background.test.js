@@ -93,6 +93,21 @@ function createBackground(options = {}) {
     async openOptionsPage() { if(options.openOptionsPage)await options.openOptionsPage(harness); }
   };
   const alarmCalls=[];
+  const oauthCalls=[];
+  let oauthState={state:'idle',connected:false,remember:true,credentialId:'',catalogModels:[],...clone(options.oauthState)};
+  let oauthChanged=()=>{};
+  const oauthManager={
+    async initialize(){oauthCalls.push({type:'initialize'});if(options.oauthInitialize)await options.oauthInitialize(oauthManager);return this.status();},
+    status(){return clone(oauthState);},
+    change(value){oauthState={...oauthState,...clone(value)};oauthChanged(this.status());},
+    async startLogin(value){oauthCalls.push({type:'startLogin',...clone(value)});if(options.oauthStart)return options.oauthStart(value,oauthManager);this.change({state:'authorizing',remember:value.remember,device:{userCode:'TEST-CODE',verificationUriComplete:'https://accounts.x.ai/oauth2/device?user_code=TEST-CODE',expiresAt:now+600000}});return this.status();},
+    async cancelLogin(){oauthCalls.push({type:'cancelLogin'});this.change({state:'idle',device:undefined});return this.status();},
+    async logout(){oauthCalls.push({type:'logout'});if(options.oauthLogout)return options.oauthLogout(oauthManager);this.change({state:'idle',connected:false,credentialId:'',device:undefined,catalogModels:[]});return this.status();},
+    async setRemember(value){oauthCalls.push({type:'setRemember',value});this.change({remember:value});return this.status();},
+    async catalog(){oauthCalls.push({type:'catalog'});return this.status();},
+    async handleAlarm(value){oauthCalls.push({type:'alarm',name:value.name});return this.status();},
+    async ensureAccessToken(value){oauthCalls.push({type:'token',forceRefresh:value.forceRefresh,expectedCredentialId:value.expectedCredentialId});if(options.oauthToken)return options.oauthToken(value,oauthManager);if(!oauthState.connected||value.expectedCredentialId!==oauthState.credentialId)throw Object.assign(new Error('Sign in required.'),{code:'OAUTH_LOGIN_REQUIRED'});return {accessToken:value.forceRefresh?'rotated-access-fixture':'access-fixture',credentialId:oauthState.credentialId};}
+  };
   const permissionState={granted:options.localPermission!==false};
   const permissions={onRemoved:event(),async contains(){if(options.permissionContains)await options.permissionContains(permissionState);return permissionState.granted;}};
   const chrome = { runtime, permissions, alarms:{onAlarm:event(),async create(name,options){alarmCalls.push({name,...options});}}, storage: { local, session }, tabs: {
@@ -130,7 +145,7 @@ function createBackground(options = {}) {
   let now = options.now ?? 1800000000000;
   class ClockDate extends Date { static now() { return now; } }
   const context = vm.createContext({
-    chrome, XGrokCore: options.retryLimit===undefined?core:{...core,AUTO_RETRY_LIMIT:options.retryLimit}, GrokFirstUI:ui, SuperXKeyStore:options.keyStore||keyStore,SuperXBuildConnectionStore:buildStore,SuperXBuildSetup:setup, SuperXHistoryStore:{...historyStore,create(area){return historyStore.create(area,{now:()=>now});}}, importScripts() {}, URL, AbortController, DOMException, crypto, Date: ClockDate, TextEncoder, TextDecoder,
+    chrome, XGrokCore: options.retryLimit===undefined?core:{...core,AUTO_RETRY_LIMIT:options.retryLimit}, GrokFirstUI:ui, SuperXKeyStore:options.keyStore||keyStore,SuperXBuildConnectionStore:buildStore,SuperXBuildSetup:setup, SuperXHistoryStore:{...historyStore,create(area){return historyStore.create(area,{now:()=>now});}}, SuperXOAuth:{ALARMS:{poll:'SUPERX_OAUTH_DEVICE_POLL',refresh:'SUPERX_OAUTH_REFRESH'},create(value){oauthChanged=value.onChange;return oauthManager;}}, importScripts() {}, URL, AbortController, DOMException, crypto, Date: ClockDate, TextEncoder, TextDecoder,
     navigator: Object.hasOwn(options, 'navigator') ? options.navigator : { language: 'en-US' },
     SuperXBuild:{publicError:buildProvider.publicError,async close(){if(options.buildClose)await options.buildClose();},async status(input){buildStatusCalls.push(clone(input));return options.buildStatus?options.buildStatus(input):{connected:true,installed:true,available:true,authenticated:true,version:'1.0.60'};},
       async run(post,settings,callbacks){const call={post,settings,...callbacks};buildCalls.push(call);return options.buildRun?options.buildRun(call,harness):{text:'Checked '+post.id,provider:'build',searched:true,verificationStatus:'completed',model:'grok-4.7',usage:{total_tokens:17}};},
@@ -151,7 +166,7 @@ function createBackground(options = {}) {
     clearTimeout(timer) { if (timer?.immediate) clearImmediate(timer.immediate); if (timer?.deadline) timer.cancelled = true; }
   });
   const harness = {
-    chrome, permissionState, local, session, alarmCalls, buildStore,buildState,buildStoreCalls, keyStore:options.keyStore||keyStore, keyStoreState, keyStoreCalls, apiCalls, commentCalls, buildCalls,buildCommentCalls,buildStatusCalls,runtimeMessages, createdTabs, removedTabs, tabMessages, tabs, windows, createdWindows, removedWindows, deadlines,
+    chrome, permissionState, local, session, alarmCalls,oauthManager,oauthCalls, buildStore,buildState,buildStoreCalls, keyStore:options.keyStore||keyStore, keyStoreState, keyStoreCalls, apiCalls, commentCalls, buildCalls,buildCommentCalls,buildStatusCalls,runtimeMessages, createdTabs, removedTabs, tabMessages, tabs, windows, createdWindows, removedWindows, deadlines,
     now() { return now; },
     advance(ms) { now += ms; },
     advanceRetryTimers(ms) {
@@ -187,6 +202,8 @@ function createBackground(options = {}) {
   return harness;
 }
 const post = id => ({ id: String(id), url: `https://x.com/author/status/${id}`, text: `Claim ${id}`, quotedContext: [], images: [] });
+const OAUTH_ACCOUNT_A='11111111-1111-4111-8111-111111111111',OAUTH_ACCOUNT_B='22222222-2222-4222-8222-222222222222';
+const oauthConnected=(credentialId=OAUTH_ACCOUNT_A)=>({state:'connected',connected:true,remember:true,credentialId,catalogModels:['grok-4.3','grok-4.7']});
 test('fresh installations persist the versioned three-request and one-second defaults without provider calls',async()=>{
   const bg=createBackground({local:{settings:undefined},session:null});await bg.ready();const config=await bg.message({type:'GET_CONFIG'});assert.equal(config.settings.analysisDefaultsVersion,1);assert.equal(config.settings.apiConcurrency,3);assert.equal(config.settings.dwellMs,1000);assert.deepEqual(bg.local.data.settings,core.DEFAULT_SETTINGS);assert.equal(bg.apiCalls.length,0);assert.equal(bg.commentCalls.length,0);assert.equal(bg.buildCalls.length,0);
 });
@@ -1014,7 +1031,7 @@ test('0.6.2 excerpt-based caches cannot substitute for full-post answers in any 
     const keys=Object.keys(bg.session.data.cache),freshKey=keys.find(key=>key!==oldKey);
     assert.ok(keys.includes(oldKey));assert.ok(freshKey);
     assert.equal(JSON.parse(freshKey)[6],'api-v10-model-reasoning');
-    assert.deepEqual(JSON.parse(JSON.parse(freshKey)[9]),['post-input-v3-full-url',input.url,'en']);
+    assert.deepEqual(JSON.parse(JSON.parse(freshKey)[9]),['post-input-v4-source-full-url','api',input.url,'en']);
     assert.equal((await analyze(bg,port,'full-hit-'+mode,100,{post:input})).cached,true);
     const restarted=createBackground({settings:s,session:bg.session.data});await restarted.ready();
     const persisted=await analyze(restarted,restarted.connect(),'full-restart-'+mode,100,{post:input});
@@ -1048,7 +1065,7 @@ test('0.6.4 API process narration caches regenerate in every mode and reader-fac
     const keys=Object.keys(bg.session.data.cache),freshKey=keys.find(key=>key!==oldKey);
     assert.ok(keys.includes(oldKey),'Changing answer policy does not destructively remove stored data');
     assert.ok(freshKey);assert.equal(JSON.parse(freshKey)[6],'api-v10-model-reasoning');
-        assert.deepEqual(JSON.parse(JSON.parse(freshKey)[9]),['post-input-v3-full-url',input.url,'en']);
+        assert.deepEqual(JSON.parse(JSON.parse(freshKey)[9]),['post-input-v4-source-full-url','api',input.url,'en']);
     const cached=await analyze(bg,port,'reader-output-hit-'+mode,100,{post:input});
     assert.equal(cached.cached,true);assert.equal(cached.result.text,freshText);assert.equal(bg.apiCalls.length,1);
     const restarted=createBackground({settings:s,session:bg.session.data});
@@ -2240,7 +2257,12 @@ test('startup migrates retired provider and URL selections while preserving key 
     assert.equal(bg.local.data.settings.provider,'api');assert.equal(bg.local.data.settings.explanationMode,'preset');
     for(const key of ['language','apiModel','explainPrompt','verifyPrompt','commentsPrompt'])assert.equal(bg.local.data.settings[key],saved[key]);
     await assertStoredKey(bg,'saved-local-secret');assert.equal(bg.session.data.apiKey,'saved-local-secret');
-    const port=bg.connect();assert.equal((await analyze(bg,port,'legacy-'+providerName)).type,'RESULT');
+    const port=bg.connect();
+    if(providerName==='unknown'){
+      assert.equal((await analyze(bg,port,'unknown-before-selection')).type,'ERROR');assert.equal(bg.apiCalls.length,0);
+      assert.equal((await bg.message({type:'SAVE_SETTINGS',settings:{...bg.local.data.settings,provider:'api'}})).ok,true);
+    }
+    assert.equal((await analyze(bg,port,'legacy-'+providerName)).type,'RESULT');
     assert.equal(bg.apiCalls[0].key,'saved-local-secret','Existing local credentials restore directly into the trusted session');
     assert.equal((await bg.message({type:'SAVE_KEY',apiKey:'saved-session-secret',remember:false})).ok,true);
     const result=await analyze(bg,port,'migrated-'+providerName);assert.equal(result.type,'RESULT');
@@ -3130,4 +3152,119 @@ test('a sixth timeout reports cumulative charges in the terminal error, retained
   const last=port.messages.find(m=>m.type==='ERROR');assert.equal(last.code,'TIMEOUT');assert.equal(last.retryAttempts,5);assert.equal(last.usage.total_tokens,210);assert.equal(last.partialResult.usage.total_tokens,210);assert.equal(last.partialResult.verificationFailure.code,'TIMEOUT');assert.equal(last.partialResult.text,'Source evidence before timeout.');assert.equal(bg.apiCalls.length,6);
   let saved;await until(()=>bg.local.data.superxHistory?.[0]?.analysis?.usage?.total_tokens===210);
   saved=await bg.message({type:'GET_HISTORY'});assert.equal(saved.entries[0].analysis.usage.total_tokens,210);assert.equal(saved.entries[0].analysis.text,'Source evidence before timeout.');assert.equal(Object.keys(bg.session.data.cache||{}).length,0);
+});
+
+test('OAuth can run Fact Check and strict comments without an API Key or Build connection',async()=>{
+  const bg=createBackground({settings:{provider:'oauth'},session:{apiKey:undefined,securityFault:true},oauthState:oauthConnected(),
+    apiRun:async call=>{assert.equal(call.key,undefined);assert.equal(await call.authorization.getAccessToken(),'access-fixture');return {provider:'oauth',text:'Independent cited finding.',sources:[{url:'https://example.org/evidence'}],verificationStatus:'completed',model:'grok-4.3',usage:{total_tokens:31}};},
+    commentRun:async call=>{assert.equal(call.key,undefined);assert.equal(await call.authorization.getAccessToken(),'access-fixture');return {provider:'oauth',comments:['Evidence matters.','Which source confirms this?','The comparison needs context.'],model:'grok-4.3',usage:{total_tokens:12}};}});
+  await bg.ready();assert.equal((await bg.message({type:'GET_CONFIG'})).ready,true);const port=bg.connect();
+  const result=await analyze(bg,port,'oauth-fact');assert.equal(result.type,'RESULT');assert.equal(result.result.provider,'oauth');assert.equal(result.result.usage.total_tokens,31);
+  const comments=await draftComments(bg,port,'oauth-comments');assert.equal(comments.type,'COMMENT_RESULT');assert.equal(comments.comments.length,3);assert.equal(comments.usage.total_tokens,12);
+  assert.equal(bg.buildCalls.length,0);assert.equal(bg.buildCommentCalls.length,0);assert.equal(bg.keyStoreCalls.length,0);
+  assert.doesNotMatch(JSON.stringify([...port.messages,...bg.runtimeMessages]),/access-fixture|rotated-access-fixture/);
+});
+
+test('OAuth signed-out and unavailable models never fall through to an existing paid Key or Build',async()=>{
+  for(const state of [{state:'idle',connected:false}, {...oauthConnected(),catalogModels:['grok-4.7']}]){
+    const bg=createBackground({settings:{provider:'oauth'},oauthState:state});await bg.ready();const result=await analyze(bg,bg.connect(),'oauth-closed');
+    assert.equal(result.type,'ERROR');assert.ok(['OAUTH_LOGIN_REQUIRED','OAUTH_MODEL_UNAVAILABLE'].includes(result.code));assert.equal(bg.apiCalls.length,0);assert.equal(bg.buildCalls.length,0);assert.equal(bg.session.data.apiKey,'session-secret');
+    assert.equal(bg.local.data.settings.oauthModel,'grok-4.3');assert.equal(bg.local.data.settings.apiModel,'grok-4.3');
+  }
+});
+
+test('only trusted UI sees the device challenge and login opens the returned official page without inference',async()=>{
+  const bg=createBackground({settings:{provider:'oauth'}});await bg.ready();const port=bg.connect();await until(()=>port.messages.some(value=>value.type==='CONFIG'));
+  const feed={id:bg.chrome.runtime.id,url:'https://x.com/home',frameId:0,tab:{id:7}};
+  for(const type of ['GET_OAUTH_STATUS','OAUTH_LOGIN','OAUTH_CANCEL_LOGIN','OAUTH_LOGOUT','OAUTH_SET_REMEMBER','OAUTH_REFRESH_CATALOG'])assert.equal((await bg.message({type,remember:false},feed)).ok,false);
+  const login=await bg.message({type:'OAUTH_LOGIN',remember:false});assert.equal(login.ok,true);assert.equal(login.oauthStatus.device.userCode,'TEST-CODE');assert.equal(bg.createdTabs.length,1);assert.equal(bg.createdTabs[0].url,'https://accounts.x.ai/oauth2/device?user_code=TEST-CODE');
+  const uiConfig=await bg.message({type:'GET_CONFIG'});assert.equal(uiConfig.oauthStatus.device.userCode,'TEST-CODE');assert.equal(uiConfig.settings.oauthRemember,false);
+  const feedConfig=port.messages.findLast(value=>value.type==='CONFIG');assert.equal(feedConfig.oauthStatus.device,undefined);assert.doesNotMatch(JSON.stringify(port.messages),/TEST-CODE|verificationUri|device_code|refresh_token|access_token/);
+  assert.equal(bg.apiCalls.length+bg.commentCalls.length+bg.buildCalls.length,0);
+  await bg.message({type:'OAUTH_CANCEL_LOGIN'});assert.equal(bg.oauthManager.status().device,undefined);
+});
+
+test('cancelled device startup cannot open a late official tab and switching providers cancels pending login',async()=>{
+  const pending=deferred();const bg=createBackground({settings:{provider:'oauth'},oauthStart:async(value,manager)=>{manager.change({state:'starting'});await pending.promise;return {state:'authorizing',device:{userCode:'LATE-CODE',verificationUriComplete:'https://accounts.x.ai/oauth2/device?user_code=LATE-CODE'},remember:true};}});
+  await bg.ready();const login=bg.message({type:'OAUTH_LOGIN'});await until(()=>bg.oauthCalls.some(value=>value.type==='startLogin'));
+  await bg.message({type:'SAVE_SETTINGS',settings:{...bg.local.data.settings,provider:'api'}});assert.ok(bg.oauthCalls.some(value=>value.type==='cancelLogin'));
+  pending.resolve();await login;assert.equal(bg.createdTabs.length,0);assert.equal(bg.local.data.settings.provider,'api');assert.equal(bg.session.data.apiKey,'session-secret');
+});
+
+test('provider changes cancel login while it is still waiting for credential restoration',async()=>{
+  const pending=deferred();const bg=createBackground({settings:{provider:'oauth'},oauthState:{state:'restoring'},oauthStart:async()=>{
+    await pending.promise;return {state:'awaiting_authorization',device:{userCode:'RESTORE-LATE',verificationUriComplete:'https://accounts.x.ai/oauth2/device?user_code=RESTORE-LATE'}};
+  }});
+  await bg.ready();const login=bg.message({type:'OAUTH_LOGIN'});await until(()=>bg.oauthCalls.some(value=>value.type==='startLogin'));
+  assert.equal(bg.oauthManager.status().state,'restoring');
+  await bg.message({type:'SAVE_SETTINGS',settings:{...bg.local.data.settings,provider:'api'}});
+  assert.ok(bg.oauthCalls.some(value=>value.type==='cancelLogin'));
+  pending.resolve();await login;assert.equal(bg.createdTabs.length,0);assert.equal(bg.oauthManager.status().device,undefined);
+  assert.equal(bg.local.data.settings.provider,'api');assert.equal(bg.session.data.apiKey,'session-secret');assert.equal(bg.apiCalls.length,0);
+});
+
+test('OAuth remembers login independently and logout preserves configured Key and Build while closing only OAuth work',async()=>{
+  const bg=createBackground({oauthState:oauthConnected()});await bg.ready();await bg.configureBuild();
+  await bg.message({type:'OAUTH_SET_REMEMBER',remember:false});assert.equal(bg.local.data.settings.oauthRemember,false);assert.equal(bg.session.data.apiKey,'session-secret');assert.ok(bg.buildState.key);
+  await bg.message({type:'OAUTH_LOGOUT'});assert.equal(bg.oauthManager.status().connected,false);assert.equal(bg.session.data.apiKey,'session-secret');assert.ok(bg.buildState.key);assert.equal(bg.keyStoreCalls.includes('clear'),false);assert.equal(bg.buildStoreCalls.includes('clear'),false);
+  assert.equal((await analyze(bg,bg.connect(),'api-after-oauth-logout')).type,'RESULT');assert.equal(bg.apiCalls[0].key,'session-secret');
+});
+
+test('OAuth Responses errors do not automatically replay an uncertain request or freeze other posts',async()=>{
+  let calls=0;const bg=createBackground({settings:{provider:'oauth'},oauthState:oauthConnected(),manualRetryTimers:true,apiRun:async()=>{calls++;if(calls===1)throw Object.assign(new Error('Interrupted stream.'),{code:'API_STREAM_INTERRUPTED'});return {provider:'oauth',text:'The next post still completes.',verificationStatus:'completed'};}});
+  await bg.ready();const port=bg.connect();const first=await analyze(bg,port,'oauth-interrupted',701);assert.equal(first.type,'ERROR');assert.equal(first.retryAttempts,0);bg.advanceRetryTimers(3000);await tick();assert.equal(bg.apiCalls.length,1);assert.equal(port.messages.some(value=>value.type==='RETRY_WAIT'),false);
+  assert.equal((await analyze(bg,port,'oauth-sibling',702)).type,'RESULT');assert.equal(bg.apiCalls.length,2);assert.equal(bg.buildCalls.length,0);
+});
+
+test('account replacement isolates active tasks, cache and history, without replaying a prior account result',async()=>{
+  const slow=deferred();let calls=0;const bg=createBackground({settings:{provider:'oauth',analysisDefaultsVersion:1,apiConcurrency:1},oauthState:oauthConnected(),apiRun:async call=>{calls++;assert.equal(call.key,undefined);await call.authorization.getAccessToken();if(calls===1)return slow.promise;return {provider:'oauth',text:'Account B finding.',verificationStatus:'completed',usage:{total_tokens:22}};}});
+  await bg.ready();const port=bg.connect();await visitHistory(bg,port,[801]);port.send({type:'ANALYZE',requestId:'account-a-live',post:post(801)});await until(()=>bg.apiCalls.length===1);
+  bg.oauthManager.change(oauthConnected(OAUTH_ACCOUNT_B));await tick();const config=await bg.message({type:'GET_CONFIG'});assert.equal(config.credentialIdentity,OAUTH_ACCOUNT_B);
+  port.send({type:'ANALYZE',requestId:'account-b-live',post:post(801)});await tick();assert.equal(bg.apiCalls.length,1,'Cancelled transport retains its actual concurrency lease');
+  slow.resolve({provider:'oauth',text:'Private account A answer.',verificationStatus:'completed'});await until(()=>port.messages.some(value=>value.requestId==='account-b-live'&&value.type==='RESULT'));
+  assert.equal(port.messages.some(value=>value.requestId==='account-a-live'&&value.type==='RESULT'),false);assert.equal(bg.apiCalls.length,2);
+  await until(()=>bg.local.data.superxHistory?.some(entry=>entry.analysis?.text==='Account B finding.'));
+  assert.equal((await bg.message({type:'GET_HISTORY'})).entries[0].analysis.text,'Account B finding.');
+  bg.oauthManager.change(oauthConnected(OAUTH_ACCOUNT_A));await tick();assert.equal((await bg.message({type:'GET_HISTORY'})).entries[0].analysis,undefined);assert.equal((await analyze(bg,port,'account-a-fresh',801)).cached,false);assert.equal(bg.apiCalls.length,3);
+});
+
+test('source-specific answers are filtered from history while visible visits remain and old API settings survive',async()=>{
+  const bg=createBackground({oauthState:oauthConnected(),apiRun:async call=>({provider:call.settings.provider,text:call.settings.provider==='oauth'?'OAuth evidence.':'API evidence.',verificationStatus:'completed'})});await bg.ready();const port=bg.connect();await visitHistory(bg,port,[901]);await analyze(bg,port,'history-api',901);await until(()=>bg.local.data.superxHistory?.[0]?.analysis?.text==='API evidence.');
+  await bg.message({type:'SAVE_SETTINGS',settings:{...bg.local.data.settings,provider:'oauth',oauthModel:'grok-4.7',oauthReasoningEffort:'none'}});
+  assert.equal((await bg.message({type:'GET_HISTORY'})).entries.length,1);assert.equal((await bg.message({type:'GET_HISTORY'})).entries[0].analysis,undefined);
+  await analyze(bg,port,'history-oauth',901);await until(()=>bg.local.data.superxHistory?.[0]?.analysis?.text==='OAuth evidence.');
+  await bg.message({type:'SAVE_SETTINGS',settings:{...bg.local.data.settings,provider:'api'}});assert.equal((await bg.message({type:'GET_HISTORY'})).entries[0].analysis,undefined);assert.equal(bg.local.data.settings.apiModel,'grok-4.3');assert.equal(bg.local.data.settings.oauthModel,'grok-4.7');assert.equal(bg.session.data.apiKey,'session-secret');
+  const cached=await analyze(bg,port,'back-to-api-cache',901);assert.equal(cached.cached,true);assert.equal(cached.result.text,'API evidence.');
+});
+
+test('history mutations filter other source and account answers just like history reads',async()=>{
+  for(const initialProvider of ['api','oauth']){
+    const bg=createBackground({settings:{provider:initialProvider},oauthState:oauthConnected(),apiRun:async()=>({provider:initialProvider,text:'Isolated saved finding.',verificationStatus:'completed'})});
+    await bg.ready();const port=bg.connect();await visitHistory(bg,port,[910,911]);await analyze(bg,port,'history-scope-answer',910);await draftComments(bg,port,'history-scope-comments',910);
+    await until(()=>bg.local.data.superxHistory?.some(entry=>entry.analysis&&entry.comments?.length===3));
+    if(initialProvider==='api')await bg.message({type:'SAVE_SETTINGS',settings:{...bg.local.data.settings,provider:'oauth'}});
+    else{bg.oauthManager.change(oauthConnected(OAUTH_ACCOUNT_B));await tick();}
+    for(const operation of [{type:'DELETE_HISTORY',id:'911'},{type:'SET_HISTORY_ENABLED',enabled:false},{type:'SET_HISTORY_ENABLED',enabled:true}]){
+      const result=await bg.message(operation);assert.equal(result.ok,true);assert.equal(result.entries.length,1);assert.equal(result.entries[0].id,'910');
+      assert.equal(result.entries[0].analysis,undefined);assert.equal(result.entries[0].comments,undefined);assert.equal(result.entries[0].commentsModel,undefined);
+      assert.equal(bg.local.data.superxHistory.find(entry=>entry.id==='910').analysis.text,'Isolated saved finding.','Stored visits and answers remain local while the returned view is scoped');
+    }
+    const cleared=await bg.message({type:'CLEAR_HISTORY'});assert.equal(cleared.ok,true);assert.deepEqual(cleared.entries,[]);
+  }
+});
+
+test('restoring the same OAuth credential keeps its session cache without another paid generation',async()=>{
+  const seed=createBackground({settings:{provider:'oauth'},oauthState:oauthConnected(),apiRun:async()=>({provider:'oauth',text:'Cached OAuth evidence.',verificationStatus:'completed'})});
+  await seed.ready();const port=seed.connect();assert.equal((await analyze(seed,port,'oauth-cache-seed',920)).cached,false);
+  await until(()=>Object.keys(seed.session.data.cache||{}).length===1);
+  const restore=deferred(),restarted=createBackground({local:seed.local.data,session:seed.session.data,oauthInitialize:async manager=>{await restore.promise;manager.change(oauthConnected());}});
+  await restarted.ready();restore.resolve();await until(()=>restarted.oauthManager.status().connected);
+  const result=await analyze(restarted,restarted.connect(),'oauth-restored-cache',920);assert.equal(result.cached,true);assert.equal(result.result.text,'Cached OAuth evidence.');assert.equal(restarted.apiCalls.length,0);
+});
+
+test('unknown persisted sources stay closed across normalization and require an explicit supported selection',async()=>{
+  const first=createBackground({settings:{provider:'malformed-source'}});await first.ready();assert.equal((await first.message({type:'GET_CONFIG'})).ready,false);assert.equal((await analyze(first,first.connect(),'unknown-no-fallback')).type,'ERROR');assert.equal(first.apiCalls.length,0);
+  const restarted=createBackground({local:first.local.data,session:first.session.data});await restarted.ready();assert.equal((await restarted.message({type:'GET_CONFIG'})).ready,false);
+  assert.equal((await restarted.message({type:'SAVE_SETTINGS',settings:{...restarted.local.data.settings,provider:'bad-provider'}})).ok,false);
+  await restarted.message({type:'SAVE_SETTINGS',settings:{...restarted.local.data.settings,provider:'api'}});assert.equal((await restarted.message({type:'GET_CONFIG'})).ready,true);assert.equal((await analyze(restarted,restarted.connect(),'explicit-api')).type,'RESULT');
 });

@@ -26,10 +26,65 @@
   let diagnosticsBusy=false,diagnosticsStatusKey=null,diagnosticsText="",diagnosticsRetentionHours=24,diagnosticsMaxEntries=30;
   let buildStatus = null, buildChecking = false, buildCheckRevision = 0;
   let buildConnection={configured:false,port:2419},buildSecretChanged=false,buildGenerating=false;
+  let oauthStatus={state:"idle",connected:false,remember:true,catalogModels:null},oauthActionBusy=false,oauthLoginPending=false,oauthActionRevision=0,oauthLoaded=false,oauthPollTimer,oauthReadRevision=0,oauthActionError=null;
   const advertisedBuildModels = new Set();
-  const apiControlIds = ["api-key","remember-key","api-model","api-reasoning-effort","fast-preset","api-concurrency","clear-key"];
+  const apiControlIds = ["api-key","remember-key","api-model","api-reasoning-effort","fast-preset","clear-key"];
   const buildControlIds = ["build-platform","build-port","build-secret","generate-build-command","copy-build-command","clear-build-connection","build-model","build-reasoning-effort","check-build","build-guide"];
+  const oauthControlIds=["oauth-login","oauth-cancel","oauth-logout","oauth-remember","oauth-copy-code","oauth-model","oauth-reasoning-effort","oauth-refresh-models"];
   const isBuild = () => $("provider").value === "build";
+  const isOAuth = () => $("provider").value === "oauth";
+  const isAPI = () => $("provider").value === "api";
+  function oauthErrorKey(code){return ({OAUTH_ACCESS_DENIED:"oauth.denied",OAUTH_AUTHORIZATION_DENIED:"oauth.denied",OAUTH_AUTHORIZATION_EXPIRED:"oauth.expired",OAUTH_DEVICE_EXPIRED:"oauth.expired",OAUTH_EXPIRED_TOKEN:"oauth.expired",OAUTH_NETWORK_ERROR:"oauth.networkError",OAUTH_AUTH_UNAVAILABLE:"oauth.networkError",OAUTH_NETWORK:"oauth.networkError",OAUTH_STORAGE_ERROR:"oauth.storageError",OAUTH_REAUTH_REQUIRED:"oauth.reauthRequired",OAUTH_REFRESH_UNCERTAIN:"oauth.reauthRequired",OAUTH_ACCOUNT_CHANGED:"oauth.reauthRequired",OAUTH_NOT_CONNECTED:"oauth.needsLogin",OAUTH_LOGIN_REQUIRED:"oauth.needsLogin",OAUTH_CANCELLED:"oauth.canceled",OAUTH_CATALOG_ERROR:"oauth.catalogUnavailable",OAUTH_CATALOG_FAILED:"oauth.catalogUnavailable",OAUTH_CATALOG_UNAVAILABLE:"oauth.catalogUnavailable"})[code]||"oauth.unavailable";}
+  function officialOAuthURL(value){
+    if(typeof value!=="string"||value.length>2048)return "";
+    try{const url=new URL(value);if(!["https://accounts.x.ai","https://auth.x.ai"].includes(url.origin)||url.username||url.password||url.hash||!/^\/oauth2\/device(?:\/|$)/.test(url.pathname))return "";for(const key of url.searchParams.keys())if(!["user_code","client_id"].includes(key))return "";return url.href;}catch{return "";}
+  }
+  function safeOAuthStatus(raw){
+    const states={disconnected:"idle",starting:"authorizing",awaiting_authorization:"authorizing",idle:"idle",authorizing:"authorizing",connected:"connected",refreshing:"refreshing",restoring:"restoring",reauth_required:"reauth_required",error:"error",logging_out:"logging_out"};
+    const result={state:states[raw?.state]||"idle",connected:raw?.connected===true,remember:typeof raw?.remember==="boolean"?raw.remember:currentSettings.oauthRemember!==false,catalogModels:null};
+    if(typeof raw?.errorCode==="string")result.errorKey=oauthErrorKey(raw.errorCode);
+    if(raw?.catalogErrorCode)result.catalogError=true;
+    if(result.connected&&Array.isArray(raw?.catalogModels))result.catalogModels=raw.catalogModels.slice(0,100).flatMap(entry=>{const id=typeof entry==="string"?entry:entry?.id;if(typeof id!=="string"||!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(id))return [];return [{id,available:entry?.available!==false,...(Array.isArray(entry?.efforts)?{efforts:entry.efforts.filter(value=>["none","minimal","low","medium","high","xhigh","auto"].includes(value))}:{})}];});
+    const code=raw?.device?.userCode,url=officialOAuthURL(raw?.device?.verificationUriComplete);
+    if(result.state==="authorizing"&&typeof code==="string"&&/^[A-Za-z0-9-]{3,32}$/.test(code)&&url)result.device={userCode:code,url};
+    return result;
+  }
+  function oauthEfforts(model){const entry=oauthStatus.catalogModels?.find(item=>item.id===model),profile=core.modelProfile(model);return entry?.efforts||profile?.efforts||["auto"];}
+  function populateOAuthModels(model=currentSettings.oauthModel||"grok-4.3",effort=$("oauth-reasoning-effort").value||currentSettings.oauthReasoningEffort||"none",modelChanged=false){
+    const select=$("oauth-model"),choices=new Map(core.API_MODELS.map(item=>[item.value,item.label]));for(const entry of oauthStatus.catalogModels||[])choices.set(entry.id,choices.get(entry.id)||entry.id);if(!choices.has(model))choices.set(model,model);select.replaceChildren();
+    for(const [value,label]of choices){const option=document.createElement("option");option.value=value;option.textContent=label;option.disabled=Array.isArray(oauthStatus.catalogModels)&&!oauthStatus.catalogModels.some(entry=>entry.id===value&&entry.available!==false);select.append(option);}select.value=model;
+    const reasoning=$("oauth-reasoning-effort"),efforts=oauthEfforts(model),preferred=core.reasoningEffort(model),selected=efforts.includes(effort)?effort:!modelChanged&&["none","minimal","low","medium","high","xhigh","auto"].includes(effort)?effort:efforts.includes(preferred)?preferred:efforts[0]||"";reasoning.replaceChildren();
+    for(const value of [...efforts,...(selected&&!efforts.includes(selected)?[selected]:[])]){const option=document.createElement("option");option.value=value;option.textContent=ui.t("options.reasoning."+value,uiLanguage);option.disabled=!efforts.includes(value);reasoning.append(option);}reasoning.value=selected;
+  }
+  function renderOAuth(){
+    const selected=isOAuth(),pending=["authorizing","restoring","refreshing","logging_out"].includes(oauthStatus.state),authorizing=oauthStatus.state==="authorizing",connected=oauthStatus.connected;
+    for(const id of oauthControlIds)$(id).disabled=busy||oauthActionBusy||!selected;
+    $("oauth-login").hidden=authorizing||connected||["restoring","logging_out"].includes(oauthStatus.state);$("oauth-cancel").hidden=!authorizing;$("oauth-logout").hidden=!connected&&oauthStatus.state!=="reauth_required";$("oauth-remember").disabled=busy||oauthActionBusy||!selected||["restoring","logging_out"].includes(oauthStatus.state);
+    $("oauth-refresh-models").disabled=busy||oauthActionBusy||!selected||!connected||pending;
+    const statusKey=oauthActionError||(oauthStatus.state==="error"?oauthStatus.errorKey||"oauth.unavailable":({idle:"oauth.idle",authorizing:"oauth.authorizing",connected:"oauth.connected",refreshing:"oauth.refreshing",restoring:"oauth.restoring",reauth_required:"oauth.reauthRequired",logging_out:"oauth.loggingOut"})[oauthStatus.state]||"oauth.unavailable");
+    $("oauth-status").textContent=ui.t(statusKey,uiLanguage);$("oauth-status").dataset.state=oauthActionError?"error":oauthStatus.state;
+    const device=oauthStatus.device;$("oauth-device").hidden=!device;$("oauth-user-code").textContent=device?.userCode||"";if(device)$("oauth-official-link").setAttribute("href",device.url);else $("oauth-official-link").removeAttribute("href");
+    const model=$("oauth-model").value,available=!Array.isArray(oauthStatus.catalogModels)||oauthStatus.catalogModels.some(entry=>entry.id===model&&entry.available!==false),effort=oauthEfforts(model).includes($("oauth-reasoning-effort").value);
+    $("oauth-model-status").textContent=oauthStatus.catalogError?ui.t("oauth.catalogUnavailable",uiLanguage):!available?ui.t("oauth.modelUnavailable",uiLanguage,{model}):!effort?ui.t("options.reasoningInvalid",uiLanguage):"";
+  }
+  function scheduleOAuthPoll(){
+    if(oauthPollTimer!==undefined)globalThis.clearTimeout?.(oauthPollTimer);oauthPollTimer=undefined;
+    if(isOAuth()&&["authorizing","restoring","refreshing","logging_out"].includes(oauthStatus.state)&&globalThis.setTimeout)oauthPollTimer=setTimeout(()=>{oauthPollTimer=undefined;void refreshOAuthStatus();},1500);
+  }
+  function applyOAuthStatus(raw){oauthStatus=safeOAuthStatus(raw);oauthLoaded=true;$("oauth-remember").checked=oauthStatus.remember;currentSettings={...currentSettings,oauthRemember:oauthStatus.remember};populateOAuthModels($("oauth-model").value||currentSettings.oauthModel,$("oauth-reasoning-effort").value||currentSettings.oauthReasoningEffort);renderOAuth();scheduleOAuthPoll();}
+  async function refreshOAuthStatus(){const revision=++oauthReadRevision;try{const result=await send({type:"GET_OAUTH_STATUS"});if(revision===oauthReadRevision&&result.oauthStatus){oauthActionError=null;applyOAuthStatus(result.oauthStatus);}}catch{if(revision===oauthReadRevision){oauthActionError="oauth.unavailable";renderOAuth();}}}
+  async function oauthAction(type,values={}){
+    if(busy||oauthActionBusy||!isOAuth())return;const revision=++oauthActionRevision;oauthActionBusy=true;oauthLoginPending=type==="OAUTH_LOGIN";oauthActionError=null;oauthReadRevision++;renderOAuth();
+    try{const result=await chrome.runtime.sendMessage({type,...values});if(revision!==oauthActionRevision)return;if(result?.oauthStatus)applyOAuthStatus(result.oauthStatus);if(!result?.ok){oauthActionError=oauthErrorKey(result?.errorCode||result?.oauthStatus?.errorCode);renderOAuth();}else if(!result.oauthStatus)throw new Error("Missing OAuth status");}
+    catch{if(revision===oauthActionRevision){oauthActionError="oauth.unavailable";$("oauth-remember").checked=oauthStatus.remember;renderOAuth();}}
+    finally{if(revision===oauthActionRevision){oauthActionBusy=false;oauthLoginPending=false;renderOAuth();scheduleOAuthPoll();}}
+  }
+  async function cancelOAuthLoginOnProviderChange(){
+    if(isOAuth()||!oauthLoginPending&&oauthStatus.state!=="authorizing")return;
+    const revision=++oauthActionRevision;oauthReadRevision++;oauthActionBusy=false;oauthLoginPending=false;oauthActionError=null;oauthStatus={...oauthStatus,state:"idle",connected:false,device:undefined};renderOAuth();scheduleOAuthPoll();
+    try{const result=await send({type:"OAUTH_CANCEL_LOGIN"});if(revision===oauthActionRevision&&result.oauthStatus)applyOAuthStatus(result.oauthStatus);}
+    catch{if(revision===oauthActionRevision&&isOAuth()){oauthActionError="oauth.unavailable";renderOAuth();}}
+  }
   function buildStateKey() {
     if (buildChecking) return "build.checking";
     if (!buildStatus) return "build.unknown";
@@ -62,14 +117,16 @@
     $("build-fast-help").hidden = !/fast/i.test(selected);
   }
   function renderProvider() {
-    const build = isBuild();
-    $("api-fields").hidden = build;$("build-fields").hidden = !build;
-    for (const id of apiControlIds) $(id).disabled = busy || build;
+    const build = isBuild(),oauth=isOAuth();
+    $("api-fields").hidden = !isAPI();$("build-fields").hidden = !build;$("oauth-fields").hidden=!oauth;
+    for (const id of apiControlIds) $(id).disabled = busy || !isAPI();
     for (const id of buildControlIds) $(id).disabled = busy || !build;
+    $("api-concurrency-field").hidden=build;$("api-concurrency").disabled=busy||build;
     $("source-description").textContent = build ? ui.t("options.buildDescription",uiLanguage) : "";
     $("source-description").hidden = !build;
-    $("save").disabled = busy || (!build && !securityLoaded);
-    renderBuildStatus();
+    $("save").disabled = busy || (isAPI() && !securityLoaded);
+    $("verification-help").textContent=ui.t(oauth?"oauth.verificationHelp":"options.verificationHelp",uiLanguage);
+    renderBuildStatus();renderOAuth();
   }
   function requestLocalAccess(){try{return chrome.permissions?.request({origins:["http://127.0.0.1/*"]}) || Promise.resolve(false);}catch{return Promise.resolve(false);}}
 
@@ -136,7 +193,7 @@
     $("key-security-state").textContent = ui.t(stateKeys[security.keyState] || stateKeys.missing,uiLanguage);
     $("key-security-state").dataset.state = security.keyState;
     $("clear-key").hidden = !securityLoaded || security.keyState !== "ready" && !security.hasSavedKey;
-    $("save").disabled = busy || (!isBuild() && !securityLoaded);
+    $("save").disabled = busy || (isAPI() && !securityLoaded);
   }
   async function refreshSecurity(fillKey = false, preserveDraft = false) {
     const result = await send({type:"GET_SECURITY_STATUS"});
@@ -159,12 +216,14 @@
     renderSecurity();return result;
   }
   function markDraft() {
-    if (busy || (!isBuild() && !securityLoaded)) return;
+    if (busy || (isAPI() && !securityLoaded)) return;
     const changed = keyChanged || rememberChanged
       || $("provider").value !== currentSettings.provider
       || buildSecretChanged || Number($("build-port").value) !== currentSettings.buildPort
       || $("build-model").value !== currentSettings.buildModel
       || $("build-reasoning-effort").value !== currentSettings.buildReasoningEffort
+      || $("oauth-model").value !== (currentSettings.oauthModel||"grok-4.3")
+      || $("oauth-reasoning-effort").value !== (currentSettings.oauthReasoningEffort||"none")
       || $("enabled").checked !== currentSettings.enabled
       || $("explanation-mode").value !== currentSettings.explanationMode
       || $("api-model").value !== currentSettings.apiModel
@@ -183,18 +242,18 @@
   }
   async function consumeOptionsFocus() {
     optionsFocusPending = true;
-    if (busy || (!isBuild() && !securityLoaded)) return;
+    if (busy || (isAPI() && !securityLoaded)) return;
     optionsFocusPending = false;
     try {
       const stored = await chrome.storage.session.get("superxOptionsFocus");
       const request = stored.superxOptionsFocus;
-      if (!request || !["api-key","unlock-passphrase","build"].includes(request.id)
+      if (!request || !["api-key","unlock-passphrase","build","oauth"].includes(request.id)
         || !["string","number"].includes(typeof request.nonce) || request.nonce === lastOptionsFocusNonce) return;
       if (busy) { optionsFocusPending = true;return; }
       lastOptionsFocusNonce = request.nonce;
       // Keep Build navigation on its visible setup controls. Legacy password
       // focus requests still lead to the API Key field in API mode.
-      const id = request.id === "build" || isBuild() ? isBuild() ? "check-build" : "provider" : "api-key";
+      const id = isOAuth()?"oauth-login":request.id==="oauth"?"provider":request.id === "build" || isBuild() ? isBuild() ? "check-build" : "provider" : "api-key";
       await chrome.storage.session.remove("superxOptionsFocus");
       $(id).scrollIntoView?.({block:"center",behavior:"instant"});
       $(id).focus({preventScroll:true});
@@ -326,6 +385,7 @@
     const buildModel=$("build-model").value || currentSettings.buildModel;
     const buildEffort=$("build-reasoning-effort").value || currentSettings.buildReasoningEffort;
     populateBuildModels(buildModel);populateBuildReasoning(buildModel,buildEffort);
+    populateOAuthModels($("oauth-model").value||currentSettings.oauthModel,$("oauth-reasoning-effort").value||currentSettings.oauthReasoningEffort);
     showExplanationMode();
     renderSecurity();
     renderProvider();
@@ -337,6 +397,7 @@
     $("provider").value = settings.provider;
     $("build-port").value = settings.buildPort;
     populateBuildModels(settings.buildModel);populateBuildReasoning(settings.buildModel,settings.buildReasoningEffort);
+    populateOAuthModels(settings.oauthModel||"grok-4.3",settings.oauthReasoningEffort||"none");$("oauth-remember").checked=oauthLoaded?oauthStatus.remember:settings.oauthRemember!==false;
     $("explanation-mode").value = settings.explanationMode === "custom" ? "custom" : "preset";
     populateModels(settings.apiModel);
     populateReasoning(settings.apiModel,settings.apiReasoningEffort);
@@ -368,7 +429,8 @@
       currentSettings = core.normalizeSettings(local.settings);
       populate(currentSettings);
       try {const connection=await send({type:"GET_BUILD_CONNECTION"});buildConnection={configured:connection.configured===true,port:connection.port||currentSettings.buildPort};$("build-port").value=buildConnection.port;}catch{/* Existing API setup stays usable if the local connection is unavailable. */}
-      try {await refreshSecurity(true);} catch(error) {if(currentSettings.provider!=="build")throw error;}
+      try {await refreshSecurity(true);} catch(error) {if(currentSettings.provider==="api")throw error;}
+      await refreshOAuthStatus();
       $("remember-key").checked = security.remember;
       if (localeRevision === revision) applyLanguage(locale?.language || local.uiLanguage || observedUILanguage);
       else renderLanguage();
@@ -377,7 +439,15 @@
     } finally { setBusy(false);await consumeOptionsFocus(); }
   }
   $("explanation-mode").addEventListener("change",() => { showExplanationMode();markDraft(); });
-  $("provider").addEventListener("change",() => { renderProvider();markDraft(); });
+  $("provider").addEventListener("change",() => { void cancelOAuthLoginOnProviderChange();renderProvider();markDraft();scheduleOAuthPoll();if(isOAuth())void refreshOAuthStatus(); });
+  $("oauth-login").addEventListener("click",()=>oauthAction("OAUTH_LOGIN",{remember:$("oauth-remember").checked}));
+  $("oauth-cancel").addEventListener("click",()=>oauthAction("OAUTH_CANCEL_LOGIN"));
+  $("oauth-logout").addEventListener("click",()=>oauthAction("OAUTH_LOGOUT"));
+  $("oauth-remember").addEventListener("change",()=>oauthAction("OAUTH_SET_REMEMBER",{remember:$("oauth-remember").checked}));
+  $("oauth-refresh-models").addEventListener("click",()=>oauthAction("OAUTH_REFRESH_CATALOG"));
+  $("oauth-model").addEventListener("change",()=>{populateOAuthModels($("oauth-model").value,$("oauth-reasoning-effort").value,true);renderOAuth();markDraft();});
+  $("oauth-reasoning-effort").addEventListener("change",()=>{renderOAuth();markDraft();});
+  $("oauth-copy-code").addEventListener("click",async()=>{if(!oauthStatus.device)return;try{await navigator.clipboard.writeText(oauthStatus.device.userCode);setStatus("common.copied");}catch{setStatus("common.copyFailed","error");}});
   $("build-model").addEventListener("change",() => { populateBuildReasoning($("build-model").value,$("build-reasoning-effort").value,true);renderBuildStatus();markDraft(); });
   $("build-reasoning-effort").addEventListener("change",() => { renderBuildStatus();markDraft(); });
   $("check-build").addEventListener("click",async () => {
@@ -475,7 +545,7 @@
   }
   $("settings-form").addEventListener("submit",async event => {
     event.preventDefault();
-    if (busy || (!isBuild() && !securityLoaded) || !event.currentTarget.reportValidity()) return;
+    if (busy || (isAPI() && !securityLoaded) || !event.currentTarget.reportValidity()) return;
     const oversized = promptFields.find(field => $(field.name + "-prompt").value.length > promptLimit);
     if (oversized) {
       setStatus("options.promptTooLong","error",{limit:promptLimit});
@@ -490,6 +560,9 @@
       buildPort:Number($("build-port").value),
       buildModel:$("build-model").value,
       buildReasoningEffort:$("build-reasoning-effort").value,
+      oauthModel:$("oauth-model").value,
+      oauthReasoningEffort:$("oauth-reasoning-effort").value,
+      oauthRemember:$("oauth-remember").checked,
       explanationMode:$("explanation-mode").value,
       apiModel:$("api-model").value.trim(),
       apiReasoningEffort:$("api-reasoning-effort").value,
@@ -504,7 +577,7 @@
       commentsPrompt:$("comments-prompt").value,
     });
     const apiKey = $("api-key").value.trim();
-    const saveKey = !isBuild() && keyNeedsSave();
+    const saveKey = isAPI() && keyNeedsSave();
     const remember = $("remember-key").checked;
     if(isBuild()&&!buildConnection.configured&&!$("build-secret").value.trim()){
       setStatus("build.codeRequired","error");$("generate-build-command").focus();return;
@@ -515,11 +588,11 @@
     if (saveKey && (apiKey.length > 500 || /[\r\n]/.test(apiKey))) {
       setStatus("errors.keyInvalid","error");$("api-key").focus();return;
     }
-    if (!isBuild() && !core.API_MODELS.some(item => item.value === $("api-model").value)
+    if (isAPI() && !core.API_MODELS.some(item => item.value === $("api-model").value)
       && $("api-model").value !== currentSettings.apiModel) {
       setStatus("options.modelInvalid","error");$("api-model").focus();return;
     }
-    if (!isBuild() && (!$("api-reasoning-effort").value || $("api-reasoning-effort").value !== settings.apiReasoningEffort)) {
+    if (isAPI() && (!$("api-reasoning-effort").value || $("api-reasoning-effort").value !== settings.apiReasoningEffort)) {
       setStatus("options.reasoningInvalid","error");$("api-reasoning-effort").focus();return;
     }
     if (isBuild() && (!buildModelChoices().some(item => item.value === $("build-model").value)
@@ -531,6 +604,8 @@
       || Array.isArray(buildEfforts)&&!buildEfforts.includes(settings.buildReasoningEffort))) {
       setStatus("options.reasoningInvalid","error");$("build-reasoning-effort").focus();return;
     }
+    if(isOAuth()&&Array.isArray(oauthStatus.catalogModels)&&!oauthStatus.catalogModels.some(entry=>entry.id===settings.oauthModel&&entry.available!==false)){setStatus("oauth.modelUnavailable","error",{model:settings.oauthModel});$("oauth-model").focus();return;}
+    if(isOAuth()&&(!$("oauth-reasoning-effort").value||!oauthEfforts(settings.oauthModel).includes($("oauth-reasoning-effort").value)||settings.oauthReasoningEffort!==$("oauth-reasoning-effort").value)){setStatus("options.reasoningInvalid","error");$("oauth-reasoning-effort").focus();return;}
     if (!settings.webSearch && !settings.xSearch) {
       setStatus("options.urlSearchRequired","error");$("x-search").focus();return;
     }
@@ -549,7 +624,7 @@
         buildConnection={configured:true,port:settings.buildPort};buildSecretChanged=false;$("build-secret").value="";$("build-launch").hidden=true;$("build-command").textContent="";
       } else await send({type:"SAVE_SETTINGS",settings});
       currentSettings = settings;
-      if (!isBuild()) await refreshSecurity();
+      if (isAPI()) await refreshSecurity();
       populate(currentSettings);renderLanguage();
       setStatus("options.saved");
     } catch (error) {
@@ -560,7 +635,7 @@
     finally { setBusy(false); }
   });
   $("clear-key").addEventListener("click",async () => {
-    if (busy || isBuild()) return;setBusy(true);
+    if (busy || !isAPI()) return;setBusy(true);
     try {
       await send({type:"SAVE_KEY",apiKey:"",remember:$("remember-key").checked});
       keyInputClear();rememberChanged = false;await refreshSecurity();setStatus("options.keyCleared");
@@ -610,8 +685,10 @@
   });
   chrome.runtime.onMessage.addListener(message => {
     if (message?.type === "UI_LANGUAGE_CHANGED") { localeRevision++;applyLanguage(message.language); }
+    if((message?.type==="OAUTH_STATUS_CHANGED"||message?.type==="CONFIG")&&message.oauthStatus){oauthReadRevision++;oauthActionError=null;applyOAuthStatus(message.oauthStatus);}
   });
   chrome.storage.onChanged.addListener((changes,area) => {
+    if((area==="local"||area==="session")&&Object.keys(changes).some(key=>/^oauth/i.test(key))&&!oauthActionBusy)void refreshOAuthStatus();
     if(area==="local"&&changes.buildConnectionEncrypted&&!busy&&!buildSecretChanged&&Number($("build-port").value)===buildConnection.port){
       send({type:"GET_BUILD_CONNECTION"}).then(connection=>{if(!busy&&!buildSecretChanged&&Number($("build-port").value)===buildConnection.port){buildConnection={configured:connection.configured===true,port:connection.port||currentSettings.buildPort};$("build-port").value=buildConnection.port;currentSettings={...currentSettings,buildPort:buildConnection.port};resetBuildCheck();}}).catch(()=>{});
     }

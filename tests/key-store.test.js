@@ -434,3 +434,19 @@ test('browser global and CommonJS API expose the same password-free operations',
   assert.equal('lock' in KeyStore, false);
   assert.equal('unlock' in KeyStore, false);
 });
+
+test('OAuth refresh encryption has a distinct key and authenticated context that survives clearing API and local Build credentials',async()=>{
+  const indexedDB=memoryIDB(),api=KeyStore.create({indexedDB,crypto:webcrypto}),build=KeyStore.create({indexedDB,crypto:webcrypto,purpose:'build-connection'}),oauth=KeyStore.create({indexedDB,crypto:webcrypto,purpose:'oauth-refresh'});
+  const a=await api.seal('api-fixture-value'),b=await build.seal('build-fixture-value'),raw='refresh-fixture.'+'x'.repeat(8192),o=await oauth.seal(raw);
+  assert.equal(oauth.isEnvelope(o),true);assert.equal(api.isEnvelope(o),false);assert.equal(await oauth.open(o),raw);assert.equal(indexedDB.state.records.size,3);
+  await assert.rejects(oauth.open(a),safeFailure);await assert.rejects(oauth.open(b),safeFailure);await assert.rejects(api.open(o),safeFailure);await assert.rejects(build.open(o),safeFailure);
+  await api.clear();await build.clear();assert.equal(await oauth.open(o),raw);assert.equal(indexedDB.state.records.size,1);
+  const newApi=await api.seal('api-again');await oauth.clear();assert.equal(await api.open(newApi),'api-again');await assert.rejects(oauth.open(o),safeFailure);
+});
+
+test('OAuth accepts bounded long refresh tokens without weakening API and Build length validation',async()=>{
+  const indexedDB=memoryIDB(),oauth=KeyStore.create({indexedDB,crypto:webcrypto,purpose:'oauth-refresh'}),api=KeyStore.create({indexedDB,crypto:webcrypto}),build=KeyStore.create({indexedDB,crypto:webcrypto,purpose:'build-connection'});
+  const raw='x'.repeat(16384),envelope=await oauth.seal(raw);assert.equal(await oauth.open(envelope),raw);
+  for(const value of ['x'.repeat(16385),'valid\nbad','valid\rbad',''])await assert.rejects(oauth.seal(value),{code:'KEY_STORE_INVALID_KEY'});
+  for(const store of [api,build]){await assert.rejects(store.seal('x'.repeat(501)),{code:'KEY_STORE_INVALID_KEY'});assert.equal(await store.open(await store.seal('x'.repeat(500))),'x'.repeat(500));}
+});

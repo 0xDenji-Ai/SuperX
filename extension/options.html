@@ -45,6 +45,7 @@
             <label for="provider" data-i18n="options.providerChoice">Connect with</label>
             <select id="provider" required aria-describedby="source-description">
               <option value="api" data-i18n="options.providerKey">Grok API Key</option>
+              <option value="oauth" data-i18n="options.providerOAuth">Grok subscription sign-in</option>
               <option value="build" data-i18n="options.providerBuild">Grok CLI / ACP · Official local connection</option>
             </select>
           </div>
@@ -92,11 +93,45 @@
                 <a id="model-pricing" class="help" href="https://docs.x.ai/developers/pricing" target="_blank" rel="noopener noreferrer" data-i18n="options.modelPricing">View models and pricing</a>
               </div>
             </div>
-            <div class="field concurrency-field">
-              <label for="api-concurrency" data-i18n="options.concurrency">Maximum concurrent API requests</label>
-              <input id="api-concurrency" type="number" min="1" max="8" step="1" value="3" required aria-describedby="api-concurrency-help">
-              <p id="api-concurrency-help" class="help" data-i18n="options.concurrencyHelp">Default: 3. All X tabs and comment requests share this limit.</p>
+          </div>
+          <div id="oauth-fields" hidden>
+            <div class="onboarding oauth-connection" aria-labelledby="oauth-heading">
+              <h3 id="oauth-heading" data-i18n="oauth.title">Connect your Grok subscription</h3>
+              <p class="help" data-i18n="oauth.intro">Sign in on the official Grok page. No API Key, CLI or extra installation is needed.</p>
+              <p class="help" data-i18n="oauth.sharedClient">The authorization page may show Grok Build because this uses xAI’s shared OAuth client.</p>
+              <div class="onboarding-actions oauth-actions">
+                <button id="oauth-login" class="secondary-button" type="button" data-i18n="oauth.login">Sign in to Grok</button>
+                <button id="oauth-cancel" class="text-button" type="button" data-i18n="oauth.cancel" hidden>Cancel sign-in</button>
+                <button id="oauth-logout" class="text-button" type="button" data-i18n="oauth.logout" hidden>Sign out</button>
+              </div>
+              <p id="oauth-status" class="key-state" role="status" aria-live="polite"></p>
+              <div id="oauth-device" class="oauth-device" hidden>
+                <p class="help" data-i18n="oauth.verifyCode">Check this code on the official authorization page:</p>
+                <div class="oauth-code-row"><code id="oauth-user-code" dir="ltr"></code><button id="oauth-copy-code" class="text-button" type="button" data-i18n="oauth.copyCode">Copy code</button></div>
+                <a id="oauth-official-link" target="_blank" rel="noopener noreferrer" data-i18n="oauth.openOfficial">Reopen official authorization page</a>
+              </div>
+              <p class="help" data-i18n="oauth.startHint">When SuperX is enabled, connected posts follow your existing visibility and waiting settings. Completed results are not rerun.</p>
             </div>
+            <label class="checkbox-label oauth-remember-label"><input id="oauth-remember" type="checkbox" checked><span data-i18n="oauth.remember">Remember login on this device</span></label>
+            <p class="help indented" data-i18n="oauth.rememberHelp">Encrypted locally and restored after restart. Uncheck to keep the login only until the browser closes.</p>
+            <p class="help" data-i18n="oauth.billing">Uses eligible subscription allowance. Availability, limits and additional usage follow your Grok account settings.</p>
+            <div class="api-access-links"><a href="https://grok.com/dashboard/usage" target="_blank" rel="noopener noreferrer" data-i18n="options.dashboardUsage">View usage</a><a href="https://docs.x.ai/x-subscription/overview" target="_blank" rel="noopener noreferrer" dir="ltr">The X Subscription</a></div>
+            <div class="field model-field">
+              <label for="oauth-model" data-i18n="options.model">Model</label>
+              <select id="oauth-model" required dir="ltr" aria-describedby="oauth-model-help oauth-model-status"></select>
+              <p id="oauth-model-help" class="help" data-i18n="oauth.modelHelp">Model settings are separate from other connections. The available model list is checked without sending a fact-check request.</p>
+              <p id="oauth-model-status" class="help" role="status" aria-live="polite"></p>
+              <button id="oauth-refresh-models" class="text-button" type="button" data-i18n="oauth.refreshModels">Refresh available models</button>
+            </div>
+            <div class="field">
+              <label for="oauth-reasoning-effort" data-i18n="options.reasoning">Reasoning effort</label>
+              <select id="oauth-reasoning-effort" required></select>
+            </div>
+          </div>
+          <div id="api-concurrency-field" class="field concurrency-field">
+            <label for="api-concurrency" data-i18n="options.concurrency">Maximum concurrent API requests</label>
+            <input id="api-concurrency" type="number" min="1" max="8" step="1" value="3" required aria-describedby="api-concurrency-help">
+            <p id="api-concurrency-help" class="help" data-i18n="options.concurrencyHelp">Default: 3. All X tabs and comment requests share this limit.</p>
           </div>
           <div id="build-fields" hidden>
             <div class="onboarding" aria-labelledby="build-setup-heading">
@@ -147,7 +182,7 @@
             <p id="analysis-dwell-help" class="help" data-i18n="options.dwellHelp">After scrolling stops, posts must stay visible for this long before automatic analysis. Default: 1 second; 0 starts immediately. Manual actions do not wait.</p>
           </div>
           <div class="shared-search">
-            <p class="help" data-i18n="options.verificationHelp">Fact checks read the full linked post. Search tool calls may add cost.</p>
+            <p id="verification-help" class="help" data-i18n="options.verificationHelp">Fact checks read the full linked post. Search tool calls may add cost.</p>
             <div class="checkbox-row">
               <label class="checkbox-label"><input id="web-search" type="checkbox"><span data-i18n="options.webSearch">Search web sources</span></label>
               <label class="checkbox-label"><input id="x-search" type="checkbox"><span data-i18n="options.xSearch">Search X posts</span></label>

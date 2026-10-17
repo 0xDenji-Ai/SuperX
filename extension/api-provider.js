@@ -10,7 +10,18 @@
   const VERIFICATION_FAILURE_CODES = new Set(['OUTPUT_LIMIT','INCOMPLETE','CONNECTION','LANGUAGE_MISMATCH','RATE_LIMIT','ACCESS','SERVER','TIMEOUT','UNKNOWN']);
   // Responses-compatible incomplete reasons; never expose arbitrary backend text.
   const INCOMPLETE_REASONS = new Set(['max_output_tokens','content_filter']);
-  const SAFE_API_ERROR_CODES = new Set(['API_INCOMPLETE','API_STREAM_INTERRUPTED','API_STREAM_ERROR','API_LANGUAGE_MISMATCH','API_CAPACITY','RATE_LIMIT','API_ERROR','CANCELED','TIMEOUT']);
+  const OAUTH_ERROR_MESSAGES=Object.freeze({
+    OAUTH_LOGIN_REQUIRED:'Sign in to Grok in Settings.',OAUTH_REAUTH_REQUIRED:'Sign in to Grok again in Settings.',
+    OAUTH_AUTH_DENIED:'Grok authorization was denied.',OAUTH_DEVICE_EXPIRED:'The Grok sign-in code expired. Start sign-in again.',
+    OAUTH_CANCELLED:'Grok sign-in was cancelled.',OAUTH_NETWORK:'The Grok sign-in service could not be reached.',
+    OAUTH_STORAGE:'Grok login could not be saved safely. Sign in again.',OAUTH_REFRESH_UNCERTAIN:'Grok credential rotation could not be confirmed. Sign in again.',
+    OAUTH_PROTOCOL:'Grok authentication returned an invalid response.',OAUTH_MODEL_UNAVAILABLE:'The selected model is unavailable for this Grok login.',
+    OAUTH_PERMISSION:'This Grok login does not allow the requested operation.',OAUTH_STORAGE_ERROR:'Grok login could not be saved safely. Sign in again.',
+    OAUTH_ACCOUNT_CHANGED:'Grok login changed. Start this task again.',OAUTH_ACCESS_DENIED:'Grok authorization was denied.',
+    OAUTH_AUTH_UNAVAILABLE:'The Grok sign-in service could not be reached.',OAUTH_DEVICE_INVALID:'Grok sign-in returned an invalid authorization code.',
+    OAUTH_CATALOG_UNAVAILABLE:'The available Grok models could not be loaded.'
+  });
+  const SAFE_API_ERROR_CODES = new Set(['API_INCOMPLETE','API_STREAM_INTERRUPTED','API_STREAM_ERROR','API_LANGUAGE_MISMATCH','API_CAPACITY','RATE_LIMIT','API_ERROR','CANCELED','TIMEOUT',...Object.keys(OAUTH_ERROR_MESSAGES)]);
   const SAFE_ERRORS = new WeakSet();
   const DIAGNOSTIC_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   const LANGUAGE_NAMES = Object.freeze({'zh-CN':'Simplified Chinese','en':'English','ja':'Japanese','ko':'Korean','zh-TW':'Traditional Chinese','es':'Spanish','fr':'French','de':'German','pt':'Portuguese','ar':'Arabic','ru':'Russian','hi':'Hindi'});
@@ -51,8 +62,8 @@
     if(!tools.length)throw apiError('分析原帖需要开启 X 搜索或网页搜索，才能读取全文。','URL_SEARCH_REQUIRED');
     return {url,tools};
   }
-  function configureReasoning(request,model,value) {
-    const effort=Core.reasoningEffort(model,value);
+  function configureReasoning(request,model,value,oauth=false) {
+    const effort=oauth?Core.oauthReasoningEffort(value):Core.reasoningEffort(model,value);
     if(effort!=='auto')request.reasoning={effort};
     return request;
   }
@@ -65,7 +76,11 @@
   function commentsLanguageInstruction(post,settings) {
     return languageInstruction(settings.language,post);
   }
+  function transportSettings(settings) {
+    return settings?.provider==='oauth'?{...settings,apiModel:Core.providerModel(settings),apiReasoningEffort:Core.providerEffort(settings)}:settings;
+  }
   function buildCommentsRequest(post,settings,analysis) {
+    settings=transportSettings(settings);
     const url=Core.canonicalPostUrl(post?.url);
     if(!url)throw apiError('请提供有效的 X 原帖链接。','POST_INVALID');
     return configureReasoning({
@@ -83,7 +98,7 @@
       // duplicates and whitespace-only strings before displaying any drafts.
       text:{format:{type:'json_schema',name:'grokfirst_comments',strict:true,schema:{type:'array',minItems:3,maxItems:3,items:{type:'string',minLength:1,maxLength:280}}}},
       max_output_tokens:OUTPUT_LIMITS.comments,stream:true,store:false
-    },settings.apiModel,settings.apiReasoningEffort);
+    },settings.apiModel,settings.apiReasoningEffort,settings.provider==='oauth');
   }
   function validateComments(value) {
     if(!Array.isArray(value)||value.length!==3)throw apiError('Grok did not return exactly three valid comment drafts.','COMMENTS_INVALID_RESPONSE');
@@ -104,6 +119,7 @@
     return validateComments(value);
   }
   function buildRequest(post, settings, stage='verify', analysis) {
+    settings=transportSettings(settings);
     if(stage==='comments')return buildCommentsRequest(post,settings,analysis);
     stage = stage || 'verify';
     if (!Object.hasOwn(OUTPUT_LIMITS,stage)) throw new Error('不支持的 API 生成阶段。');
@@ -121,7 +137,7 @@
       stream:true,
       store:false
     };
-    return configureReasoning(request,settings.apiModel,settings.apiReasoningEffort);
+    return configureReasoning(request,settings.apiModel,settings.apiReasoningEffort,settings.provider==='oauth');
   }
   function readerChannel(value) {
     if(!value||typeof value!=='object')return false;
@@ -283,13 +299,44 @@
   function abortError() { const error=apiError('API 请求已取消。','CANCELED');error.name='AbortError';return error; }
   function assertNotAborted(signal) { if(signal?.aborted)throw abortError(); }
   function apiError(message,code='API_ERROR') { const error=new Error(message);error.code=code;SAFE_ERRORS.add(error);return error; }
+  function authorizationContext(settings,apiKey,authorization) {
+    const oauth=settings?.provider==='oauth',secrets=[];
+    const authError=(error,fallback,signal)=>{
+      if(signal?.aborted||error?.name==='AbortError'||['CANCELED','CANCELLED','OAUTH_CANCELLED'].includes(error?.code))return abortError();
+      const code=Object.hasOwn(OAUTH_ERROR_MESSAGES,error?.code)?error.code:fallback;
+      return Object.assign(apiError(OAUTH_ERROR_MESSAGES[code],code),{provider:'oauth'});
+    };
+    const accept=(value,fallback)=>{
+      if(typeof value!=='string'||!value||value.length>32768||!/^[\x21-\x7e]+$/.test(value))throw authError(null,fallback);
+      if(!secrets.includes(value))secrets.push(value);
+      return value;
+    };
+    if(!oauth) {
+      if(!apiKey)throw apiError('请在设置中填写 xAI API Key。','NEEDS_KEY');
+      secrets.push(apiKey);
+      return {oauth:false,secrets,async getToken(signal){assertNotAborted(signal);return apiKey;}};
+    }
+    if(!authorization||typeof authorization.getAccessToken!=='function')throw authError(null,'OAUTH_LOGIN_REQUIRED');
+    return {oauth:true,secrets,
+      async getToken(signal){try{assertNotAborted(signal);const token=await authorization.getAccessToken(signal);assertNotAborted(signal);return accept(token,'OAUTH_PROTOCOL');}catch(error){throw authError(error,'OAUTH_LOGIN_REQUIRED',signal);}},
+      async onUnauthorized(rejectedToken,signal){
+        try{
+          assertNotAborted(signal);
+          if(typeof authorization.onUnauthorized!=='function')throw authError(null,'OAUTH_REAUTH_REQUIRED');
+          const token=accept(await authorization.onUnauthorized(rejectedToken,signal),'OAUTH_PROTOCOL');assertNotAborted(signal);
+          if(token===rejectedToken)throw authError(null,'OAUTH_REAUTH_REQUIRED');
+          return token;
+        }catch(error){throw authError(error,'OAUTH_REAUTH_REQUIRED',signal);}
+      }
+    };
+  }
   function publicError(error) {
     if(SAFE_ERRORS.has(error))return {code:error.code,error:error.message};
     const messages={API_INCOMPLETE:'Grok 输出未完成，可手动重试。',API_STREAM_INTERRUPTED:'与 xAI 的连接中断，未收到完整答案，可手动重试。',
       API_STREAM_ERROR:'API 数据流损坏，未收到完整答案。',API_LANGUAGE_MISMATCH:'Grok 未遵循所选输出语言。',
       API_CAPACITY:CAPACITY_MESSAGE,RATE_LIMIT:'xAI 请求限速或额度耗尽，请稍后再试。',API_ERROR:'xAI 生成失败，请稍后重试。',CANCELED:'API 请求已取消。',TIMEOUT:'分析超时，Grok 未能完成响应；可手动重试。',
       NEEDS_KEY:'请在设置中填写 xAI API Key。',POST_INVALID:'请提供有效的 X 原帖链接。',URL_SEARCH_REQUIRED:'分析原帖需要开启 X 搜索或网页搜索，才能读取全文。',
-      COMMENTS_INVALID_RESPONSE:'Grok 未返回三个有效的评论草稿。'};
+      COMMENTS_INVALID_RESPONSE:'Grok 未返回三个有效的评论草稿。',...OAUTH_ERROR_MESSAGES};
     const code=Object.hasOwn(messages,error?.code)?error.code:'API_ERROR';
     return {code,error:messages[code]};
   }
@@ -316,7 +363,9 @@
     // truncating first could leave a cut-off credential or echoed post behind.
     if(typeof value!=='string'||value.length>8192)return undefined;
     let text=value.normalize('NFKC').replace(/[\u200b-\u200f\u202a-\u202e\u2066-\u2069]/g,'');
-    for(const secret of secrets)if(typeof secret==='string'&&secret) {
+    // A rotated opaque token can extend an older value. Remove the longest
+    // exact credentials first so an older prefix cannot expose its suffix.
+    for(const secret of [...secrets].filter(secret=>typeof secret==='string'&&secret).sort((a,b)=>b.length-a.length)) {
       for(const form of new Set([secret,encodeURIComponent(secret),JSON.stringify(secret).slice(1,-1)]))text=text.split(form).join('[redacted]');
     }
     const folded=text.toLowerCase().replace(/\s+/g,' ');
@@ -354,7 +403,7 @@
     if(!metadata.providerMessage){const message=providerMessage(value,redaction);if(message)metadata.providerMessage=message;}
     return metadata;
   }
-  function diagnosticRedaction(post,settings,analysis,apiKey,request) {
+  function diagnosticRedaction(post,settings,analysis,secrets,request) {
     const inputs=[];
     function collectPost(value,depth=0) {
       if(!value||typeof value!=='object'||depth>2)return;
@@ -364,7 +413,7 @@
     }
     collectPost(post);inputs.push(analysis?.text,request.instructions,settings.verifyPrompt,settings.commentsPrompt);
     for(const input of request.input||[])if(typeof input.content==='string')inputs.push(input.content);
-    return {secrets:[apiKey],inputs};
+    return {secrets,inputs};
   }
   function failed(error,code,details={}) {
     error.failureDetails={code,...details,errorCode:error.code};
@@ -491,40 +540,56 @@
     } catch(error) {cancel();throw error;}
     finally {signal?.removeEventListener('abort',cancel);if(cancellation)await cancellation;reader.releaseLock();}
   }
-  async function runStage(post,settings,apiKey,stage,analysis,{signal,onUpdate,fetchImpl}) {
+  async function runStage(post,settings,apiKey,stage,analysis,{signal,onUpdate,fetchImpl,authorization}) {
     assertNotAborted(signal);
+    const auth=authorizationContext(settings,apiKey,authorization),secrets=auth.secrets;
     let text='',completed=null,usage={},sources=[],searched=false,model=sanitizedModel(settings.apiModel),terminalUsageComplete=false;
-    if(model.includes(apiKey))model='';
-    const request=buildRequest(post,settings,stage,analysis),redaction=diagnosticRedaction(post,settings,analysis,apiKey,request);
-    const startedAt=Date.now(),diagnostic={failureOrigin:'network',startedAt,requestedModel:diagnosticModel(settings.apiModel),requestedEffort:Core.reasoningEffort(settings.apiModel,settings.apiReasoningEffort)};
+    const containsSecret=value=>typeof value==='string'&&secrets.some(secret=>value.includes(secret));
+    if(containsSecret(model))model='';
+    const request=buildRequest(post,settings,stage,analysis),redaction=diagnosticRedaction(post,settings,analysis,secrets,request);
+    const startedAt=Date.now(),diagnostic={failureOrigin:'network',startedAt,requestedModel:diagnosticModel(settings.apiModel),requestedEffort:auth.oauth?Core.providerEffort(settings):Core.reasoningEffort(settings.apiModel,settings.apiReasoningEffort)};
     const tracker=textTracker();
     const publish=()=>onUpdate({text,usage,model,usageComplete:terminalUsageComplete,usageByStage:{[stage]:usage},modelByStage:{[stage]:model}});
     try {
-      const response=await fetchImpl(ENDPOINT,{
-        method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${apiKey}`},
-        body:JSON.stringify(request),signal
+      let token=await auth.getToken(signal),response;
+      if(containsSecret(model))model='';
+      for(let recovery=0;;recovery++){
+      response=await fetchImpl(ENDPOINT,{
+        method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`},
+        body:JSON.stringify(request),signal,...(auth.oauth?{credentials:'omit',redirect:'error'}:{})
       });
       if(signal?.aborted)try{await response.body?.cancel();}catch{/* An errored body is already closed. */}
       assertNotAborted(signal);
       if(Number.isInteger(response.status))diagnostic.transportStatus=response.status;
       for(const header of ['x-request-id','request-id']) {
         let value;try{value=response.headers?.get(header);}catch{/* Metadata cannot hide the actual provider failure. */}
-        const id=diagnosticId(value);if(id&&value!==apiKey){diagnostic.requestId=id;break;}
+        const id=diagnosticId(value);if(id&&!containsSecret(id)){diagnostic.requestId=id;break;}
       }
       if(!response.ok) {
         diagnostic.failureOrigin='http';
         const received=await httpFailureDiagnostics(response,signal,redaction);assertNotAborted(signal);
         const diagnostics=received.failure;Object.assign(diagnostic,received.metadata);
+        if(auth.oauth&&response.status===401){
+          if(recovery===0){
+            token=await auth.onUnauthorized(token,signal);assertNotAborted(signal);
+            if(containsSecret(model))model='';
+            for(const field of ['transportStatus','requestId','responseId','providerMessage','model'])delete diagnostic[field];
+            diagnostic.failureOrigin='network';continue;
+          }
+          throw failed(Object.assign(apiError(OAUTH_ERROR_MESSAGES.OAUTH_REAUTH_REQUIRED,'OAUTH_REAUTH_REQUIRED'),{provider:'oauth'}),'ACCESS',diagnostics);
+        }
         const category=providerFailure(diagnostics),rateLimited=category==='RATE_LIMIT';
         if(capacityFailure(diagnostics,category,diagnostic.providerMessage))throw failed(apiError(CAPACITY_MESSAGE,'API_CAPACITY'),'SERVER',diagnostics);
         const hints={401:'API Key 无效或已失效。',403:'此 Key 没有访问该模型的权限。',402:'xAI API 的余额、预算或用量限制阻止了本次请求。',429:'xAI 请求限速或额度耗尽，请稍后再试。'};
         throw failed(apiError(hints[response.status]||'xAI API 请求失败，请检查模型和网络。',rateLimited?'RATE_LIMIT':'API_ERROR'),category,diagnostics);
       }
+      break;
+      }
       if(!response.body)throw failed(apiError('API 未返回可读取的响应。','API_STREAM_INTERRUPTED'),'CONNECTION');
       await readEvents(response.body,event=>{
         assertNotAborted(signal);
         const responseId=diagnosticId(event.response?.id)||diagnosticId(event.response_id);
-        if(responseId&&responseId!==apiKey)diagnostic.responseId=responseId;
+        if(responseId&&!containsSecret(responseId))diagnostic.responseId=responseId;
         if(['response.failed','response.incomplete','error'].includes(event.type)||event.response?.status==='failed'||event.response?.status==='incomplete') {
           diagnostic.failureOrigin='stream';Object.assign(diagnostic,errorRequestMetadata(event,redaction));
         }
@@ -535,7 +600,7 @@
           searched ||= searchedResponse(event.response);
           if(['response.completed','response.failed','response.incomplete'].includes(event.type)&&Object.hasOwn(event.response,'output'))text=responseText(event.response,{final:true});
         }
-        const actualModel=sanitizedModel(event.response?.model);if(actualModel&&!actualModel.includes(apiKey)){model=actualModel;diagnostic.model=diagnosticModel(actualModel);}
+        const actualModel=sanitizedModel(event.response?.model);if(actualModel&&!containsSecret(actualModel)){model=actualModel;diagnostic.model=diagnosticModel(actualModel);}
         if(['response.completed','response.failed','response.incomplete','error'].includes(event.type))terminalUsageComplete=usageComplete(event.response?.usage);
         if(['response.completed','response.failed','response.incomplete'].includes(event.type)&&Object.hasOwn(event.response||{},'output')&&!text.trim())publish();
         if(event.type==='response.output_text.delta') {
@@ -572,7 +637,7 @@
       if(!text.trim())throw failed(apiError('Grok 返回了空答案。','API_INCOMPLETE'),'INCOMPLETE');
       return {text,sources:responseSources(completed),searched:searchedResponse(completed),usage,model,usageComplete:terminalUsageComplete};
     } catch(error) {
-      if(error instanceof SyntaxError||SAFE_ERRORS.has(error)&&!['CANCELED','API_STREAM_INTERRUPTED'].includes(error.code)&&diagnostic.failureOrigin!=='http')diagnostic.failureOrigin='stream';
+      if(error instanceof SyntaxError||SAFE_ERRORS.has(error)&&!['CANCELED','API_STREAM_INTERRUPTED'].includes(error.code)&&!error.code?.startsWith('OAUTH_')&&diagnostic.failureOrigin!=='http')diagnostic.failureOrigin='stream';
       if(signal?.aborted||error.name==='AbortError')error=abortError();
       // Preserve only server-reported billing metadata. Stream snapshots replace
       // earlier snapshots; they must not be added to the same request twice.
@@ -587,13 +652,15 @@
       const failedAt=Date.now();
       // These are local request times, not a claim about provider billing time.
       // The exact Key and input data never leave this closure as diagnostics.
-      for(const field of ['requestId','responseId','model','requestedModel'])if(typeof diagnostic[field]==='string'&&diagnostic[field].includes(apiKey))delete diagnostic[field];
+      for(const field of ['requestId','responseId','model','requestedModel'])if(containsSecret(diagnostic[field]))delete diagnostic[field];
+      if(containsSecret(model))model='';
       error.requestDiagnostics=sanitizedRequestDiagnostics({...diagnostic,failedAt,elapsedMs:Math.max(0,failedAt-startedAt)});
       error.usage=usage;
       error.usageComplete=terminalUsageComplete;
       error.usageByStage={[stage]:usage};
       if(model)error.model=model;
       if(model)error.modelByStage={[stage]:model};
+      if(auth.oauth)error.provider='oauth';
       // A real unfinished Fact Check remains useful, unlike an earlier
       // explanation. Never retain canceled output or rejected language drift.
       const partial=Core.readerOutput(text,{final:true});
@@ -605,20 +672,20 @@
       throw error;
     }
   }
-  async function generateComments(post,settings,apiKey,{analysis,signal,fetchImpl=fetch}={}) {
-    if(!apiKey)throw apiError('请在设置中填写 xAI API Key。','NEEDS_KEY');
+  async function generateComments(post,settings,apiKey,{analysis,signal,fetchImpl=fetch,authorization}={}) {
+    authorizationContext(settings,apiKey,authorization);
     assertNotAborted(signal);
-    settings={...settings,language:resolveLanguage(settings.language,post)};
+    settings=transportSettings({...settings,language:resolveLanguage(settings.language,post)});
     // Partial JSON is never exposed as a finished draft; require a terminal
     // completion event before parsing the complete three-comment result.
-    const result=await runStage(post,settings,apiKey,'comments',analysis,{signal,fetchImpl,onUpdate(){}});
+    const result=await runStage(post,settings,apiKey,'comments',analysis,{signal,fetchImpl,authorization,onUpdate(){}});
     assertNotAborted(signal);
     try {
       const comments=parseComments(result.text);
       for(const comment of comments)assertMatchingScript(comment,settings.language,false,'comments');
-      return {comments,provider:'api',task:'comments',verified:false,searched:false,usage:result.usage,model:result.model,usageComplete:result.usageComplete,completedAt:Date.now()};
+      return {comments,provider:settings.provider==='oauth'?'oauth':'api',task:'comments',verified:false,searched:false,usage:result.usage,model:result.model,usageComplete:result.usageComplete,completedAt:Date.now()};
     } catch(error) {
-      Object.assign(error,sanitizedMetadata({...result,usageByStage:{comments:result.usage},modelByStage:{comments:result.model}}));throw error;
+      Object.assign(error,sanitizedMetadata({...result,usageByStage:{comments:result.usage},modelByStage:{comments:result.model}}));if(settings.provider==='oauth')error.provider='oauth';throw error;
     }
   }
   const STATUS_LABELS=Object.freeze({
@@ -640,9 +707,9 @@
     const values=STATUS_LABELS[languageKey(settings.language)]||STATUS_LABELS.auto;
     return Object.fromEntries(['incomplete','unverified','completed'].map((key,index)=>[key,values[index]]));
   }
-  function resultFor(stage,mode,status,warning,usageByStage,modelByStage,billingComplete=stage.usageComplete) {
+  function resultFor(stage,mode,status,warning,usageByStage,modelByStage,billingComplete=stage.usageComplete,provider='api') {
     const usage=mergeUsage(...Object.values(usageByStage));
-    return {...stage,provider:'api',verified:false,apiVerification:mode,verificationStatus:status,warning,
+    return {...stage,provider,verified:false,apiVerification:mode,verificationStatus:status,warning,
       usage,usageByStage,usageComplete:billingComplete===true&&Object.values(usageByStage).every(usageComplete)&&usageComplete(usage),...sanitizedMetadata({modelByStage}),completedAt:Date.now()};
   }
   function assertMatchingScript(text,language,streaming=false,stage='verify') {
@@ -678,25 +745,26 @@
       Object.assign(error,sanitizedMetadata({...result,usageByStage:{[stage]:result.usage},modelByStage:{[stage]:result.model}}));throw error;
     }
   }
-  async function run(post,settings,apiKey,{signal,onUpdate=()=>{},fetchImpl=fetch}={}) {
-    if(!apiKey)throw apiError('请在设置中填写 xAI API Key。','NEEDS_KEY');
+  async function run(post,settings,apiKey,{signal,onUpdate=()=>{},fetchImpl=fetch,authorization}={}) {
+    authorizationContext(settings,apiKey,authorization);
     assertNotAborted(signal);
     // Resolve Auto once from the author's currently displayed body. Neither
     // retrieved sources nor another post can change this job's language.
     post={...post};
-    settings={...settings,language:resolveLanguage(settings.language,post)};
-    const mode='only',label=labels(settings);
+    settings=transportSettings({...settings,language:resolveLanguage(settings.language,post)});
+    const mode='only',label=labels(settings),provider=settings.provider==='oauth'?'oauth':'api';
     buildRequest(post,settings,'verify');
-    const emit=update=>{assertNotAborted(signal);onUpdate({...update,phase:'verify',provider:'api',verified:false,apiVerification:mode});};
+    const emit=update=>{assertNotAborted(signal);onUpdate({...update,phase:'verify',provider,verified:false,apiVerification:mode});};
     emit({text:'',verificationStatus:'running',warning:'',sources:[],searched:false});
     try {
-      const stage=await runStage(post,settings,apiKey,'verify',undefined,{signal,fetchImpl,onUpdate:update=>{
+      const stage=await runStage(post,settings,apiKey,'verify',undefined,{signal,fetchImpl,authorization,onUpdate:update=>{
         assertMatchingScript(update.text,settings.language,true,'verify');
         emit({...update,verificationStatus:'running',warning:'',sources:[],searched:false});
       }});
       assertStageLanguage(stage,settings.language,'verify');
-      return resultFor(stage,mode,stage.searched?'completed':'unverified',stage.searched?label.completed:label.unverified,{verify:stage.usage},{verify:stage.model});
+      return resultFor(stage,mode,stage.searched?'completed':'unverified',stage.searched?label.completed:label.unverified,{verify:stage.usage},{verify:stage.model},stage.usageComplete,provider);
     } catch(error) {
+      if(provider==='oauth')error.provider='oauth';
       const failure=verificationFailureFor(error);
       error.verificationFailure=failure;
       if(signal?.aborted||error.name==='AbortError')throw error;
@@ -711,7 +779,7 @@
         languageError.verificationFailure=verificationFailureFor(languageError);
         throw languageError;
       }
-      const partial=resultFor({text,sources:mergeSources(error.partialSources),searched:error.partialSearched===true,model:sanitizedModel(error.model)||sanitizedModel(settings.apiModel),verificationFailure:failure},mode,'incomplete',label.incomplete,{verify:sanitizedUsage(error.usage)},{verify:error.model},error.usageComplete===true);
+      const partial=resultFor({text,sources:mergeSources(error.partialSources),searched:error.partialSearched===true,model:sanitizedModel(error.model)||sanitizedModel(settings.apiModel),verificationFailure:failure},mode,'incomplete',label.incomplete,{verify:sanitizedUsage(error.usage)},{verify:error.model},error.usageComplete===true,provider);
       const diagnostics=sanitizedRequestDiagnostics(error.requestDiagnostics);if(diagnostics)partial.requestDiagnostics=diagnostics;
       emit(partial);
       if(error.code==='RATE_LIMIT'||error.code==='API_CAPACITY') {

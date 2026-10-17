@@ -620,6 +620,7 @@ class UIElement {
   constructor(attrs={}) { this.attrs={...attrs};this.children=[];this.dataset={};this.value=attrs.value||'';this.textContent='';this.listeners={}; }
   getAttribute(name) { return this.attrs[name]??null; }
   setAttribute(name,value) { this.attrs[name]=String(value); }
+  removeAttribute(name) { delete this.attrs[name]; }
   matches() { return ['data-i18n','data-i18n-aria','data-i18n-placeholder','data-i18n-title'].some(key=>key in this.attrs); }
   querySelectorAll() { return this.children.filter(child=>child.matches()); }
   replaceChildren(...children) { this.children=[...children]; }
@@ -734,6 +735,7 @@ function uiPageFixture(file, settings=core.DEFAULT_SETTINGS, storage={}, environ
           return {ok:true,language:environment.reportedLanguage || local.uiLanguage || ui.browserLanguage({chrome,navigator:{language:environment.navigatorLanguage || 'en-US'}})};
         }
         if(message.type==='GET_SECURITY_STATUS')return environment.securityFailure?{ok:false,errorKey:'errors.noResponse'}:security();
+        if(message.type==='GET_OAUTH_STATUS')return {ok:true,oauthStatus:environment.oauthStatus||{state:'disconnected',connected:false,remember:local.settings.oauthRemember!==false,catalogModels:[]}};
         if(message.type==='GET_HISTORY_STATUS')return {ok:true,enabled:local.superxHistoryEnabled!==false,count:0,epoch:0};
         if(message.type==='GET_API_DIAGNOSTICS')return {ok:true,entries:[],retentionHours:24,maxEntries:30};
         if(message.type==='CLEAR_API_DIAGNOSTICS')return {ok:true};
@@ -767,12 +769,12 @@ function uiPageFixture(file, settings=core.DEFAULT_SETTINGS, storage={}, environ
       session:{get:async keys=>pick(session,keys),remove:async keys=>{for(const key of Array.isArray(keys)?keys:[keys])delete session[key];}},onChanged:{addListener:listener=>storageListeners.push(listener)}}
   };
   if(Object.hasOwn(environment,'browserLanguage'))chrome.i18n={getUILanguage:()=>environment.browserLanguage};
-  const context=vm.createContext({document,chrome,XGrokCore:core,GrokFirstUI:ui,navigator:{language:environment.navigatorLanguage || 'en-US',clipboard:{async writeText(value){if(environment.copyFailure)throw new Error('Clipboard unavailable');environment.onCopy?.(value);}}}});
+  const context=vm.createContext({document,chrome,URL,XGrokCore:core,GrokFirstUI:ui,navigator:{language:environment.navigatorLanguage || 'en-US',clipboard:{async writeText(value){if(environment.copyFailure)throw new Error('Clipboard unavailable');environment.onCopy?.(value);}}}});
   vm.runInContext(fs.readFileSync(path.join(__dirname,'../extension',`${file}.js`),'utf8'),context);
   return {document,ids,messages,reads,runtimeListeners,storageListeners,local,session,openedOptions,openedHistory,permissionRequests};
 }
 const settleUI=()=>new Promise(resolve=>setImmediate(resolve));
-const uiMessageTypes=fixture=>fixture.messages.map(message=>message.type).filter(type=>!['GET_SECURITY_STATUS','GET_CONFIG','GET_HISTORY_STATUS','GET_BUILD_CONNECTION'].includes(type));
+const uiMessageTypes=fixture=>fixture.messages.map(message=>message.type).filter(type=>!['GET_SECURITY_STATUS','GET_CONFIG','GET_HISTORY_STATUS','GET_BUILD_CONNECTION','GET_OAUTH_STATUS'].includes(type));
 
 test('Settings model and reasoning controls are required dropdowns with model-specific choices',async()=>{
   const html=fs.readFileSync(path.join(__dirname,'../extension/options.html'),'utf8');
@@ -2231,12 +2233,44 @@ test('Settings uses one Key flow with expanded account-specific help and the exi
     const input=fixture.ids.get(id);assert.equal(input.getAttribute('min'),min);assert.equal(input.getAttribute('max'),max);assert.equal(input.getAttribute('step'),step);
   }
   const html=fs.readFileSync(path.join(__dirname,'../extension/options.html'),'utf8');
+  const apiSection=html.slice(html.indexOf('id="api-fields"'),html.indexOf('id="oauth-fields"'));
   for(const [key,url]of [['options.apiSubscriptionLink','https://grok.com/dashboard/api-keys'],['options.dashboardUsage','https://grok.com/dashboard/usage'],['options.apiMeteredLink','https://console.x.ai/']]){
-    assert.equal(html.split('href="'+url+'"').length-1,1);assert.ok(html.includes('data-i18n="'+key+'"'));
+    assert.equal(apiSection.split('href="'+url+'"').length-1,1);assert.ok(apiSection.includes('data-i18n="'+key+'"'));
   }
   assert.match(html,/<details[^>]*id="api-access-guide"[^>]*\bopen\b/);
   assert.doesNotMatch(html,/options\.(?:providerIntro|uiHint|apiPriorityHelp|apiPriorityLink|apiDirectHint|keyStorageHelp|console|apiStep[123])/);
   assert.ok(html.indexOf('id="api-key"')<html.indexOf('id="api-access-guide"'));assert.ok(html.indexOf('id="clear-key"')<html.indexOf('id="api-model"'));
   assert.equal(fixture.ids.get('source-description').hidden,true);assert.equal(fixture.ids.get('source-description').textContent,'');
   assert.equal(fixture.messages.some(message=>/PRIORITY|TIER|UPGRADE|BILLING/.test(message.type)),false);
+});
+
+test('OAuth settings select an explicit third provider with independent model reasoning and remember defaults',()=>{
+  const initial=core.normalizeSettings({provider:'oauth'});
+  assert.equal(initial.provider,'oauth');assert.equal(initial.oauthModel,'grok-4.3');assert.equal(initial.oauthReasoningEffort,'none');assert.equal(initial.oauthRemember,true);
+  const selected=core.normalizeSettings({provider:'oauth',oauthModel:'grok-4.6',oauthReasoningEffort:'xhigh',oauthRemember:false,apiModel:'grok-4.5',apiReasoningEffort:'medium',buildDefaultsVersion:1,buildModel:'grok-4.7',buildReasoningEffort:'high',accessToken:'DO_NOT_SAVE_AT',refreshToken:'DO_NOT_SAVE_RT'});
+  assert.equal(selected.oauthModel,'grok-4.6');assert.equal(selected.oauthReasoningEffort,'xhigh');assert.equal(selected.oauthRemember,false);
+  assert.equal(selected.apiModel,'grok-4.5');assert.equal(selected.apiReasoningEffort,'medium');assert.equal(selected.buildModel,'grok-4.7');assert.equal(selected.buildReasoningEffort,'high');
+  assert.deepEqual(core.normalizeSettings(selected),selected);assert.equal(Object.hasOwn(selected,'accessToken'),false);assert.equal(Object.hasOwn(selected,'refreshToken'),false);
+  for(const provider of ['api','build','oauth'])assert.equal(core.normalizeSettings({...selected,provider}).oauthModel,'grok-4.6');
+  for(const provider of ['native','other','OAuth',null])assert.equal(core.normalizeSettings({provider}).provider,'api');
+});
+
+test('OAuth choices remain explicit for live catalog validation rather than inheriting API model defaults',()=>{
+  for(const oauthModel of ['grok-4.7','grok-future-model']){
+    const selected=core.normalizeSettings({provider:'oauth',oauthModel,oauthReasoningEffort:'none',apiModel:'grok-4.5',apiReasoningEffort:'high'});
+    assert.equal(selected.oauthModel,oauthModel);assert.equal(selected.oauthReasoningEffort,'none');assert.equal(core.providerModel(selected),oauthModel);assert.equal(core.providerEffort(selected),'none');
+  }
+  for(const level of ['auto','none','minimal','low','medium','high','xhigh'])assert.equal(core.oauthReasoningEffort(level),level);
+  assert.equal(core.oauthReasoningEffort('PRIVATE_INVALID_LEVEL'),'none');assert.equal(core.normalizeSettings({oauthModel:'invalid model'}).oauthModel,'grok-4.3');
+  assert.equal(core.providerModel({provider:'api',apiModel:'grok-4.5'}),'grok-4.5');assert.equal(core.providerEffort({provider:'api',apiModel:'grok-4.5',apiReasoningEffort:'none'}),'low');
+  assert.equal(core.providerModel({provider:'build',buildModel:'grok-4.7'}),'grok-4.7');assert.equal(core.providerEffort({provider:'build',buildModel:'grok-4.7',buildReasoningEffort:'minimal'}),'minimal');
+});
+
+test('full-post request identity separates API OAuth and local sources without storing credentials',()=>{
+  const post={id:'100',url:'https://x.com/example/status/100',text:'The current English post',language:'en'};
+  const identities=['api','oauth','build'].map(provider=>core.apiPostIdentity(post,{provider,language:'auto'}));
+  assert.equal(new Set(identities).size,3);
+  assert.equal(core.apiPostIdentity({...post,text:'Expanded English content'}, {provider:'oauth',language:'auto'}),identities[1]);
+  assert.notEqual(core.apiPostIdentity({...post,language:'zh'}, {provider:'oauth',language:'auto'}),identities[1]);
+  assert.equal(identities.some(value=>/accessToken|refreshToken/.test(value)),false);
 });

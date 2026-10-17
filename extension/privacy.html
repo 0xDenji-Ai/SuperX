@@ -67,25 +67,25 @@
   <main>
     <p class="eyebrow">Data &amp; privacy</p>
     <h1>隐私政策<br><span lang="en">Privacy Policy</span></h1>
-    <p class="intro">了解 SuperX 发送哪些数据、如何保存 Key，以及怎样暂停或清除本机数据。<br><span lang="en">What SuperX sends, how it stores your key, and how to pause or clear local data.</span></p>
+    <p class="intro">了解 SuperX 发送哪些数据、如何保存凭据，以及怎样暂停或清除本机数据。<br><span lang="en">What SuperX sends, how it stores your credentials, and how to pause or clear local data.</span></p>
 
     <aside class="notice" role="note"><strong>SuperX 本机隐私说明 / Included privacy notice</strong><p>此页面随扩展提供。<a href="https://superx.vip/privacy/" rel="noopener noreferrer">在线隐私政策 / Online privacy policy</a> · <a href="https://github.com/bwjoke/SuperX/issues" rel="noopener noreferrer">GitHub 支持 / Support</a></p></aside>
 
     <article id="zh" lang="zh-CN" aria-labelledby="zh-title">
       <h2 id="zh-title">SuperX 隐私政策</h2>
-      <p class="date">最后更新：2026 年 10 月 16 日 · 0.9.5</p>
-      <p>本政策说明 SuperX 0.9.5 的数据处理。SuperX 使用你自己的 API Key 或官方本机 Grok Build 登录，为 X／Twitter 帖子提供事实核查和可选评论草稿，不再先生成解释。SuperX 是独立开发的扩展，与 X、Grok 或 xAI 没有官方隶属或背书关系。</p>
+      <p class="date">最后更新：2026 年 10 月 18 日 · 0.9.11 未发布候选</p>
+      <p>本政策说明 SuperX 0.9.11 候选的数据处理。SuperX 使用 Grok 订阅 OAuth、自己的 API Key 或官方本机 Grok Build 连接，为 X／Twitter 帖子提供事实核查和可选评论草稿，不再先生成解释。商店稳定版仍为 0.7.26；集成 OAuth 仍待新的用户授权及浏览器实装验收。SuperX 是独立开发的扩展，与 X、Grok 或 xAI 没有官方隶属或背书关系。</p>
 
       <h3>1. 配置与分析范围</h3>
-      <p>在设置中填写自己的普通 xAI API Key、保存并启用 SuperX 后，可见且符合条件的帖子会进入分析队列。没有单独的数据同意勾选或 ZDR 声明步骤。暂停自动分析可停止新的自动请求；清除或更换 Key 会取消排队和正在进行的工作，并清除原会话 Key 与缓存。已经发送给 xAI 的数据无法通过这些操作收回。</p>
+      <p>默认使用自己的 API Key；也可选择浏览器内的 Grok 订阅 OAuth，或连接官方本机 CLI／ACP。OAuth 无需 API Key、CLI 或额外程序，由你本人在官方 xAI 页面核对短码并确认授权。已有 API／本机配置独立保留，不会自动回退到其他凭据或更改账户预算。扩展没有单独的数据同意勾选或 ZDR 声明步骤；官方 OAuth 授权仍由你本人确认。暂停自动分析可停止新的自动请求；清除或更换 API Key 会取消相关工作，并清除原会话 Key 与缓存。已经发送的数据无法收回。</p>
       <div class="notice">
         <strong>分析不限于公开帖子。</strong>
-        <p>受保护帖子、回复，以及喜欢或书签页面中的帖子，只要以支持的帖子元素出现在启用的页面中，也可能被发送给 xAI。即使 xAI 无法凭链接访问某条帖子，页面可见的正文仍可能作为上下文发送。打开不希望上传的内容前，请先暂停 SuperX 或移除 Key。</p>
+        <p>受保护帖子、回复，以及喜欢或书签页面中的帖子，只要以支持的帖子元素出现在启用的页面中，也可能被发送给 xAI。即使 xAI 无法凭链接访问某条帖子，页面可见的正文仍可能作为上下文发送。打开不希望上传的内容前，请先暂停 SuperX。</p>
       </div>
       <p>私信和独立 Grok 页面不参与分析或历史记录。SuperX 不读取 X 登录 Cookie，不访问浏览器其他网站的历史，也不向 xAI 发送 X 会话凭据。独立的本机浏览历史会记录 SuperX 和历史记录启用时实际可见的支持帖子，详情见下文。它不会自动发帖、评论、点赞或转发。评论建议始终是草稿；点击复制后，由你自行编辑和发布。</p>
 
       <h3>2. 发送给 xAI 的信息</h3>
-      <p>API 模式通过 HTTPS 从扩展后台直接发送至 <code>api.x.ai</code>。根据所用功能，请求可能包含：</p>
+      <p>API Key 和 OAuth 模式通过 HTTPS 从扩展后台直接发送至 <code>api.x.ai</code>，三种来源使用相同的帖子上下文。根据所用功能，请求可能包含：</p>
       <ul>
         <li>原始帖子的规范链接和帖子 ID。</li>
         <li>当前页面显示的正文、语言标记、作者标签和发布时间。</li>
@@ -93,7 +93,9 @@
         <li>所选模型、推理档位、回答语言、搜索设置、生成流程、实际生效的任务指令，以及你选用的自定义提示词。</li>
         <li>可选评论草稿请求所需的已有核查结果。事实核查本身只有一次生成请求，不附带先前解释。</li>
       </ul>
-      <p>API Key 作为请求的认证凭据发送给 xAI。使用搜索功能时，请求会让 xAI 的工具检索原帖和相关证据，工具可能取得其他帖子、网页或媒体。SuperX 不会独立预加载每条完整帖子或视频。</p>
+      <p>所选 API Key 或 OAuth 访问 Token 作为 Bearer 认证凭据仅发送给 xAI，不发给 X 页面。使用搜索功能时，请求会让 xAI 的工具检索原帖和相关证据，工具可能取得其他帖子、网页或媒体。SuperX 不会独立预加载每条完整帖子或视频。</p>
+      <p>OAuth 创建设备码、轮询、刷新和尽力撤销刷新 Token，仅请求固定 <code>auth.x.ai/oauth2/</code> 端点；打开的授权链接严格限制为官方 <code>accounts.x.ai</code> 或 <code>auth.x.ai</code> 设备页。该网页自己的登录、Cookie 和政策适用；SuperX 不读取账号密码或网页 Cookie。短码／授权链接仅供可信扩展界面显示，设备码与访问／刷新 Token 不传给帖子脚本、不写入公开配置、生成历史或诊断。</p>
+      <p>当前使用共享的公开 Grok OAuth 客户端，因此官方页可能显示 <strong>Grok Build</strong>，不是 SuperX 独立注册的授权身份或官方合作声明。请求权限范围为 <code>openid profile email offline_access grok-cli:access api:access</code>；扩展不请求用户资料接口或收集其中的邮箱。登录后只读取模型目录，不发送测试生成，也不冒用 CLI 身份头。套餐资格、模型、额度和费用以账号与提供方规则为准。</p>
 
       <h3>3. 第三方处理与数据用途</h3>
       <p>SuperX 开发者不运营 API 中转、分析或遥测服务。分析和评论请求直接发送给 xAI；xAI 对请求、日志和工具数据的处理受其自身条款、政策与账号配置约束。</p>
@@ -105,6 +107,7 @@
       <dl class="storage">
         <div><dt>记住 API Key</dt><dd>默认勾选记住 Key，以 AES-GCM 自动加密保存。密文位于本机扩展存储 <code>apiKeyEncrypted</code>，随机生成的不可导出加密密钥单独保存在扩展 IndexedDB 中。重启浏览器后自动恢复到受限会话存储，无需密码或手动解锁。</dd></div>
         <div><dt>会话 Key</dt><dd>未选择“记住 Key”时，Key 仅保存在浏览器会话扩展存储和必要运行内存中，扩展不会刻意跨会话持久保存；重启浏览器后需重新填写。Key 仅供可信扩展界面与后台使用；内容脚本仅获知 Key 是否可用。</dd></div>
+        <div><dt>OAuth 登录</dt><dd>默认记住登录：刷新 Token 密文保存在独立的 <code>superxOAuthCredential</code> 本机记录，独立随机不可导出的 AES-GCM 密钥位于扩展 IndexedDB。访问 Token 只在受限会话存储和后台内存中，不持久写入本机存储；关闭记住登录后，刷新 Token 也仅在会话中。无需密码、不使用同步。临时设备挑战只在受限会话存储；本机保留授权身份、轮换版本、模型目录和期限等元数据。</dd></div>
         <div><dt>本机 Grok 连接</dt><dd>连接码在本机自动加密保存，与 API Key 分开；端口作为本机设置保存。仅可信扩展页面和后台使用，不传入帖子脚本，不使用浏览器同步。</dd></div>
         <div><dt>设置</dt><dd>设置、自定义提示词、Key 保存偏好和最近报告的 X 界面语言保存在本机，直到你更改或移除扩展数据。</dd></div>
         <div><dt>分析和评论缓存</dt><dd>仅保存在浏览器会话扩展存储中，在当前会话内最多重用 24 小时，最多 160 项、约 4 MB。包含生成文本、评论、来源、模型与用量信息、完成时间以及缓存身份；身份可能包含帖子 URL、设置、提示词、帖子／引用快照和已有分析。浏览器会话结束时清除，不跨新的浏览器会话。</dd></div>
@@ -115,6 +118,8 @@
       <p>升级时可复用已有明文 Key 或旧版可用的会话 Key；选择记住 Key 时先完成加密保存，再删除明文记录。选择仅会话保存时，删除持久 Key 记录及本机加密密钥。密文或加密密钥缺失、损坏时，请重新填写一次 API Key。新版不解密旧版密码加密记录，旧记录仅保留到成功迁移、更换或清除 Key。旧的数据同意字段不再使用，也不再控制分析。</p>
       <p>升级后后台初始化时会删除旧版保存在本机持久存储中的结果缓存，不将其私密内容迁移到新的会话缓存。新结果只在当前浏览器会话中缓存；浏览历史是另一个持久保存功能。</p>
       <p>历史仅在本机保存，不作为历史集合上传，也不使用同步。重复帖子合并，按最后浏览排序；再次实际浏览会刷新该帖的 24 小时期限。搜索、展开或查看已有回答不会调用 API、恢复生成或自动请求远程图片；点击原帖或出处才访问相应网站。它不为补齐历史而检索未显示内容。</p>
+      <p>答案缓存及历史中的生成回答／评论按连接来源和 OAuth 授权身份隔离；切换来源或账号后不显示先前来源／账号的生成内容，本机帖子访问记录仍保留。这不是对旧历史数据或页面已显示结果的取证级擦除。API Key、OAuth 刷新 Token、本机连接码使用独立密钥和记录，清除一种不会销毁另一种；自动加密的保护边界与上文相同。</p>
+      <p>OAuth 按提供方返回的有效期刷新；先持久记录轮换意图，再交换刷新 Token，并确认新记录保存成功后才使用。网络结果不确定、记录不匹配或保存失败时要求重新登录，不反复使用可能已被消费的旧 Token。后台定时与按需刷新属于认证请求，不发送生成问题；没有帖子分析时也可能请求认证端点。生命周期错误仅保留固定类别，诊断不记录 OAuth 凭据或原始 Token 响应。</p>
 
       <h3>5. 到期、删除与控制</h3>
       <ul>
@@ -125,22 +130,25 @@
         <li><strong>清除缓存：</strong>移除会话结果缓存，不清除 Key、设置、浏览历史、xAI 记录或已显示在打开页面上的回答。刷新页面可清除已显示结果；之后完成的新请求可能再次写入缓存。</li>
         <li><strong>历史控制：</strong>关闭「保存浏览历史」停止新增记录及回答更新，已有记录保留至到期。可删除单条或清空全部历史，不清除 Key、答案缓存、服务商记录或 X 中已显示的回答。记录仍开启时，之后实际浏览帖子可以创建新记录。</li>
         <li><strong>改为会话保存：</strong>取消“记住 Key”并保存后，删除密文、IndexedDB 加密密钥及旧版持久 Key 记录，当前 API Key 仅保留于会话。会话 Key 不会未经选择记住 Key 自动持久保存。</li>
+        <li><strong>OAuth 取消／退出：</strong>取消使待授权登录失效；退出清除该连接的本机／会话记录及加密密钥，取消其任务并尽力向官方撤销最新已知刷新 Token。迟到结果不能恢复已取消登录或覆盖新登录。不删除帖子访问记录、API／本机配置、浏览器网站登录或服务商记录；网络不可达时无法保证撤销。</li>
+        <li><strong>关闭记住登录：</strong>移除 OAuth 持久刷新 Token，当前登录只留在受限会话；新的浏览器会话需重新登录。切换来源取消待授权登录，但保留已连接凭据，不自动以其他凭据回退。</li>
       </ul>
       <p>清除扩展记录不保证从设备、旧备份或浏览器存储残留中完成取证级擦除。</p>
       <p><strong>24 小时是会话缓存的重用到期时间，不是定时删除保证。</strong>后台初始化和保存新缓存时会修剪过期、格式错误、未来时间或超出预算的条目。过期条目可能留在仍运行的浏览器会话中，直到下次修剪或主动清除。浏览器会话结束时缓存会清除，不跨新的浏览器会话；仅关闭 X 标签页并不等于结束浏览器会话。通过浏览器卸载扩展或移除扩展数据是更全面的本机删除操作；第三方记录须另行处理。</p>
       <p>浏览历史的 24 小时独立期限从最后浏览开始。到期条目不再显示，并在后台启动、历史读写及每小时 <code>alarms</code> 清理中删除。浏览器未运行、调度延迟或存储错误可能延迟实际删除，不保证精确时点擦除。浏览历史跨重启保留，容量上限可能使旧记录提前移除。</p>
       <p>SuperX 没有独立的费用预算或帖子数量上限。启用自动分析后，所有可见且符合条件的帖子都可能产生付费请求；请先了解 xAI 计费。</p>
-      <p>求证和评论遇到临时错误后等待 3 秒，每条任务最多额外重试 5 次，使用原有提供方、模型和推理设置。重试会再次发送该任务的上下文，可能消耗额外额度或产生费用。Key 无效、账户／余额限制、不支持的设置、输出上限及本机取消未确认等问题不自动重试，单条失败不会停止其他帖子。</p>
+      <p>API Key／CLI 的求证和评论遇到临时错误后等待 3 秒，每条最多额外重试 5 次，使用原提供方、模型及推理设置，可能再次发送上下文并消耗额度或费用。Key 无效、账户限制、不支持的设置、输出上限及本机取消未确认不自动重试。OAuth 收到 HTTP 200 后的流错误、未完成或超时不自动重放；首次 HTTP 401 拒绝可刷新授权并恢复请求一次。单条失败不会停止其他帖子。</p>
 
-<p><strong>Grok CLI／ACP 模式：</strong>帖子上下文、指令、模型／推理选择和可选已有核查，通过固定本机地址 <code>127.0.0.1</code> 的 WebSocket 直接交给用户启动的官方 Grok 服务，再由官方客户端认证并发送至提供方，不使用扩展 API Key，也不安装额外 SuperX 程序。SuperX 不读取或复制登录文件、OAuth Token 或 X Cookie；生成的启动命令让官方客户端读取自己的默认登录，同时使用临时隔离的 Grok home／工作目录，保留个人配置，关闭导入的 coding／MCP 集成。每个帖子使用新会话，实际检查本地函数数为零并拒绝反向文件、终端和权限请求。工具限制不等同于系统沙箱。提供方账号与 Build 条款、保留策略适用；API 的 <code>store: false</code> 不代表 Build 的保留行为。</p><p>本机连接码随机生成，与账号密码和 API Key 不同，作为握手凭据仅发往固定本机地址，不发给 X 或 SuperX 服务器，不进入公开配置、历史或诊断文本。保存时在本机加密，保护范围与已保存 API Key 相同；完整浏览器配置或设备被控制时不能提供保护。复制的命令、剪贴板、终端历史及调试工具可能保留连接码；请勿公开，泄露后停止旧服务并生成新码。官方服务本身不限制只有 SuperX 浏览器来源可以连接，具有连接码和本机访问条件的人可能控制该服务。</p><p>浏览器断线不保证官方任务停止；SuperX 会明确请求取消和关闭会话，必要时只为清理重连，不重发问题。若无法确认停止，会提示用户在服务终端按 Ctrl+C。已经提交的工作仍可能消耗额度。正常命令退出尝试清理临时目录，崩溃可能留下文件；官方客户端还可能生成会话标题等辅助请求。移除扩展不会卸载或停止官方 Grok；清除扩展 Key 不退出官方登录，请使用官方 logout。不会自动切换提供方；停止未确认时不会自动重试。</p>
+<p><strong>Grok CLI／ACP 模式：</strong>帖子上下文、指令、模型／推理选择和可选已有核查，通过固定本机地址 <code>127.0.0.1</code> 的 WebSocket 直接交给用户启动的官方 Grok 服务，再由官方客户端认证并发送至提供方，不使用扩展 API Key，也不安装额外 SuperX 程序。此本机模式不读取或复制官方客户端的登录文件、OAuth Token 或 X Cookie；生成的启动命令让官方客户端读取自己的默认登录，同时使用临时隔离的 Grok home／工作目录，保留个人配置，关闭导入的 coding／MCP 集成。每个帖子使用新会话，实际检查本地函数数为零并拒绝反向文件、终端和权限请求。工具限制不等同于系统沙箱。提供方账号与 Build 条款、保留策略适用；API 的 <code>store: false</code> 不代表 Build 的保留行为。</p><p>本机连接码随机生成，与账号密码和 API Key 不同，作为握手凭据仅发往固定本机地址，不发给 X 或 SuperX 服务器，不进入公开配置、历史或诊断文本。保存时在本机加密，保护范围与已保存 API Key 相同；完整浏览器配置或设备被控制时不能提供保护。复制的命令、剪贴板、终端历史及调试工具可能保留连接码；请勿公开，泄露后停止旧服务并生成新码。官方服务本身不限制只有 SuperX 浏览器来源可以连接，具有连接码和本机访问条件的人可能控制该服务。</p><p>浏览器断线不保证官方任务停止；SuperX 会明确请求取消和关闭会话，必要时只为清理重连，不重发问题。若无法确认停止，会提示用户在服务终端按 Ctrl+C。已经提交的工作仍可能消耗额度。正常命令退出尝试清理临时目录，崩溃可能留下文件；官方客户端还可能生成会话标题等辅助请求。移除扩展不会卸载或停止官方 Grok；清除扩展 Key 不退出官方登录，请使用官方 logout。不会自动切换提供方；停止未确认时不会自动重试。</p>
 
       <h3>6. 权限</h3>
       <ul>
-        <li><code>storage</code>：保存本机设置、近期浏览历史和可选加密保存的 API Key，以及受限会话 Key 和会话缓存。</li>
+        <li><code>storage</code>：保存本机设置、近期浏览历史、独立加密的 API／OAuth／本机凭据，以及受限会话凭据和会话缓存。</li>
         <li>可选 <code>http://127.0.0.1/*</code>：用户检查官方本机连接时申请；实际仅连接固定 <code>ws://127.0.0.1</code> 与所选端口，API 模式不需要。</li>
-        <li><code>alarms</code>：定期清除已到期的本机历史记录，不定时发起付费请求。</li>
+        <li><code>alarms</code>：清理过期历史，OAuth 设备轮询与 Token 刷新；这些认证请求不发送生成问题。</li>
         <li><code>https://x.com/*</code>、<code>https://twitter.com/*</code>：读取支持的帖子元素，跟随主题／语言并显示结果列。</li>
         <li><code>https://api.x.ai/*</code>：由扩展后台直接调用 xAI。</li>
+        <li><code>https://auth.x.ai/*</code>：固定 OAuth 设备码、Token 交换／刷新与撤销端点；升级新增此主机访问可能需要浏览器批准。</li>
       </ul>
       <p>扩展不申请浏览器的 <code>cookies</code>、<code>history</code> 或访问所有网站的权限。本机近期历史来自支持页面上的可见 X 帖子，不读取浏览器全局历史数据库。内容脚本匹配的网站范围比实际支持的分析路径更宽；运行时会排除私信以及独立 Grok／设置流程。</p>
 
@@ -152,19 +160,19 @@
 
     <article id="en" lang="en" aria-labelledby="en-title">
       <h2 id="en-title">SuperX Privacy Policy</h2>
-      <p class="date">Last updated: October 16, 2026 · 0.9.5</p>
-      <p>This policy describes data handling by SuperX 0.9.5. SuperX uses your own API Key or official local Grok Build login to fact-check X/Twitter posts and optionally draft replies, without first generating an explanation. It is independently developed and is not officially affiliated with or endorsed by X, Grok, or xAI.</p>
+      <p class="date">Last updated: October 18, 2026 · 0.9.11 unreleased candidate</p>
+      <p>This policy describes the SuperX 0.9.11 candidate's data handling through Grok subscription OAuth, your API Key or an official local Grok Build connection, for fact checks and optional reply drafts without a preceding explanation. Published Stable remains 0.7.26; integrated OAuth still needs fresh user authorization and installed-browser acceptance. SuperX is independently developed and is not officially affiliated with or endorsed by X, Grok, or xAI.</p>
 
       <h3>1. Setup and analysis scope</h3>
-      <p>Add your own normal xAI API key in settings, save it, and enable SuperX; visible eligible posts can then enter the analysis queue. There is no separate data-consent checkbox or ZDR-attestation step. Pause automatic analysis to stop new automatic requests. Clearing or replacing the key cancels queued and active work and clears the previous session key and cache. These controls cannot recall data already sent to xAI.</p>
+      <p>API Key remains the default. Alternatively select browser-only Grok subscription OAuth or the official local CLI / ACP connection. OAuth needs no API Key, CLI or extra program; you check the code and approve access yourself on the official xAI page. Existing API/local configurations remain separate, with no automatic credential fallback or account-budget changes. There is no separate SuperX data-consent checkbox or ZDR-attestation step; official OAuth authorization remains your own confirmation. Pause automatic analysis to stop new requests. Clearing or replacing an API Key cancels related work and clears its previous session credential and cache. These controls cannot recall data already sent.</p>
       <div class="notice">
         <strong>Analysis is not limited to public posts.</strong>
-        <p>Protected posts, replies, and posts visible in likes or bookmarks can be sent to xAI when they appear as supported post elements on an enabled page. Even when xAI cannot retrieve a post by URL, its visible text can still be sent as context. Pause SuperX or remove the key before viewing content you do not want transmitted.</p>
+        <p>Protected posts, replies, and posts visible in likes or bookmarks can be sent to xAI when they appear as supported post elements on an enabled page. Even when xAI cannot retrieve a post by URL, its visible text can still be sent as context. Pause SuperX before viewing content you do not want transmitted.</p>
       </div>
       <p>Direct messages and standalone Grok pages are excluded from analysis and history recording. SuperX does not read X authentication cookies, access the browser's history of other sites, or send X session credentials to xAI. Its separate local history records supported posts actually visible while SuperX and history recording are enabled, as described below. It does not automatically post, reply, like, or repost. Reply suggestions remain drafts; you choose whether to copy, edit, and post them.</p>
 
       <h3>2. Information sent to xAI</h3>
-      <p>API requests go directly over HTTPS from the extension background worker to <code>api.x.ai</code>. Depending on the feature used, a request can include:</p>
+      <p>API Key and OAuth requests go directly over HTTPS from the extension background worker to <code>api.x.ai</code>. All three connections use the same post context. Depending on the feature used, a request can include:</p>
       <ul>
         <li>The original post's canonical URL and post ID.</li>
         <li>The currently displayed text, language mark, author label, and timestamp.</li>
@@ -172,7 +180,9 @@
         <li>The selected model, reasoning effort, answer language, search settings, generation flow, effective task instructions, and any selected custom prompts.</li>
         <li>The existing Fact Check for an optional reply-drafting request. Fact Check itself uses one generation request and does not include an earlier explanation.</li>
       </ul>
-      <p>The API key is sent to xAI as the request's authentication credential. Search-enabled requests ask xAI tools to retrieve the original post and relevant evidence; those tools may retrieve further posts, pages, or media. SuperX does not independently preload every complete post or video.</p>
+      <p>The selected API Key or OAuth access token is sent only to xAI as Bearer authentication, never to the X page. Search-enabled requests ask xAI tools to retrieve the original post and relevant evidence; those tools may retrieve further posts, pages, or media. SuperX does not independently preload every complete post or video.</p>
+      <p>OAuth device-code creation, polling, refresh and best-effort refresh-token revocation use fixed <code>auth.x.ai/oauth2/</code> endpoints. Authorization links are restricted to official <code>accounts.x.ai</code> or <code>auth.x.ai</code> device pages. The site's own login, cookies and policies apply; SuperX does not read your password or website cookies. Trusted extension UI alone receives the short code/link. Device codes and access/refresh tokens are excluded from feed scripts, public configuration, generated history and diagnostics.</p>
+      <p>This route uses the shared public Grok OAuth client, so the official page may display <strong>Grok Build</strong>, not a separately registered SuperX identity or official partnership. Requested scopes are <code>openid profile email offline_access grok-cli:access api:access</code>; SuperX does not request user-info or collect an email/profile from it. Login reads the model directory without a test generation or CLI identity headers. Plan eligibility, models, allowance and charges remain subject to your account and provider rules.</p>
 
       <h3>3. Third parties and purposes</h3>
       <p>The SuperX developer operates no API relay, analytics service, or telemetry endpoint. Analysis and reply requests go directly to xAI. Its handling of requests, logs, and tool data is governed by its own terms, policies, and account configuration.</p>
@@ -184,6 +194,7 @@
       <dl class="storage">
         <div><dt>Remembered API key</dt><dd>Remember Key is selected by default and encrypts the API key automatically with AES-GCM. Ciphertext is stored in local extension storage as <code>apiKeyEncrypted</code>; a separate, randomly generated, non-extractable CryptoKey is stored in extension IndexedDB. The worker automatically restores the API key into restricted session storage after browser restart, with no password or manual unlock step.</dd></div>
         <div><dt>Session key</dt><dd>With Remember Key disabled, the key is kept in browser session extension storage and necessary runtime memory, not deliberately persisted across sessions. Enter it again after browser restart. The key is available only to trusted extension UI/background contexts; content scripts receive only whether a key is available.</dd></div>
+        <div><dt>OAuth login</dt><dd>Remember login defaults on: refresh-token ciphertext stays in the separate local <code>superxOAuthCredential</code> record, with an independent random, non-extractable AES-GCM CryptoKey in extension IndexedDB. Access tokens remain only in restricted session storage and worker memory; with remembering off, the refresh token is also session-only. No password or sync is used. Pending device challenges stay in restricted session storage; local metadata records authorization identity, rotation revision, safe model IDs, expiry and preference.</dd></div>
         <div><dt>Local Grok connection</dt><dd>The connection code is encrypted locally, separately from the API Key; its port is a local setting. Only trusted extension UI and the worker use it, without browser sync or disclosure to the post script.</dd></div>
         <div><dt>Settings</dt><dd>Settings, custom prompts, key-storage preferences, and the last reported X interface language remain in local storage until changed or extension data is removed.</dd></div>
         <div><dt>Analysis and reply cache</dt><dd>Kept only in browser session extension storage, reusable for up to 24 hours within the current session, and bounded to 160 entries and approximately 4 MB. Entries contain generated text/replies, sources, model and usage metadata, completion times, and cache identities. Identities can include post URLs, settings, prompts, post/quotation snapshots, and earlier analysis. The cache is cleared when the browser session ends and does not carry into a new browser session.</dd></div>
@@ -194,6 +205,8 @@
       <p>An upgrade can reuse existing plaintext credentials or an available session key from an older version. When Remember Key is selected, the API key is encrypted before its plaintext record is removed. Session-only storage removes persistent key records and the local encryption key. Missing or damaged ciphertext or encryption keys require one-time API key re-entry. Older password-encrypted records are not decrypted and remain only until successful migration, replacement or clearing. Obsolete data-consent fields are ignored and no longer control analysis.</p>
       <p>On worker initialization after upgrade, legacy result caches in persistent local storage are deleted. Their private contents are not migrated into the new session cache. New results are cached only for the current browser session; browsing history is a separate persistent feature.</p>
       <p>History stays on this device, is not uploaded as a history collection and is not synced. Repeated posts are merged and ordered by the latest view; viewing a post again restarts its 24-hour period. Searching, expanding or viewing saved answers makes no API request, does not resume generation and does not fetch remote images. Original-post or source links visit their websites only when clicked. History does not retrieve unseen content to complete a saved post.</p>
+      <p>Answer cache reuse and generated history answers/comments are scoped to the connection source and OAuth authorization identity. Changing sources/accounts does not show the earlier context's generated results; recorded post visits remain. This is not forensic erasure of stored history or answers already displayed. API Key, OAuth refresh-token and local-connection encryption use independent keys and records; clearing one does not destroy another. The encryption protection limits above apply.</p>
+      <p>OAuth expiry follows the provider's token lifetime. Refreshes serialize, persist a rotation intent before exchange, and confirm replacement storage before use. Uncertain network outcomes, mismatched records or failed saving require sign-in again instead of replaying a potentially consumed refresh token. Alarms and on-demand checks can contact authentication endpoints without any post analysis, but send no generation prompt. Lifecycle errors use fixed categories; diagnostics exclude OAuth credentials and raw token-response text.</p>
 
       <h3>5. Expiry, deletion, and controls</h3>
       <ul>
@@ -204,22 +217,25 @@
         <li><strong>Clear cache:</strong> Removes the session result cache, not the key, settings, browsing history, xAI records, or answers already displayed on an open page. Refresh the page to clear displayed results. New completed requests may create new cache entries.</li>
         <li><strong>History controls:</strong> Turn off Save browsing history to stop new records and answer updates while retaining existing records until expiry. Delete one post or clear all history without deleting the key, result cache, provider records or answers displayed in X. A later actual view may create a new record while recording remains enabled.</li>
         <li><strong>Switch to session-only:</strong> Uncheck Remember Key and save to remove ciphertext, the IndexedDB encryption key and obsolete persistent key records, keeping the current API key in session storage. Session-only keys are not automatically persisted without choosing Remember Key.</li>
+        <li><strong>OAuth Cancel / Sign out:</strong> Cancel invalidates a pending login. Sign-out clears this connection's local/session records and encryption key, cancels its tasks and attempts to revoke the newest known refresh token. Late results cannot revive cancelled login or replace a newer one. It does not erase post visits, saved API/local settings, website logins or provider records; unreachable providers prevent guaranteed revocation.</li>
+        <li><strong>Disable Remember login:</strong> Removes the persistent OAuth refresh-token copy, keeping the current login in restricted session storage. A new browser session requires sign-in. Source changes cancel pending device login but preserve connected credentials, without automatic fallback.</li>
       </ul>
       <p>Clearing extension records does not guarantee forensic erasure from the device, older backups or browser storage remnants.</p>
       <p><strong>The 24-hour period is a session-cache reuse expiry, not a guaranteed deletion timer.</strong> Expired, malformed, future-dated, or over-budget entries are pruned when the worker initializes and when new entries are saved. Expired entries may remain within a running browser session until the next pruning or explicit clearing. The cache is cleared when that session ends and does not carry into a new session. Closing an X tab alone does not end the browser session. Uninstalling or removing extension data through the browser provides broader local removal; third-party records are separate.</p>
       <p>History's separate 24-hour lifetime runs from the latest view. Expired entries are excluded from history views and removed on startup, history reads/writes and hourly <code>alarms</code> cleanup. Browser shutdown, scheduling delays or storage errors may postpone physical deletion; there is no exact-time erasure guarantee. History survives restart and can be pruned earlier to meet storage limits.</p>
       <p>SuperX has no independent spending budget or post-count cap. All visible eligible posts can trigger paid work when automatic analysis is enabled. Review xAI billing before enabling it.</p>
 
-<p><strong>Grok CLI / ACP mode:</strong> Post context, prompts, model / effort choices and optional earlier findings pass directly over a loopback WebSocket at fixed <code>127.0.0.1</code> to the official Grok service started by the user. The official client authenticates and sends them to its provider. This mode does not use the extension API Key or install another SuperX program. SuperX does not read or copy login files, OAuth tokens or X cookies. The generated command lets official Grok read its own default login while using an isolated temporary Grok home / working directory, leaving personal configuration unchanged and disabling imported coding/MCP integrations. Each post uses a new session, actual local-function count is checked as zero, and reverse file/terminal/permission requests are refused. These restrictions are not an OS sandbox. Provider account/Build terms and retention rules apply; API <code>store: false</code> does not establish Build retention behavior.</p><p>The randomly generated local connection code differs from an account password or API Key. It is sent only to fixed loopback as the handshake credential, not to X or a SuperX server, and is omitted from public configuration, history and diagnostics. Its saved copy is encrypted locally with the same protection limits as remembered API Keys; a compromised device or full browser profile is outside that protection. Copied commands, clipboard, terminal history or debugging tools may retain it. Keep it private; stop the old service and generate a new code if exposed. The official service does not restrict connections to a SuperX browser origin: someone with the code and local access may control it.</p><p>Browser disconnection alone does not stop an official task. SuperX requests explicit cancellation and session closure; reconnection is limited to cleanup, never prompt replay. If stopping cannot be confirmed, the user is told to press Ctrl+C in the service terminal. Submitted work can still consume usage. Normal command exit attempts temporary-directory cleanup; crashes may leave remnants. The official client can generate supporting requests such as session titles. Removing SuperX does not uninstall or stop official Grok; Clear saved Key does not log it out. Use official logout separately. There is no automatic provider fallback; unconfirmed cancellation is not retried.</p>
+<p><strong>Grok CLI / ACP mode:</strong> Post context, prompts, model / effort choices and optional earlier findings pass directly over a loopback WebSocket at fixed <code>127.0.0.1</code> to the official Grok service started by the user. The official client authenticates and sends them to its provider. This mode does not use the extension API Key or install another SuperX program. In this local mode, SuperX does not read or copy the official client's login files, OAuth tokens or X cookies. The generated command lets official Grok read its own default login while using an isolated temporary Grok home / working directory, leaving personal configuration unchanged and disabling imported coding/MCP integrations. Each post uses a new session, actual local-function count is checked as zero, and reverse file/terminal/permission requests are refused. These restrictions are not an OS sandbox. Provider account/Build terms and retention rules apply; API <code>store: false</code> does not establish Build retention behavior.</p><p>The randomly generated local connection code differs from an account password or API Key. It is sent only to fixed loopback as the handshake credential, not to X or a SuperX server, and is omitted from public configuration, history and diagnostics. Its saved copy is encrypted locally with the same protection limits as remembered API Keys; a compromised device or full browser profile is outside that protection. Copied commands, clipboard, terminal history or debugging tools may retain it. Keep it private; stop the old service and generate a new code if exposed. The official service does not restrict connections to a SuperX browser origin: someone with the code and local access may control it.</p><p>Browser disconnection alone does not stop an official task. SuperX requests explicit cancellation and session closure; reconnection is limited to cleanup, never prompt replay. If stopping cannot be confirmed, the user is told to press Ctrl+C in the service terminal. Submitted work can still consume usage. Normal command exit attempts temporary-directory cleanup; crashes may leave remnants. The official client can generate supporting requests such as session titles. Removing SuperX does not uninstall or stop official Grok; Clear saved Key does not log it out. Use official logout separately. There is no automatic provider fallback; unconfirmed cancellation is not retried.</p>
 
-      <p>Transient Fact Check and comment failures retry after 3 seconds, up to 5 additional attempts per task, using the same provider, model and reasoning settings. Retries resend that task's context and may consume additional allowance or paid usage. Invalid credentials, account/balance restrictions, unsupported settings, output limits and unconfirmed local cancellation do not automatically retry. A failed task does not stop other posts.</p>
+      <p>API Key / CLI transient fact-check and comment failures retry after 3 seconds, up to 5 additional attempts with the same provider, model and reasoning. Retried context can consume allowance or charges. Invalid credentials, account restrictions, unsupported settings, output limits and unconfirmed local cancellation do not retry automatically. OAuth does not replay generation after accepted HTTP 200, stream failure, incomplete output or timeout. An initial HTTP 401 rejection can refresh authorization and recover once. A failed task does not stop other posts.</p>
       <h3>6. Permissions</h3>
       <ul>
-        <li><code>storage</code>: Local settings, recent browsing history and optionally encrypted API keys, plus restricted session keys and session result caches.</li>
+        <li><code>storage</code>: Settings, recent history, independently encrypted API/OAuth/local credentials, restricted session credentials and result caches.</li>
         <li>Optional <code>http://127.0.0.1/*</code>: requested for official local Grok access; actual connections use fixed <code>ws://127.0.0.1</code> and the selected port only. API mode does not need it.</li>
-        <li><code>alarms</code>: Periodic removal of expired local history; no scheduled paid requests.</li>
+        <li><code>alarms</code>: Expired-history cleanup, OAuth device polling and token refresh; these authentication calls send no generation prompt.</li>
         <li><code>https://x.com/*</code> and <code>https://twitter.com/*</code>: Observe supported post elements, follow theme/language, and display the result column.</li>
         <li><code>https://api.x.ai/*</code>: Call xAI directly from the background worker.</li>
+        <li><code>https://auth.x.ai/*</code>: Fixed OAuth device authorization, token exchange/refresh and revocation; newly added site access may require upgrade approval.</li>
       </ul>
       <p>The extension does not request the browser's <code>cookies</code> or <code>history</code> permission or access to all websites. Its recent history comes from visible supported X post elements, not the browser's global history database. Content-script site matching is broader than the supported analysis paths; runtime behavior excludes direct messages and standalone Grok/settings flows.</p>
 

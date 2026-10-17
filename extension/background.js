@@ -1,5 +1,5 @@
 /* SuperX: credentials and provider calls stay in the extension worker. */
-importScripts('feed-core.js', 'api-provider.js', 'build-acp.js', 'build-transport.js', 'build-provider.js', 'build-setup.js', 'ui-i18n.js', 'key-store.js', 'history-store.js');
+importScripts('feed-core.js', 'api-provider.js', 'build-acp.js', 'build-transport.js', 'build-provider.js', 'build-setup.js', 'ui-i18n.js', 'key-store.js', 'oauth-provider.js', 'history-store.js');
 const Core = XGrokCore;
 const UI = GrokFirstUI;
 const KeyStore = SuperXKeyStore;
@@ -18,6 +18,9 @@ let securityWrites = Promise.resolve(), securityPending = 0, securityGeneration 
 let hasSavedKey = false, rememberApiKey = true, credentialReady = false, securityFault = false, sealAttempted = false;
 let buildStatus = {connected:false,installed:false,available:false,errorCode:'BUILD_NOT_CONNECTED'}, buildStatusAt = 0, buildStatusPending;
 let buildSecret='',buildConnectionGeneration=0,buildConnectionPending=0;
+let oauthGeneration=0,oauthActionGeneration=0,oauthPendingLogins=0,oauthCredentialIdentity='',oauthReady=Promise.resolve(),providerFault=false;
+const oauth=SuperXOAuth.create({chrome,fetch:globalThis.fetch?.bind(globalThis),crypto:globalThis.crypto,
+  keyStore:KeyStore.create?.({purpose:'oauth-refresh'}),onChange:onOAuthChanged});
 const CACHE_TTL = 24 * 60 * 60 * 1000;
 const ready = initialize();
 
@@ -27,9 +30,14 @@ async function initialize() {
   // Diagnostic storage is optional. Its reads/writes never gate credentials,
   // analysis or normal extension startup.
   apiDiagnosticsReady=loadAPIDiagnostics();
-  const local = await chrome.storage.local.get(['settings','uiLanguage','apiKey','apiKeyEncrypted','apiKeyVault','rememberApiKey','buildConnectionEncrypted']);
+  const local = await chrome.storage.local.get(['settings','uiLanguage','apiKey','apiKeyEncrypted','apiKeyVault','rememberApiKey','buildConnectionEncrypted','invalidAnswerSource']);
   const session = await chrome.storage.session.get(['quotas','railStates','uiLanguage','apiKey','cache','securityFault','apiBudgetPause','apiCapacityPause']);
   settings = Core.normalizeSettings(local.settings);
+  providerFault=local.invalidAnswerSource===true||Boolean(local.settings?.provider&&!['api','build','oauth','native'].includes(local.settings.provider));
+  if(providerFault)await chrome.storage.local.set({invalidAnswerSource:true});
+  // OAuth restoration cannot delay an independent API Key or local connection.
+  // Its own gate stays closed until restoration has established usable state.
+  oauthReady=Promise.resolve(oauth.initialize()).catch(()=>{});
   // Errors belong to their own request. Retired session pause records never
   // freeze unrelated work, even when optional storage cleanup fails.
   try{await chrome.storage.session.remove(['apiBudgetPause','apiCapacityPause']);}catch{}
@@ -85,7 +93,49 @@ async function initialize() {
 function validKey(value) { return typeof value==='string' && Boolean(value.trim()) && value.length<=500 && !/[\r\n]/.test(value); }
 function securityAllowsCalls() { return !securityFault && credentialReady && securityPending===0; }
 function buildReady() { return buildConnectionPending===0&&validBuildSecret(buildSecret)&&buildStatus.connected===true&&buildStatus.installed===true&&buildStatus.available===true&&buildStatus.authenticated===true&&buildStatus.permission!==false; }
-function providerAllowsCalls(s=settings) { return s?.provider==='build'?buildReady():securityAllowsCalls(); }
+function providerAllowsCalls(s=settings) {
+  if(providerFault)return false;
+  if(s?.provider==='api')return securityAllowsCalls();
+  if(s?.provider==='build')return buildReady();
+  if(s?.provider==='oauth'){
+    const state=oauth.status();
+    return state.connected===true&&Boolean(state.credentialId)&&state.catalogModels?.some(item=>(typeof item==='string'?item:item?.id)===s.oauthModel);
+  }
+  return false;
+}
+function oauthFeedStatus(){
+  const state=oauth.status();
+  return {state:state.state,connected:state.connected===true,credentialId:state.credentialId||'',errorCode:state.errorCode||'',
+    modelAvailable:state.catalogModels?.some(item=>(typeof item==='string'?item:item?.id)===settings?.oauthModel)===true};
+}
+function onOAuthChanged(){
+  const state=oauth.status(),identity=state.credentialId||'';
+  if(identity!==oauthCredentialIdentity){
+    oauthCredentialIdentity=identity;oauthGeneration++;
+    for(const job of [...jobs.values()].filter(value=>value.settings.provider==='oauth'))abortJob(job);
+    for(const key of Object.keys(cache)){try{const partition=JSON.parse(key);if(partition[1]==='oauth'&&(!identity||partition[2]?.[0]!==identity))delete cache[key];}catch{delete cache[key];}}
+    cacheEpoch++;
+    if(settings?.provider==='oauth')void history.invalidateResults?.().catch(()=>{});
+  }
+  // Device codes and the official authorization URL go only to extension UI.
+  // Content scripts receive only oauthFeedStatus(), never the device challenge.
+  void Promise.resolve().then(()=>ready).then(async()=>{
+    await chrome.runtime.sendMessage({type:'OAUTH_STATUS_CHANGED',oauthStatus:oauth.status()}).catch(()=>{});
+    await broadcastConfig();pump();
+  }).catch(()=>{});
+}
+function selectedModel(value){return Core.providerModel?Core.providerModel(value):value.provider==='oauth'?value.oauthModel:value.provider==='build'?value.buildModel:value.apiModel;}
+function selectedEffort(value){return Core.providerEffort?Core.providerEffort(value):value.provider==='oauth'?value.oauthReasoningEffort:value.provider==='build'?value.buildReasoningEffort:Core.reasoningEffort(value.apiModel,value.apiReasoningEffort);}
+function historyScope(value=settings){return value.provider==='oauth'?'oauth:'+(value.oauthCredentialId||oauth.status().credentialId||'signed-out'):value.provider;}
+function scopedHistory(result){
+  const scope=historyScope();
+  return {...result,entries:(result.entries||[]).map(value=>{
+    const entry={...value};
+    if(entry.analysis&&(entry.analysis.scope||'api')!==scope)delete entry.analysis;
+    if((entry.commentsScope||'api')!==scope)for(const field of ['comments','commentsScope','commentsLanguage','commentsModel','commentsUsage','commentsCompletedAt'])delete entry[field];
+    return entry;
+  })};
+}
 function validBuildSecret(value){return typeof value==='string'&&/^[A-Za-z0-9_-]{24,256}$/.test(value)&&! /^(?:xai|sk)-/i.test(value);}
 function buildConnection(input={}){
   const port=input.port===undefined?settings.buildPort:input.port,secret=input.secret===undefined?buildSecret:input.secret;
@@ -174,14 +224,14 @@ function trustedFeed(sender) { return sender.id===chrome.runtime.id && sender.fr
 function send(port, message) { try { port.postMessage(message); } catch { /* Tab closed. */ } }
 async function publicConfig() {
   const generation=securityGeneration,canRefresh=securityPending===0;
-  const session = settings.provider==='build'?{}:await chrome.storage.session.get('apiKey');
+  const session = settings.provider==='api'?await chrome.storage.session.get('apiKey'):{};
   // A lookup started before a Key change or while a mutation was pending cannot
   // overwrite the newer operation's readiness with an old storage snapshot.
-  if(settings.provider!=='build'&&canRefresh && generation===securityGeneration && securityPending===0)credentialReady = validKey(session.apiKey);
+  if(settings.provider==='api'&&canRefresh && generation===securityGeneration && securityPending===0)credentialReady = validKey(session.apiKey);
   const status=securityStatus();
   const historyConfig=history.config();
   if(settings.provider==='build')ensureBuildStatus();
-  return {settings,ready:providerAllowsCalls(),keyState:status.keyState,apiBudgetPaused:false,apiCapacityPaused:false,...(settings.provider==='build'?{buildStatus:{...buildStatus,ready:buildReady()}}:{}),buildConnection:{configured:validBuildSecret(buildSecret),port:settings.buildPort},historyEnabled:historyConfig.enabled,historyEpoch:historyConfig.epoch};
+  return {settings,ready:providerAllowsCalls(),keyState:status.keyState,credentialIdentity:settings.provider==='oauth'?oauthCredentialIdentity:'',oauthStatus:oauthFeedStatus(),apiBudgetPaused:false,apiCapacityPaused:false,...(settings.provider==='build'?{buildStatus:{...buildStatus,ready:buildReady()}}:{}),buildConnection:{configured:validBuildSecret(buildSecret),port:settings.buildPort},historyEnabled:historyConfig.enabled,historyEpoch:historyConfig.epoch};
 }
 async function notifyHistoryChanged(){await chrome.runtime.sendMessage({type:'HISTORY_CHANGED',...history.config()}).catch(()=>{});}
 async function broadcastHistoryConfig(){
@@ -189,15 +239,18 @@ async function broadcastHistoryConfig(){
   for(const client of clients)send(client.port,{type:'HISTORY_CONFIG',...config});
   await notifyHistoryChanged();
 }
-function historyTicket(post){return history.capture(post.id).catch(()=>null);}
+function historyTicket(post,snapshot=settings){const scope=historyScope(snapshot),capturedRevision=revision;return history.capture(post.id).then(ticket=>({ticket,scope,revision:capturedRevision})).catch(()=>null);}
 function rememberHistoryResult(ticket,result,comments=false,language=''){
   if(!comments&&Core.readerOutput(result?.text,{final:true}).kind!=='content')return;
-  void Promise.resolve(ticket).then(value=>comments?history.comments(value,{...result,language}):history.analysis(value,{...result,language})).then(()=>notifyHistoryChanged()).catch(()=>{});
+  void Promise.resolve(ticket).then(value=>{
+    if(!value||value.revision!==revision||value.scope!==historyScope())return;
+    return comments?history.comments(value.ticket,{...result,language,scope:value.scope}):history.analysis(value.ticket,{...result,language,scope:value.scope});
+  }).then(()=>notifyHistoryChanged()).catch(()=>{});
 }
 async function broadcastConfig() {
   const config=await publicConfig();
   for(const client of clients)send(client.port,{type:'CONFIG',...config,used:quotas[client.tabId]||0,collapsed:Boolean(railStates[client.tabId]),uiLanguage:client.uiLanguage});
-  void chrome.runtime.sendMessage({type:'CONFIG',...config}).catch(()=>{});
+  void chrome.runtime.sendMessage({type:'CONFIG',...config,oauthStatus:oauth.status()}).catch(()=>{});
 }
 async function currentUILanguage() {
   try {
@@ -231,9 +284,9 @@ function sanitizePost(raw) {
 function cacheKey(post, s, inputFingerprint) {
   const mode=Core.explanationMode(s);
   const prompts=['fact-check-prompts-v2-deeper',mode==='preset'?Core.DEFAULT_PROMPTS.verify:s.verifyPrompt];
-  return JSON.stringify(['GrokFirst-v1',s.provider,s.provider==='build'?['official-ws-v1',s.buildPort,s.buildModel]:s.apiModel,s.language,s.webSearch,s.xSearch,
+  return JSON.stringify(['GrokFirst-v1',s.provider,s.provider==='build'?['official-ws-v1',s.buildPort,s.buildModel]:s.provider==='oauth'?[s.oauthCredentialId,s.oauthModel]:s.apiModel,s.language,s.webSearch,s.xSearch,
     'api-v10-model-reasoning',mode,'only',
-    Core.apiPostIdentity(post,s),...prompts,s.provider==='build'?s.buildReasoningEffort:Core.reasoningEffort(s.apiModel,s.apiReasoningEffort)]);
+    Core.apiPostIdentity(post,s),...prompts,selectedEffort(s)]);
 }
 function sanitizeAnalysis(raw) {
   const value=typeof raw==='string'?{text:raw}:raw&&typeof raw==='object'?raw:{};
@@ -244,12 +297,12 @@ function sanitizeAnalysis(raw) {
 }
 function commentCacheKey(post,s,inputFingerprint,analysis) {
   const prompts=['comments-prompt-v1',s.commentsPrompt];
-  return JSON.stringify(['GrokFirst-comments-v2-language',s.provider,s.provider==='build'?['official-ws-v1',s.buildPort,s.buildModel]:s.apiModel,s.language,Core.postFingerprint(post),analysis,...prompts,s.provider==='build'?s.buildReasoningEffort:Core.reasoningEffort(s.apiModel,s.apiReasoningEffort)]);
+  return JSON.stringify(['GrokFirst-comments-v2-language',s.provider,s.provider==='build'?['official-ws-v1',s.buildPort,s.buildModel]:s.provider==='oauth'?[s.oauthCredentialId,s.oauthModel]:s.apiModel,s.language,Core.postFingerprint(post),analysis,...prompts,selectedEffort(s)]);
 }
 function commentsJob(job) { return job.settings.task==='comments'; }
-function billingMetadata(value,provider) { return ['api','build'].includes(provider)?GrokFirstAPI.sanitizedMetadata(value):{}; }
+function billingMetadata(value,provider) { return ['api','build','oauth'].includes(provider)?GrokFirstAPI.sanitizedMetadata(value):{}; }
 function requestMetadata(value,provider) {
-  if(provider!=='api')return {};
+  if(!['api','oauth'].includes(provider))return {};
   let diagnostics;
   try{diagnostics=(Core.sanitizedRequestDiagnostics||GrokFirstAPI.sanitizedRequestDiagnostics)?.(value?.requestDiagnostics);}catch{/* Invalid diagnostic data is never forwarded. */}
   return diagnostics?{requestDiagnostics:diagnostics}:{};
@@ -273,7 +326,7 @@ async function loadAPIDiagnostics() {
   }catch{/* Diagnostics must not prevent normal requests or account safety. */}
 }
 function rememberAPIDiagnostics(job,value,code) {
-  if(job.settings.provider!=='api'||job.diagnosticsRecorded||!API_DIAGNOSTIC_CODES.has(code))return;
+  if(!['api','oauth'].includes(job.settings.provider)||job.diagnosticsRecorded||!API_DIAGNOSTIC_CODES.has(code))return;
   const diagnostics=requestMetadata(value,'api').requestDiagnostics;
   if(!diagnostics)return;
   job.diagnosticsRecorded=true;
@@ -379,7 +432,7 @@ function waitForAbort(promise, signal) {
 async function openSettings(focus) {
   // Replace stale focus requests even when the caller uses a generic Settings
   // entry point or sends an unlock target from an older content script.
-  try { await chrome.storage.session.set({superxOptionsFocus:{id:focus==='build'||settings.provider==='build'?'build':'api-key',nonce:crypto.randomUUID()}}); }
+  try { await chrome.storage.session.set({superxOptionsFocus:{id:focus==='oauth'||settings.provider==='oauth'?'oauth':focus==='build'||settings.provider==='build'?'build':'api-key',nonce:crypto.randomUUID()}}); }
   catch { /* The settings page remains reachable when session storage fails. */ }
   await chrome.runtime.openOptionsPage();
 }
@@ -389,7 +442,7 @@ chrome.runtime.onConnect.addListener(port => {
   const client = {port,tabId:port.sender.tab.id,cancelEpoch:0,uiLanguage:null,requestCancellations:new Map()}; clients.add(client);
   ready.then(async()=>{client.uiLanguage=UI.normalizeLanguage(client.uiLanguage || uiLanguage);send(port,{type:'CONFIG',...await publicConfig(),used:quotas[client.tabId] || 0,collapsed:Boolean(railStates[client.tabId]),uiLanguage:client.uiLanguage});}).catch(()=>send(port,{type:'FATAL',error:'扩展初始化失败，请重新加载扩展。'}));
   port.onMessage.addListener(message=>{
-    const receivedEpoch=client.cancelEpoch,receivedRevision=revision,receivedCredentialGeneration=securityGeneration,receivedBuildGeneration=buildConnectionGeneration;
+    const receivedEpoch=client.cancelEpoch,receivedRevision=revision,receivedCredentialGeneration=securityGeneration,receivedBuildGeneration=buildConnectionGeneration,receivedOAuthGeneration=oauthGeneration;
     const messageRequestId=String(message.requestId || '').slice(0,80);
     // Cancellation can arrive before an asynchronous readiness lookup has
     // created a job. Capture a receipt generation so it cannot dispatch later;
@@ -438,9 +491,10 @@ chrome.runtime.onConnect.addListener(port => {
       const requestId=messageRequestId;
       if(!requestId) return;
       if(client.requestCancellations.get(requestId)!==receivedCancellation)return;
-      if(client.cancelEpoch!==receivedEpoch || receivedRevision!==revision||(settings.provider==='build'?receivedBuildGeneration!==buildConnectionGeneration:receivedCredentialGeneration!==securityGeneration)){report('任务已取消。','CANCELLED');return;}
-      if(settings.provider!=='build'&&(securityPending || securityFault)) { report('API Key 设置需要重新确认，请在设置中重试。','NEEDS_KEY');return; }
-      const snapshot={...settings,...(comments?{task:'comments'}:{})};
+      const currentCredentials=()=>settings.provider==='oauth'?receivedOAuthGeneration===oauthGeneration:settings.provider==='build'?receivedBuildGeneration===buildConnectionGeneration:receivedCredentialGeneration===securityGeneration;
+      if(client.cancelEpoch!==receivedEpoch || receivedRevision!==revision||!currentCredentials()){report('任务已取消。','CANCELLED');return;}
+      if(settings.provider==='api'&&(securityPending || securityFault)) { report('API Key 设置需要重新确认，请在设置中重试。','NEEDS_KEY');return; }
+      const snapshot={...settings,...(settings.provider==='oauth'?{oauthCredentialId:oauth.status().credentialId||''}:{}),...(comments?{task:'comments'}:{})};
       if(!settings.enabled&&!comments) { report('已暂停自动分析。','PAUSED'); return; }
       if(railStates[client.tabId]){report('右栏已收起。','RAIL_COLLAPSED');return;}
       let post,inputFingerprint;
@@ -448,13 +502,17 @@ chrome.runtime.onConnect.addListener(port => {
       if(!comments&&!snapshot.webSearch&&!snapshot.xSearch) { report('通过帖子链接读取全文需要启用 X 搜索或网页搜索。','URL_SEARCH_REQUIRED');return; }
       const analysis=comments?sanitizeAnalysis(message.analysis):undefined;
       const fingerprint=comments?commentCacheKey(post,snapshot,inputFingerprint,analysis):cacheKey(post,snapshot,inputFingerprint);
-      const ticket=historyTicket(post),historyLanguage=Core.resolvePostLanguage(snapshot.language,post);
+      const ticket=historyTicket(post,snapshot),historyLanguage=Core.resolvePostLanguage(snapshot.language,post);
       const cached=message.force ? null : cachedResult(fingerprint);
       if(cached) { rememberHistoryResult(ticket,cached,comments,historyLanguage);send(port,comments?{type:'COMMENT_RESULT',requestId,comments:cached.comments,cached:true,...billingMetadata(cached,snapshot.provider)}:{type:'RESULT',requestId,result:withBillingMetadata(cached,snapshot.provider,snapshot.apiVerification),cached:true}); return; }
       const config=await publicConfig();
-      if(!clients.has(client)||client.cancelEpoch!==receivedEpoch||receivedRevision!==revision||client.requestCancellations.get(requestId)!==receivedCancellation||(snapshot.provider==='build'?receivedBuildGeneration!==buildConnectionGeneration:receivedCredentialGeneration!==securityGeneration))return;
+      if(!clients.has(client)||client.cancelEpoch!==receivedEpoch||receivedRevision!==revision||client.requestCancellations.get(requestId)!==receivedCancellation||!currentCredentials())return;
       if(railStates[client.tabId]){report('右栏已收起。','RAIL_COLLAPSED');return;}
-      if(!config.ready) { report(settings.provider==='build'?'请在设置中连接 Grok Build。':'请打开设置并输入 xAI API Key。',settings.provider==='build'?(buildStatus.errorCode||'BUILD_NOT_CONNECTED'):'NEEDS_KEY'); return; }
+      if(!config.ready) {
+        if(settings.provider==='oauth')report('请在设置中连接 Grok 订阅并选择可用模型。',oauth.status().errorCode||(!oauth.status().connected?'OAUTH_LOGIN_REQUIRED':'OAUTH_MODEL_UNAVAILABLE'));
+        else report(settings.provider==='build'?'请在设置中连接 Grok Build。':'请打开设置并输入 xAI API Key。',settings.provider==='build'?(buildStatus.errorCode||'BUILD_NOT_CONNECTED'):'NEEDS_KEY');
+        return;
+      }
       const key=`${client.tabId}:${requestId}`;
       if(jobs.has(key)) return;
       const job={key,requestId,post,inputFingerprint,analysis,client,clientEpoch:receivedEpoch,settings:snapshot,revision:receivedRevision,fingerprint,historyTicket:ticket,historyLanguage,retryAttempts:0,completedBilling:[],controller:new AbortController()};
@@ -528,7 +586,7 @@ function aggregateBilling(job,current={}){
   return billingMetadata({usage,usageComplete:values.every(value=>value.usageComplete===true&&GrokFirstAPI.usageComplete(value.usage)),usageByStage,model,modelByStage},job.settings.provider);
 }
 function retryPlan(job,error,code,extra={}){
-  if(!logicalJobActive(job)||job.retryAttempts>=Core.AUTO_RETRY_LIMIT||!Core.autoRetryDecision(error).retryable)return false;
+  if(!logicalJobActive(job)||job.retryAttempts>=Core.AUTO_RETRY_LIMIT||!Core.autoRetryDecision({...error,provider:job.settings.provider}).retryable)return false;
   const safe=job.settings.provider==='build'?SuperXBuild.publicError(error):GrokFirstAPI.publicError(error);
   job.retryPlan={error:safe.error,code,extra};return true;
 }
@@ -608,7 +666,7 @@ async function executeJob(job) {
     job.billing={...job.billing,...billingMetadata(result,job.settings.provider)};
     if(result.requestDiagnostics)job.requestDiagnostics=result.requestDiagnostics;
 
-    if(job.settings.provider==='api'&&apiCapacityFailure(result))throw Object.assign(new Error('Model capacity is temporarily unavailable.'),{code:'API_CAPACITY',partialResult:result,verificationFailure:result.verificationFailure,...job.billing,...requestMetadata(result,'api')});
+    if(['api','oauth'].includes(job.settings.provider)&&apiCapacityFailure(result))throw Object.assign(new Error('Model capacity is temporarily unavailable.'),{code:'API_CAPACITY',partialResult:result,verificationFailure:result.verificationFailure,...job.billing,...requestMetadata(result,job.settings.provider)});
     if(commentsJob(job))result.comments=GrokFirstAPI.validateComments(result.comments);
     else {
       const reader=Core.readerOutput(result.text,{final:true});
@@ -623,7 +681,7 @@ async function executeJob(job) {
     }
     if(['incomplete','failed'].includes(result.verificationStatus)){
       rememberAPIDiagnostics(job,result,result.verificationFailure?.errorCode||'API_INCOMPLETE');
-      if(job.retryAttempts<Core.AUTO_RETRY_LIMIT&&Core.autoRetryDecision(result).retryable)throw Object.assign(new Error('Fact Check incomplete.'),{code:result.verificationFailure?.errorCode||'API_INCOMPLETE',partialResult:result,verificationFailure:result.verificationFailure,...job.billing});
+      if(job.retryAttempts<Core.AUTO_RETRY_LIMIT&&Core.autoRetryDecision({...result,provider:job.settings.provider}).retryable)throw Object.assign(new Error('Fact Check incomplete.'),{code:result.verificationFailure?.errorCode||'API_INCOMPLETE',partialResult:result,verificationFailure:result.verificationFailure,...job.billing});
     }
     Object.assign(result,aggregateBilling(job,job.billing));
     releaseAPISlot(job);pump();
@@ -658,8 +716,8 @@ async function executeJob(job) {
       const partialResult=partialText?withBillingMetadata({...retained,...errorBilling,...diagnosticMetadata,text:partialText,verificationStatus:'incomplete'},job.settings.provider,job.settings.apiVerification):undefined;
       if(partialResult&&!commentsJob(job))job.retainedFactCheck=sanitizeAnalysis(partialResult);
       const safeError=job.settings.provider==='build'?SuperXBuild.publicError(e):GrokFirstAPI.publicError(e);
-      const budgetFailure=job.settings.provider==='api'?apiBudgetFailure(e):undefined;
-      const capacityFailure=job.settings.provider==='api'&&apiCapacityFailure(e)?GrokFirstAPI.sanitizedVerificationFailure(e.verificationFailure)||GrokFirstAPI.sanitizedVerificationFailure({stage:'verify',code:'SERVER',...e.failureDetails,errorCode:'API_CAPACITY'}):undefined;
+      const budgetFailure=['api','oauth'].includes(job.settings.provider)?apiBudgetFailure(e):undefined;
+      const capacityFailure=['api','oauth'].includes(job.settings.provider)&&apiCapacityFailure(e)?GrokFirstAPI.sanitizedVerificationFailure(e.verificationFailure)||GrokFirstAPI.sanitizedVerificationFailure({stage:'verify',code:'SERVER',...e.failureDetails,errorCode:'API_CAPACITY'}):undefined;
       if(partialResult)rememberHistoryResult(job.historyTicket,{...partialResult,completedAt:Date.now()},false,job.historyLanguage);
       rememberAPIDiagnostics(job,{...diagnosticMetadata,verificationFailure:e.verificationFailure||partialResult?.verificationFailure||budgetFailure||capacityFailure},safeError.code);
       const failureMetadata={...errorBilling,...diagnosticMetadata,...(commentsJob(job)?(budgetFailure||capacityFailure?{verificationFailure:budgetFailure||capacityFailure}:{}):{...verificationMetadata({verificationFailure:e.verificationFailure||partialResult?.verificationFailure||budgetFailure||capacityFailure},job.settings.apiVerification),partialResult})};
@@ -690,6 +748,20 @@ async function runAPI(job,onUpdate) {
     if(commentsJob(job))return SuperXBuild.generateComments(job.post,job.settings,{analysis:job.analysis,signal,connection});
     return SuperXBuild.run(job.post,job.settings,{signal,onUpdate,connection});
   }
+  if(job.settings.provider==='oauth'){
+    const expectedCredentialId=job.settings.oauthCredentialId;
+    const token=async(forceRefresh=false,rejectedAccessToken)=>{
+      if(!liveJob(job))throw signal.reason||Object.assign(new Error('Cancelled.'),{code:'CANCELLED'});
+      const value=await oauth.ensureAccessToken({signal,forceRefresh,expectedCredentialId,rejectedAccessToken});
+      if(!liveJob(job)||value.credentialId!==expectedCredentialId)throw Object.assign(new Error('Grok login changed.'),{code:'OAUTH_ACCOUNT_CHANGED'});
+      return value.accessToken;
+    };
+    if(!expectedCredentialId||!providerAllowsCalls(job.settings))throw Object.assign(new Error('Grok subscription login is required.'),{code:'OAUTH_LOGIN_REQUIRED'});
+    const authorization={getAccessToken:()=>token(),onUnauthorized:(rejectedToken)=>token(true,rejectedToken)};
+    if(commentsJob(job))return GrokFirstAPI.generateComments(job.post,job.settings,undefined,{analysis:job.analysis,signal,authorization});
+    return GrokFirstAPI.run(job.post,job.settings,undefined,{signal,onUpdate,authorization});
+  }
+  if(job.settings.provider!=='api')throw Object.assign(new Error('Unknown answer source.'),{code:'PROVIDER_UNAVAILABLE'});
   const session=await waitForAbort(chrome.storage.session.get('apiKey'),signal);
   const key=session.apiKey;
   if(!liveJob(job))throw signal.reason || new DOMException('Cancelled','AbortError');
@@ -757,7 +829,7 @@ async function mutateSecurity(message,generation) {
     await chrome.storage.local.set(values);
   }
   if(!current())return;
-  if(message.settings)settings=message.settings;
+  if(message.settings){settings=message.settings;providerFault=false;await chrome.storage.local.remove('invalidAnswerSource');}
   if(apiKey)await chrome.storage.session.set({apiKey});
 }
 function queueSecurityMutation(message) {
@@ -765,7 +837,7 @@ function queueSecurityMutation(message) {
   securityPending++;
   let pauseReset;
   if(message.settings&&JSON.stringify(message.settings)!==JSON.stringify(settings))pauseReset=invalidateSecurityJobs();
-  else {for(const job of [...jobs.values()].filter(job=>job.settings.provider!=='build'))abortJob(job);pauseReset=clearQueuePause('api');}
+  else {for(const job of [...jobs.values()].filter(job=>job.settings.provider==='api'))abortJob(job);pauseReset=clearQueuePause('api');}
   cache={};cacheEpoch++;
   // Invalidate at receipt, before asynchronous storage or settings changes.
   void ready.then(()=>broadcastConfig()).catch(()=>{});
@@ -806,18 +878,28 @@ async function saveSettings(input) {
   if(JSON.stringify(next)!==JSON.stringify(settings)) {
     const modelChanged=next.apiModel!==settings.apiModel;
     const jobSettings=value=>{
-      const {explainPrompt,verifyPrompt,commentsPrompt,interfaceLanguage,dwellMs,analysisDefaultsVersion,...other}=value;
+      const {explainPrompt,verifyPrompt,commentsPrompt,interfaceLanguage,dwellMs,analysisDefaultsVersion,oauthRemember,...other}=value;
       return other;
     };
     const cancelsJobs=JSON.stringify(jobSettings(next))!==JSON.stringify(jobSettings(settings));
     // Accepted jobs keep their prompt/timing snapshot. Changes to future
     // visibility timing, prompts or UI locale never discard a paid generation.
     if(cancelsJobs){revision++;for(const job of [...jobs.values()])abortJob(job);}
-    settings=next;
+    if(next.provider!==settings.provider){
+      // Invalidate even a login still waiting for credential restoration. The
+      // manager cancels pending starts while keeping a connected session intact.
+      oauthActionGeneration++;
+      await history.invalidateResults?.();
+      const state=oauth.status();
+      if(oauthPendingLogins||state.device||['starting','authorizing','awaiting_authorization'].includes(state.state))await oauth.cancelLogin();
+    }
+    settings=next;providerFault=false;
     if(cancelsJobs){await clearQueuePause();pump();}
     await chrome.storage.local.set({settings});
+    await chrome.storage.local.remove('invalidAnswerSource');
     if(modelChanged)await clearAPICapacityPause();
   }
+  if(providerFault){providerFault=false;await chrome.storage.local.remove('invalidAnswerSource');}
   await broadcastConfig();
 }
 function queueSettingsMutation(input) {
@@ -829,13 +911,48 @@ function queueSettingsMutation(input) {
   securityWrites=operation;
   return operation;
 }
+async function handleOAuthMessage(message,actionGeneration){
+  if(message.type==='GET_OAUTH_STATUS')return {ok:true,oauthStatus:oauth.status()};
+  if((message.type==='OAUTH_SET_REMEMBER'||['OAUTH_LOGIN','OAUTH_START_LOGIN'].includes(message.type)&&message.remember!==undefined)&&typeof message.remember!=='boolean')return {ok:false,errorCode:'OAUTH_DEVICE_INVALID',oauthStatus:oauth.status()};
+  let state;
+  if(['OAUTH_LOGIN','OAUTH_START_LOGIN'].includes(message.type)){
+    if(actionGeneration!==oauthActionGeneration)return {ok:false,errorCode:'OAUTH_CANCELLED',oauthStatus:oauth.status()};
+    state=await oauth.startLogin({remember:message.remember??settings.oauthRemember??true});
+    const device=state.device;
+    if(device&&actionGeneration===oauthActionGeneration&&oauth.status().device?.userCode===device.userCode){
+      try{await chrome.tabs.create({url:device.verificationUriComplete,active:true});}
+      catch{return {ok:false,errorCode:'OAUTH_AUTH_UNAVAILABLE',oauthStatus:oauth.status()};}
+    }
+  }else if(message.type==='OAUTH_CANCEL_LOGIN')state=await oauth.cancelLogin();
+  else if(message.type==='OAUTH_LOGOUT'){
+    state=await oauth.logout();
+    for(const key of Object.keys(cache)){try{if(JSON.parse(key)[1]==='oauth')delete cache[key];}catch{delete cache[key];}}
+    cacheEpoch++;await persistCache(cacheEpoch).catch(()=>{});
+  }else if(message.type==='OAUTH_SET_REMEMBER')state=await oauth.setRemember(message.remember);
+  else if(message.type==='OAUTH_REFRESH_CATALOG')state=await oauth.catalog();
+  if(state&&['OAUTH_LOGIN','OAUTH_START_LOGIN','OAUTH_SET_REMEMBER'].includes(message.type)&&typeof state.remember==='boolean'){
+    await queueSettingsMutation(()=>({...settings,oauthRemember:state.remember}));
+  }
+  await broadcastConfig();
+  return {ok:!state?.errorCode,oauthStatus:oauth.status(),...(state?.errorCode?{errorCode:state.errorCode}:{})};
+}
 chrome.runtime.onMessage.addListener((message,sender,respond)=>{
+  const oauthTypes=['GET_OAUTH_STATUS','OAUTH_LOGIN','OAUTH_START_LOGIN','OAUTH_CANCEL_LOGIN','OAUTH_LOGOUT','OAUTH_SET_REMEMBER','OAUTH_REFRESH_CATALOG'];
+  if(oauthTypes.includes(message?.type)){
+    if(!trustedUI(sender)){respond({ok:false,errorCode:'OAUTH_PERMISSION'});return false;}
+    const login=['OAUTH_LOGIN','OAUTH_START_LOGIN'].includes(message.type);
+    const actionGeneration=['OAUTH_LOGIN','OAUTH_START_LOGIN','OAUTH_CANCEL_LOGIN','OAUTH_LOGOUT'].includes(message.type)?++oauthActionGeneration:oauthActionGeneration;
+    if(login)oauthPendingLogins++;
+    ready.then(()=>handleOAuthMessage(message,actionGeneration)).then(respond).catch(()=>respond({ok:false,errorCode:'OAUTH_AUTH_UNAVAILABLE',oauthStatus:oauth.status()})).finally(()=>{if(login)oauthPendingLogins--;});
+    return true;
+  }
   if(trustedUI(sender) && message?.type==='SAVE_KEY') {
     // Reject invalid input without cancelling a valid paid task or touching Key
     // storage. Optional settings join the same blocked credential transaction.
     const raw=message.apiKey,apiKey=typeof raw==='string'?raw.trim():raw==null?'':null;
     if(apiKey===null||typeof raw==='string'&&(/[\r\n]/.test(raw)||raw.trim()&&!validKey(raw))) {respond({ok:false,errorKey:'errors.keyInvalid'});return true;}
     if(message.remember!==undefined&&typeof message.remember!=='boolean') {respond({ok:false,errorKey:'errors.keyInvalid'});return true;}
+    if(message.settings?.provider!==undefined&&!['api','oauth','build'].includes(message.settings.provider)){respond({ok:false,errorKey:'options.providerChoice'});return true;}
     const next=message.settings===undefined?undefined:Core.normalizeSettings(message.settings);
     if(next&&!next.webSearch&&!next.xSearch) {respond({ok:false,errorKey:'options.urlSearchRequired'});return true;}
     queueSecurityMutation({apiKey,remember:message.remember,settings:next})
@@ -843,6 +960,7 @@ chrome.runtime.onMessage.addListener((message,sender,respond)=>{
     return true;
   }
   if(trustedUI(sender) && message?.type==='SAVE_SETTINGS') {
+    if(message.settings?.provider!==undefined&&!['api','oauth','build'].includes(message.settings.provider)){respond({ok:false,errorKey:'options.providerChoice'});return true;}
     const next=Core.normalizeSettings(message.settings);
     if(!next.webSearch&&!next.xSearch) {respond({ok:false,errorKey:'options.urlSearchRequired'});return true;}
     // Join the credential chain at receipt so even same-tick saves apply in the
@@ -867,18 +985,18 @@ chrome.runtime.onMessage.addListener((message,sender,respond)=>{
     if(message.type==='SAVE_BUILD_CONNECTION')return queueBuildConnection(message);
     if(message.type==='CLEAR_BUILD_CONNECTION')return queueBuildConnection(message,true);
     if(message.type==='GET_BUILD_STATUS')return checkBuildDraft(message);
-    if(message.type==='GET_CONFIG'){if(settings.provider==='build')await refreshBuildStatus();return {ok:true,...await publicConfig()};}
+    if(message.type==='GET_CONFIG'){if(settings.provider==='build')await refreshBuildStatus();return {ok:true,...await publicConfig(),oauthStatus:oauth.status()};}
     if(message.type==='GET_API_DIAGNOSTICS')return getAPIDiagnostics();
     if(message.type==='CLEAR_API_DIAGNOSTICS')return clearAPIDiagnostics();
     if(message.type==='GET_HISTORY'||message.type==='GET_HISTORY_STATUS'){
-      try{return {ok:true,...await history[message.type==='GET_HISTORY'?'get':'status']()};}
+      try{const result=await history[message.type==='GET_HISTORY'?'get':'status']();return {ok:true,...(message.type==='GET_HISTORY'?scopedHistory(result):result)};}
       catch{return {ok:false,errorKey:'history.storageError'};}
     }
     if(['CLEAR_HISTORY','DELETE_HISTORY','SET_HISTORY_ENABLED'].includes(message.type)){
       if(message.type==='DELETE_HISTORY'&&!/^\d{1,25}$/.test(String(message.id||''))||message.type==='SET_HISTORY_ENABLED'&&typeof message.enabled!=='boolean')return {ok:false,errorKey:'history.storageError'};
       try{
         const result=await (message.type==='CLEAR_HISTORY'?history.clear():message.type==='DELETE_HISTORY'?history.delete(message.id):history.setEnabled(message.enabled));
-        await broadcastHistoryConfig();return {ok:true,...result};
+        await broadcastHistoryConfig();return {ok:true,...scopedHistory(result)};
       }catch{return {ok:false,errorKey:'history.storageError'};}
     }
     if(message.type==='CLEAR_CACHE') { await clearStoredCache();return {ok:true}; }
@@ -887,11 +1005,13 @@ chrome.runtime.onMessage.addListener((message,sender,respond)=>{
   return true;
 });
 chrome.alarms?.onAlarm.addListener(alarm=>{
+  if(Object.values(SuperXOAuth.ALARMS||{}).includes(alarm.name))void ready.then(()=>oauth.handleAlarm(alarm)).catch(()=>{});
   if(alarm.name===HISTORY_ALARM){
     void ready.then(()=>history.prune()).then(()=>notifyHistoryChanged()).catch(()=>{});
     void ready.then(()=>pruneStoredAPIDiagnostics()).catch(()=>{});
   }
 });
+chrome.runtime.onStartup?.addListener(()=>{void ready.then(()=>oauthReady).catch(()=>{});});
 chrome.permissions?.onRemoved?.addListener(removed=>{
   if(!removed.origins?.includes('http://127.0.0.1/*'))return;
   void ready.then(async()=>{

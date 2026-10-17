@@ -36,7 +36,7 @@ test('every API analysis style follows display language while expansion, edits a
   for(const mode of ['preset','custom']) {
     const settings={provider:'api',explanationMode:mode,language:'auto'};
     const initial=core.apiPostIdentity(post,settings);
-    assert.deepEqual(JSON.parse(initial),['post-input-v3-full-url',post.url,'en']);
+    assert.deepEqual(JSON.parse(initial),['post-input-v4-source-full-url','api',post.url,'en']);
     assert.notEqual(initial,core.apiPostIdentity({...post,text:'这是当前显示的中文翻译。',language:'zh-CN'},settings));
     assert.equal(initial,core.apiPostIdentity({...post,text:post.text+' This expansion stays in English.',quotedContext:[{text:'日本語の引用文です',language:'ja'}],images:[{url:'https://pbs.twimg.com/media/photo.jpg'}]},settings));
     assert.equal(initial,core.apiPostIdentity({...post,text:'An edited same-language display of the same full original post.'},settings));

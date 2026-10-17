@@ -24,18 +24,36 @@
     return "build.unknown";
   }
   function blockedReason() {
-    if (!config.ready) return currentSettings.provider === "build" ? buildBlockedReason() : "status.needsKey";
+    if (!config.ready) {
+      if(currentSettings.provider==="oauth"){
+        const state=config.oauthStatus||{};
+        if(["starting","awaiting_authorization","authorizing"].includes(state.state))return "oauth.authorizing";
+        if(["refreshing","restoring"].includes(state.state))return "oauth.refreshing";
+        if(state.state==="reauth_required")return "oauth.reauthRequired";
+        if(state.connected===true)return "oauth.modelUnavailable";
+        return "oauth.needsLogin";
+      }
+      return currentSettings.provider === "build" ? buildBlockedReason() : "status.needsKey";
+    }
     return null;
+  }
+  function toggleLabel(reason) {
+    if(!loaded)return "common.loading";
+    if(!reason)return currentSettings.enabled ? "common.pause" : "common.resume";
+    if(currentSettings.provider==="build")return "popup.setupBuild";
+    if(currentSettings.provider!=="oauth")return "popup.addKey";
+    const state=config.oauthStatus||{};
+    return state.connected||["starting","awaiting_authorization","authorizing","refreshing","restoring"].includes(state.state)?"common.openSettings":"popup.signInGrok";
   }
   function render() {
     ui.apply(document,uiLanguage);
     const reason = loaded ? blockedReason() : null;
-    $("enabled-label").textContent = ui.t(loaded ? reason || (currentSettings.enabled ? "common.enabled" : "common.paused") : "common.loading",uiLanguage);
+    $("enabled-label").textContent = ui.t(loaded ? reason || (currentSettings.enabled ? "common.enabled" : "common.paused") : "common.loading",uiLanguage,{model:currentSettings.oauthModel});
     $("indicator").dataset.enabled = String(loaded && !reason && currentSettings.enabled);
-    const build=currentSettings.provider==="build";
-    $("provider-label").textContent = ui.t(build ? "popup.buildLabel" : "popup.apiLabel",uiLanguage,{count:currentSettings.apiConcurrency,transport:currentSettings.buildTransport.toUpperCase()});
-    $("provider-hint").textContent = ui.t(build ? "popup.buildHint" : "popup.apiHint",uiLanguage);
-    $("toggle").textContent = ui.t(loaded ? (reason ? build ? "popup.setupBuild" : "popup.addKey" : currentSettings.enabled ? "common.pause" : "common.resume") : "common.loading",uiLanguage);
+    const build=currentSettings.provider==="build",oauth=currentSettings.provider==="oauth";
+    $("provider-label").textContent = ui.t(oauth?"popup.oauthLabel":build ? "popup.buildLabel" : "popup.apiLabel",uiLanguage,{count:currentSettings.apiConcurrency,transport:currentSettings.buildTransport.toUpperCase()});
+    $("provider-hint").textContent = ui.t(oauth?"popup.oauthHint":build ? "popup.buildHint" : "popup.apiHint",uiLanguage);
+    $("toggle").textContent = ui.t(toggleLabel(reason),uiLanguage);
     $("toggle").disabled = busy || !loaded;
     $("options").hidden = Boolean(reason);
     $("status").textContent = errorMessage ? ui.t(errorMessage.key,uiLanguage,{error:errorMessage.error}) : "";
@@ -47,7 +65,7 @@
   }
   function showError(key,error) { errorMessage = {key,error};render(); }
   async function openKeySettings() {
-    const result = await chrome.runtime.sendMessage({type:"OPEN_SETTINGS",focus:currentSettings.provider==="build" ? "build" : "api-key"});
+    const result = await chrome.runtime.sendMessage({type:"OPEN_SETTINGS",focus:currentSettings.provider==="oauth"?"oauth":currentSettings.provider==="build" ? "build" : "api-key"});
     if (!result?.ok) throw new Error(ui.t("errors.noResponse",uiLanguage));
   }
   async function load() {
@@ -70,7 +88,7 @@
     if (blockedReason()) {
       busy=true;errorMessage=null;render();
       try {
-        if(currentSettings.provider==="build"){
+        if(["build","oauth"].includes(currentSettings.provider)){
           const latest=await chrome.runtime.sendMessage({type:"GET_CONFIG"});
           if(!latest?.ok||typeof latest.ready!=="boolean")throw new Error(ui.t("errors.noResponse",uiLanguage));
           config=latest;currentSettings=core.normalizeSettings(latest.settings);
@@ -105,12 +123,14 @@
   });
   chrome.runtime.onMessage.addListener(message => {
     if (message?.type === "UI_LANGUAGE_CHANGED") { localeRevision++;applyLanguage(message.language); }
+    if(message?.type==="OAUTH_STATUS_CHANGED"&&currentSettings.provider==="oauth"&&!busy){busy=true;void load();}
     if(message?.type==="CONFIG"&&message.settings&&typeof message.ready==="boolean"&&!busy){
       config=message;currentSettings=core.normalizeSettings(message.settings);loaded=true;
       uiLanguage=ui.resolveLanguage(currentSettings.interfaceLanguage,observedUILanguage);render();
     }
   });
   chrome.storage.onChanged.addListener((changes,area) => {
+    if((area==="local"||area==="session")&&Object.keys(changes).some(key=>/^oauth/i.test(key))&&currentSettings.provider==="oauth"&&!busy){busy=true;void load();return;}
     if (area === "session" && (changes.apiKey || changes.securityFault) || area === "local" && (changes.apiKeyVault || changes.rememberApiKey || changes.apiKey)) {
       if (!busy) { busy = true;load(); }
       return;

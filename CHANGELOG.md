@@ -2,6 +2,16 @@
 
 SuperX release history. The extension's `manifest.json` is the authoritative installed version. Test counts below describe those releases' recorded checks, not live provider or browser-store certification.
 
+## 0.9.11 — Browser-only Grok subscription login (unreleased candidate)
+
+- Add a third, independent Grok subscription OAuth connection for Windows and macOS browsers. Device authorization uses the shared public Grok client and official xAI page; no CLI, local service, API Key or additional SuperX program is needed. Explain that the authorization page can display Grok Build, rather than a separately registered SuperX identity. Keep account eligibility and model/tool availability subject to provider rules; do not claim an official partnership or universal plan entitlement.
+- Keep API Key as the default and preserve existing API/local credentials and settings. All three connections initially select Grok 4.3 / reasoning None; an account-unavailable selection requires an explicit user choice, with no silent model switch, provider fallback or budget change.
+- Keep OAuth tokens in the trusted worker. Remember login defaults on and stores only refresh-token ciphertext locally, with an independent non-extractable AES-GCM key in IndexedDB; access tokens remain session-only. No password or browser sync. Add fixed `auth.x.ai` host access for device/token/revocation requests and authentication alarms; inference and model-directory requests go directly to `api.x.ai` without CLI identity headers.
+- Serialize token rotation, persist intent before consuming a refresh token and require reauthorization after uncertain outcomes or unsafe storage. Make cancel, logout and late callbacks respect authorization generations. Validate official links, keep secret codes/tokens out of feed configuration, history and diagnostics, and load only the model directory after login without test inference.
+- Separate cache reuse and generated history views by connection source and OAuth authorization identity while retaining on-device post visits. Signing out of OAuth leaves saved API/local configuration intact.
+- Do not automatically replay OAuth generation after an accepted HTTP 200 response, stream failure, incomplete output or timeout. An initial HTTP 401 rejection may refresh authorization once and make one recovery request. Existing API Key/local transient retries remain 3 seconds, up to 5 extra attempts, without freezing other posts.
+- Update bilingual onboarding and privacy documentation. Automated lifecycle/provider tests do not replace fresh user authorization or installed-browser acceptance; those integrated checks remain pending. Published Stable remains 0.7.26.
+
 ## 0.9.10 — Simplify connection setup and clarify Key sources (unreleased candidate)
 
 - Put the connection method, one Grok API Key field and model settings on the main setup path. Remove the global explanatory introduction, repeated API branding, duplicate console links and repeated storage/usage instructions. Keep Enable as a separate global control.

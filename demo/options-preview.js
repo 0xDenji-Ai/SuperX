@@ -13,6 +13,14 @@
   if(query.get('security')==='migration'){state.hasSavedKey=true;state.migration=true;}
   if(query.get('security')==='saved'){state.hasSavedKey=true;state.migration=false;}
   let previewKey=state.hasSavedKey&&!state.migration?'preview-test-key-not-real':'';
+  const oauthCatalog=()=>query.get('oauth-models')==='limited'?[{id:'grok-4.7',efforts:['low','high']}]:[{id:'grok-4.3',efforts:['none','low','medium','high']},{id:'grok-4.7',efforts:['low','medium','high','xhigh']}];
+  let oauthStatus={state:'disconnected',connected:false,remember:state.settings.oauthRemember!==false,catalogModels:[]};
+  function setOAuthState(value){
+    const connected=['connected','refreshing'].includes(value);oauthStatus={state:value,connected,remember:oauthStatus.remember,catalogModels:connected?oauthCatalog():[],...(connected?{credentialId:'preview-oauth-not-a-token',expiresAt:Date.now()+21600000}:{}),...(value==='awaiting_authorization'?{device:{userCode:'DEMO-1234',verificationUriComplete:'https://accounts.x.ai/oauth2/device?user_code=DEMO-1234',expiresAt:Date.now()+600000}}:{})};
+    sessionStorage.setItem('superx-oauth-preview-state',JSON.stringify(oauthStatus));for(const listener of runtimeListeners)listener({type:'OAUTH_STATUS_CHANGED',oauthStatus});return oauthStatus;
+  }
+  try{const saved=JSON.parse(sessionStorage.getItem('superx-oauth-preview-state')||'null');if(saved)oauthStatus={...oauthStatus,...saved};}catch{/* Only synthetic preview state. */}
+  if(query.has('oauth')){const selected={pending:'awaiting_authorization',ready:'connected',reauth:'reauth_required'}[query.get('oauth')]||query.get('oauth');setOAuthState(selected);}
   const previewSession={};
   let buildConfigured=query.get('saved')==='0'?false:query.get('build')==='ready',buildPort=2419;
   if(query.has('focus'))previewSession.superxOptionsFocus={id:query.get('focus')==='build'?'build':'api-key',nonce:'local-preview-focus'};
@@ -35,6 +43,7 @@
     for(const listener of runtimeListeners)listener({type:'UI_LANGUAGE_CHANGED',language:state.uiLanguage});
   });
   localeLabel.append(localeSelect);banner.append(notice,localeLabel);
+  const oauthPreview=document.createElement('select');oauthPreview.id='preview-oauth-state';oauthPreview.setAttribute('aria-label','Simulated Grok login state');oauthPreview.style.cssText='width:auto;min-height:28px;padding:3px 6px;font:inherit';for(const [value,label]of [['disconnected','模拟未登录'],['awaiting_authorization','模拟等待授权'],['connected','模拟已连接'],['refreshing','模拟刷新'],['reauth_required','模拟需要重新登录'],['error','模拟错误']]){const option=document.createElement('option');option.value=value;option.textContent=label;oauthPreview.append(option);}oauthPreview.value=oauthStatus.state;oauthPreview.addEventListener('change',()=>setOAuthState(oauthPreview.value));banner.append(oauthPreview);
   document.body.prepend(banner);
   const receipt=document.createElement('output');receipt.id='preview-receipt';receipt.hidden=true;document.body.append(receipt);
   const persist=()=>sessionStorage.setItem('grokfirst-options-preview',JSON.stringify({settings:state.settings,rememberApiKey:state.rememberApiKey,hasSavedKey:state.hasSavedKey,migration:state.migration}));
@@ -46,8 +55,13 @@
       onMessage:{addListener:fn=>runtimeListeners.push(fn)},
       async sendMessage(message){
         if(message.type==='GET_UI_LANGUAGE')return {ok:true,language:state.uiLanguage};
+        if(message.type==='GET_OAUTH_STATUS')return {ok:true,oauthStatus};
+        if(message.type==='OAUTH_LOGIN'){oauthStatus.remember=message.remember!==false;return {ok:true,oauthStatus:setOAuthState('awaiting_authorization')};}
+        if(message.type==='OAUTH_CANCEL_LOGIN'||message.type==='OAUTH_LOGOUT')return {ok:true,oauthStatus:setOAuthState('disconnected')};
+        if(message.type==='OAUTH_SET_REMEMBER'){oauthStatus.remember=message.remember===true;state.settings=XGrokCore.normalizeSettings({...state.settings,oauthRemember:oauthStatus.remember});sessionStorage.setItem('superx-oauth-preview-state',JSON.stringify(oauthStatus));persist();return {ok:true,oauthStatus};}
+        if(message.type==='OAUTH_REFRESH_CATALOG')return {ok:true,oauthStatus:{...oauthStatus,catalogModels:oauthStatus.connected?oauthCatalog():[]}};
         if(message.type==='GET_SECURITY_STATUS')return {ok:true,...security()};
-        if(message.type==='GET_CONFIG')return {ok:true,...state,ready:state.settings.provider==='build'?buildStatus().ready:Boolean(previewKey),buildStatus:buildStatus(),...security()};
+        if(message.type==='GET_CONFIG')return {ok:true,...state,ready:state.settings.provider==='oauth'?oauthStatus.connected:state.settings.provider==='build'?buildStatus().ready:Boolean(previewKey),oauthStatus,buildStatus:buildStatus(),...security()};
         if(message.type==='GET_BUILD_STATUS'){receipt.textContent=JSON.stringify({type:message.type});return {ok:true,...buildStatus()};}
         if(message.type==='GET_BUILD_CONNECTION')return {ok:true,configured:buildConfigured,port:buildPort};
         if(message.type==='GET_BUILD_LAUNCH'){await import('/extension/build-setup.js');receipt.textContent=JSON.stringify({type:message.type,platform:message.platform});const secret='preview-local-code-not-real';return {ok:true,command:SuperXBuildSetup.command({platform:message.platform,port:message.port,secret}),port:message.port,secret};}
