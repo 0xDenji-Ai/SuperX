@@ -6,7 +6,8 @@ const OAuth=require('../extension/oauth-provider.js');
 const clone=value=>value===undefined?undefined:structuredClone(value),tick=()=>new Promise(resolve=>setImmediate(resolve));
 function deferred(){let resolve,reject;const promise=new Promise((yes,no)=>{resolve=yes;reject=no;});return {promise,resolve,reject};}
 async function until(predicate,label='OAuth work'){for(let count=0;count<100;count++){if(predicate())return;await tick();}assert.fail('Timed out waiting for '+label);}
-function area(data={},hooks={}){return {data,async get(keys){await hooks.get?.(keys);return Object.fromEntries((typeof keys==='string'?[keys]:keys).filter(key=>Object.hasOwn(data,key)).map(key=>[key,clone(data[key])]));},async set(values){await hooks.set?.(values);Object.assign(data,clone(values));},async remove(keys){await hooks.remove?.(keys);for(const key of typeof keys==='string'?[keys]:keys)delete data[key];}};}
+function area(data={},hooks={},roundTrip=clone){return {data,async get(keys){await hooks.get?.(keys);return Object.fromEntries((typeof keys==='string'?[keys]:keys).filter(key=>Object.hasOwn(data,key)).map(key=>[key,roundTrip(data[key])]));},async set(values){await hooks.set?.(values);Object.assign(data,clone(values));},async remove(keys){await hooks.remove?.(keys);for(const key of typeof keys==='string'?[keys]:keys)delete data[key];}};}
+function sortedStorage(value){return Array.isArray(value)?value.map(sortedStorage):value&&typeof value==='object'?Object.fromEntries(Object.keys(value).sort().map(key=>[key,sortedStorage(value[key])])):value;}
 function cryptoStore(profile={key:null}){
   return {profile,isEnvelope:value=>value?.version===1&&value.algorithm==='AES-GCM'&&typeof value.iv==='string'&&typeof value.ciphertext==='string',
     async seal(raw){profile.key||=await webcrypto.subtle.generateKey({name:'AES-GCM',length:256},false,['encrypt','decrypt']);const iv=webcrypto.getRandomValues(new Uint8Array(12));const buffer=await webcrypto.subtle.encrypt({name:'AES-GCM',iv,additionalData:new TextEncoder().encode('oauth-test')},profile.key,new TextEncoder().encode(raw));return {version:1,algorithm:'AES-GCM',iv:Buffer.from(iv).toString('base64'),ciphertext:Buffer.from(buffer).toString('base64')};},
@@ -18,7 +19,7 @@ const grant=(extra={})=>({access_token:AT,refresh_token:RT,token_type:'Bearer',e
 const response=(value,status=200)=>new Response(typeof value==='string'?value:JSON.stringify(value),{status,headers:{'Content-Type':'application/json'}});
 function harness(options={}){
   let time=options.time||1800000000000;const timers=[],calls=[],changes=[],alarms=new Map(),profile=options.profile||{key:null};
-  const local=area(options.local||{},options.localHooks),session=area(options.session||{},options.sessionHooks);
+  const local=area(options.local||{},options.localHooks,options.storageRoundTrip),session=area(options.session||{},options.sessionHooks,options.storageRoundTrip);
   const clock={now:()=>time,setTimeout(fn,delay){const timer={fn,delay,due:time+delay,cancelled:false};timers.push(timer);return timer;},clearTimeout(timer){if(timer)timer.cancelled=true;}};
   const chrome={storage:{local,session},alarms:{async get(name){return clone(alarms.get(name));},async create(name,value){alarms.set(name,{name,scheduledTime:value.when});},async clear(name){return alarms.delete(name);}}};
   const h={time:()=>time,local,session,profile,alarms,timers,calls,changes,advance(ms){time+=ms;for(const timer of timers.filter(value=>!value.cancelled&&value.due<=time)){timer.cancelled=true;timer.fn();}},
@@ -241,4 +242,26 @@ test('only the latest login request waiting for initialization can start a devic
   const gate=deferred();let seen=false,held=false;const h=harness({localHooks:{async get(){if(!held){held=true;seen=true;await gate.promise;}}}});
   const first=h.oauth.startLogin({remember:true});await until(()=>seen);const second=h.oauth.startLogin({remember:false});gate.resolve();await Promise.all([first,second]);
   assert.equal(h.count(OAuth.CONFIG.deviceEndpoint),1);assert.equal(h.oauth.status().state,'awaiting_authorization');assert.equal(h.oauth.status().remember,false);assert.equal(h.session.data[OAuth.STORAGE_KEY].remember,false);
+});
+
+test('Chrome-like storage key sorting preserves device login, token commits, refresh, preferences and restart',async()=>{
+  let rotation=0;const h=harness({storageRoundTrip:sortedStorage,fetch:call=>call.form?.get('grant_type')==='refresh_token'?response(grant({access_token:'SORTED_ACCESS_'+(++rotation),refresh_token:'SORTED_REFRESH_'+rotation})):undefined});
+  const initial=await h.login();assert.equal(h.count(OAuth.CONFIG.deviceEndpoint),1);assert.equal(h.count(OAuth.CONFIG.tokenEndpoint),1);assert.equal(h.local.data[OAuth.STORAGE_KEY].phase,'ready');
+  const refreshed=await h.oauth.ensureAccessToken({forceRefresh:true});assert.equal(refreshed.accessToken,'SORTED_ACCESS_1');assert.equal(refreshed.credentialId,initial.credentialId);assert.equal(await cryptoStore(h.profile).open(h.local.data[OAuth.STORAGE_KEY].refreshEncrypted),'SORTED_REFRESH_1');
+  await h.oauth.setRemember(false);assert.equal(h.oauth.status().connected,true);assert.equal(h.local.data[OAuth.STORAGE_KEY].refreshEncrypted,undefined);assert.equal(h.session.data[OAuth.STORAGE_KEY].refreshToken,'SORTED_REFRESH_1');
+  await h.oauth.setRemember(true);assert.equal(h.oauth.status().connected,true);assert.equal(h.session.data[OAuth.STORAGE_KEY].refreshToken,undefined);h.oauth.dispose();
+  const worker=harness({storageRoundTrip:sortedStorage,local:clone(h.local.data),session:clone(h.session.data),profile:h.profile,time:h.time()});await worker.oauth.initialize();assert.equal(worker.oauth.status().connected,true);assert.equal(worker.oauth.status().credentialId,initial.credentialId);assert.equal(worker.count(OAuth.CONFIG.tokenEndpoint),0);worker.oauth.dispose();
+  const browser=harness({storageRoundTrip:sortedStorage,local:clone(worker.local.data),session:{},profile:worker.profile,time:worker.time()});await browser.oauth.initialize();assert.equal(browser.oauth.status().connected,true);assert.equal(browser.oauth.status().credentialId,initial.credentialId);assert.equal(browser.count(OAuth.CONFIG.tokenEndpoint,'refresh_token'),1);assert.equal(browser.changes.some(value=>value.errorCode==='OAUTH_STORAGE_ERROR'),false);
+});
+
+test('storage read-back still rejects extra, missing, changed and nested credential fields',async()=>{
+  for(const corrupt of [value=>{value.unexpected=true;},value=>{delete value.schema;},value=>{value.remember=!value.remember;},value=>{value.refreshEncrypted.ciphertext+='AA==';}]){
+    const h=harness({storageRoundTrip:value=>{const saved=sortedStorage(value);if(saved?.kind==='auth'&&saved.phase==='committing')corrupt(saved);return saved;}});
+    await h.oauth.initialize();await h.oauth.startLogin();h.advance(5000);await h.oauth.handleAlarm({name:OAuth.ALARMS.poll});assert.equal(h.oauth.status().connected,false);assert.equal(h.oauth.status().errorCode,'OAUTH_STORAGE_ERROR');assert.equal(h.count(OAuth.CONFIG.tokenEndpoint),1);assert.equal(h.count(OAuth.CONFIG.modelsEndpoint),0);assert.equal(h.calls.some(call=>call.url===OAuth.CONFIG.revokeEndpoint&&call.form.get('token')===RT),true);
+  }
+});
+
+test('storage read-back treats catalog array order as meaningful before consuming a refresh token',async()=>{
+  let corrupt=false;const h=harness({storageRoundTrip:value=>{const saved=sortedStorage(value);if(corrupt&&saved?.kind==='auth'&&saved.catalogModels?.length>1)saved.catalogModels.reverse();return saved;}});await h.login();corrupt=true;
+  await assert.rejects(h.oauth.ensureAccessToken({forceRefresh:true}),{code:'OAUTH_STORAGE_ERROR'});assert.equal(h.oauth.status().connected,false);assert.equal(h.count(OAuth.CONFIG.tokenEndpoint,'refresh_token'),0);
 });

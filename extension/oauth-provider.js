@@ -17,6 +17,14 @@
   const lifetime=value=>Number.isInteger(value)&&value>0&&value<=366*24*60*60;
   function failure(code){const error=new Error(MESSAGES[code]||MESSAGES.OAUTH_REAUTH_REQUIRED);error.code=Object.hasOwn(MESSAGES,code)?code:'OAUTH_REAUTH_REQUIRED';return error;}
   function models(value){return [...new Set((Array.isArray(value)?value:[]).filter(id=>typeof id==='string'&&/^grok-[a-z0-9_.-]{1,110}$/i.test(id)))].slice(0,500);}
+  // Chrome storage can reorder dictionary keys; fields, values and array order
+  // still have to survive the read-back exactly before credentials are used.
+  function sameStoredValue(left,right){
+    if(left===right)return true;
+    if(!left||!right||typeof left!=='object'||typeof right!=='object'||Array.isArray(left)!==Array.isArray(right))return false;
+    if(Array.isArray(left)&&left.length!==right.length)return false;
+    const keys=Object.keys(left);return keys.length===Object.keys(right).length&&keys.every(key=>Object.hasOwn(right,key)&&sameStoredValue(left[key],right[key]));
+  }
   function verificationUri(value,userCode,{complete=false}={}){
     if(typeof value!=='string'||value.length>2048)throw failure('OAUTH_DEVICE_INVALID');
     let url;try{url=new URL(value);}catch{throw failure('OAUTH_DEVICE_INVALID');}
@@ -71,7 +79,7 @@
       finally{clearTimer(timer);controllers.delete(controller);}
     }
     function base(value,phase){return {schema:1,kind:'auth',phase,credentialId:value.credentialId,revision:value.revision,remember:value.remember,expiresAt:value.expiresAt,lifetimeMs:value.lifetimeMs,catalogModels:[...catalogModels]};}
-    async function writeVerified(area,value,ticket){assertCurrent(ticket);await area.set({[STORAGE_KEY]:value});assertCurrent(ticket);const saved=await area.get(STORAGE_KEY);assertCurrent(ticket);if(JSON.stringify(saved[STORAGE_KEY])!==JSON.stringify(value))throw failure('OAUTH_STORAGE_ERROR');}
+    async function writeVerified(area,value,ticket){assertCurrent(ticket);await area.set({[STORAGE_KEY]:value});assertCurrent(ticket);const saved=await area.get(STORAGE_KEY);assertCurrent(ticket);if(!sameStoredValue(saved[STORAGE_KEY],value))throw failure('OAUTH_STORAGE_ERROR');}
     async function commit(value,ticket){
       return serial(ticket,async()=>{
         try{
