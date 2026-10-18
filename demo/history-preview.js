@@ -5,7 +5,8 @@
   const query = new URLSearchParams(location.search),runtimeListeners = [],storageListeners = [];
   let language = GrokFirstUI.normalizeLanguage(query.get('lang') || 'en');
   let settings = XGrokCore.normalizeSettings({apiVerification:'only',interfaceLanguage:query.get('interface') || 'auto'});
-  let enabled = query.get('history-state') !== 'off',epoch = 0;
+  const savedEnabled=sessionStorage.getItem('superx-history-preview-enabled');
+  let enabled = query.get('history-state')==='off'?false:savedEnabled===null?true:savedEnabled!=='false',epoch = 0;
   const current = Date.now();
   const factCheck = '**Insufficient evidence.** The chart omits its data source, sample and evaluation conditions. An original report and independent test results would be needed to support broader conclusions.\n\n*Saved local Fact Check preview; no sources were actually searched.*';
   let entries = query.get('history-state') === 'empty' ? [] : [
@@ -38,7 +39,7 @@
         if (message.type === 'GET_HISTORY') return snapshot();
         if (message.type === 'DELETE_HISTORY') { if (query.get('history-state') === 'error') return {ok:false};entries = entries.filter(entry => entry.id !== message.id);changed();return snapshot(); }
         if (message.type === 'CLEAR_HISTORY') { if (query.get('history-state') === 'error') return {ok:false};entries = [];changed();return snapshot(); }
-        if (message.type === 'SET_HISTORY_ENABLED') { enabled = message.enabled;changed();return snapshot(); }
+        if (message.type === 'SET_HISTORY_ENABLED') { enabled = message.enabled;sessionStorage.setItem('superx-history-preview-enabled',String(enabled));changed();return snapshot(); }
         return {ok:false};
       },
     },

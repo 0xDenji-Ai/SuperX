@@ -337,6 +337,7 @@
     entry.ui.box.setAttribute('aria-busy',String(active||entry.status==='retry-wait'));
   }
   function errorKey(code,failure) {
+    if(code==='MODEL_UNSUPPORTED')return 'error.modelUnsupported';
     if(typeof code==='string'&&code.startsWith('OAUTH_'))return ({
       OAUTH_LOGIN_REQUIRED:'oauth.needsLogin',OAUTH_REAUTH_REQUIRED:'oauth.reauthRequired',OAUTH_ACCOUNT_CHANGED:'oauth.reauthRequired',OAUTH_REFRESH_UNCERTAIN:'oauth.reauthRequired',
       OAUTH_ACCESS_DENIED:'oauth.denied',OAUTH_DEVICE_EXPIRED:'oauth.expired',OAUTH_CANCELLED:'oauth.canceled',

@@ -19,7 +19,7 @@
           <a href="#source-heading" data-i18n="options.source">Connection</a>
           <a href="#language-heading" data-i18n="options.languageTitle">Language</a>
           <a href="#prompts-heading" data-i18n="options.promptsTitle">Prompts</a>
-          <a href="#history-heading" data-i18n="common.history">Browsing history</a>
+          <a href="history.html" data-i18n="common.history">Browsing history</a>
           <a href="#cache-heading" data-i18n="common.clearCache">Clear cache</a>
           <a href="#reload-heading" data-i18n="common.reload">Reload extension</a>
         </nav>
@@ -240,16 +240,6 @@
             </div>
             <textarea id="comments-prompt" rows="4" maxlength="12000" spellcheck="false" dir="auto" aria-describedby="prompt-rules-help"></textarea>
           </div>
-        </section>
-
-        <section class="settings-section" aria-labelledby="history-heading">
-          <div class="section-heading">
-            <h2 id="history-heading" data-i18n="common.history">Browsing history</h2>
-          </div>
-          <label class="switch-label"><span data-i18n="history.recording">Record recently viewed posts</span><input id="history-enabled" type="checkbox" role="switch" disabled><span class="switch-track" aria-hidden="true"></span></label>
-          <p class="help" data-i18n="history.recordingHelp">Keep viewed posts and available answers on this device for 24 hours. Turning recording off keeps existing history.</p>
-          <button id="open-history" class="secondary-button" type="button" data-i18n="history.openHistory">Open browsing history</button>
-          <p id="history-status" class="help" role="status" aria-live="polite"></p>
         </section>
 
         <section class="settings-section compact-section" aria-labelledby="cache-heading">

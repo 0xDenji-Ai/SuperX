@@ -497,6 +497,7 @@ chrome.runtime.onConnect.addListener(port => {
       if(client.cancelEpoch!==receivedEpoch || receivedRevision!==revision||!currentCredentials()){report('任务已取消。','CANCELLED');return;}
       if(settings.provider==='api'&&(securityPending || securityFault)) { report('API Key 设置需要重新确认，请在设置中重试。','NEEDS_KEY');return; }
       const snapshot={...settings,...(settings.provider==='oauth'?{oauthCredentialId:oauth.status().credentialId||''}:{}),...(comments?{task:'comments'}:{})};
+      if(Core.isNonTextGenerationModel(Core.providerModel(snapshot))){report(GrokFirstAPI.publicError({code:'MODEL_UNSUPPORTED'}).error,'MODEL_UNSUPPORTED');return;}
       if(!settings.enabled&&!comments) { report('已暂停自动分析。','PAUSED'); return; }
       if(railStates[client.tabId]){report('右栏已收起。','RAIL_COLLAPSED');return;}
       let post,inputFingerprint;
@@ -722,7 +723,7 @@ async function executeJob(job) {
       const partialText=Core.readerOutput(retained?.text,{final:true}).text.slice(0,30000);
       const partialResult=partialText?withBillingMetadata({...retained,...errorBilling,...diagnosticMetadata,text:partialText,verificationStatus:'incomplete'},job.settings.provider,job.settings.apiVerification):undefined;
       if(partialResult&&!commentsJob(job))job.retainedFactCheck=sanitizeAnalysis(partialResult);
-      const safeError=job.settings.provider==='build'?SuperXBuild.publicError(e):GrokFirstAPI.publicError(e);
+      const safeError=e.code==='MODEL_UNSUPPORTED'?GrokFirstAPI.publicError(e):job.settings.provider==='build'?SuperXBuild.publicError(e):GrokFirstAPI.publicError(e);
       const budgetFailure=['api','oauth'].includes(job.settings.provider)?apiBudgetFailure(e):undefined;
       const capacityFailure=['api','oauth'].includes(job.settings.provider)&&apiCapacityFailure(e)?GrokFirstAPI.sanitizedVerificationFailure(e.verificationFailure)||GrokFirstAPI.sanitizedVerificationFailure({stage:'verify',code:'SERVER',...e.failureDetails,errorCode:'API_CAPACITY'}):undefined;
       if(partialResult)rememberHistoryResult(job.historyTicket,{...partialResult,completedAt:Date.now()},false,job.historyLanguage);
@@ -748,6 +749,7 @@ async function executeJob(job) {
 }
 async function runAPI(job,onUpdate) {
   const signal=job.controller.signal;
+  if(Core.isNonTextGenerationModel(Core.providerModel(job.settings)))throw Object.assign(new Error('The selected model generates images or video and cannot fact-check posts.'),{code:'MODEL_UNSUPPORTED'});
   if(job.settings.provider==='build'){
     const connection=buildConnection({port:job.settings.buildPort});
     if(chrome.permissions?.contains&&!await chrome.permissions.contains({origins:['http://127.0.0.1/*']}))throw Object.assign(new Error('Local connection access was removed.'),{code:'BUILD_PERMISSION_REQUIRED'});

@@ -463,6 +463,25 @@ async function draftComments(harness,port,requestId,id=100,extra={}) {
   await until(()=>port.messages.some(message=>message.requestId===requestId&&['COMMENT_RESULT','COMMENT_ERROR'].includes(message.type)),requestId);
   return port.messages.findLast(message=>message.requestId===requestId&&['COMMENT_RESULT','COMMENT_ERROR'].includes(message.type));
 }
+
+test('saved image and video models report unsupported for all three sources before any provider dispatch',async()=>{
+  for(const source of ['api','oauth','build'])for(const model of ['grok-imagine-image','grok-imagine-video-1.5','grok-2-image-1212']){
+    const bg=createBackground({manualRetryTimers:true,settings:{provider:source,apiModel:model,oauthModel:model,buildModel:model,buildDefaultsVersion:1},oauthState:{...oauthConnected(),catalogModels:[model,'grok-4.3']}});await bg.ready();if(source==='build')await bg.configureBuild();
+    const config=await bg.message({type:'GET_CONFIG'});assert.equal(config.ready,true,'Model compatibility does not masquerade as missing credentials');assert.equal(core.providerModel(config.settings),model,'A saved unsupported ID remains available for explicit correction');
+    const port=bg.connect(),analysis=await analyze(bg,port,'unsupported-model-analysis'),comments=await draftComments(bg,port,'unsupported-model-comments');assert.equal(analysis.type,'ERROR');assert.equal(comments.type,'COMMENT_ERROR');
+    for(const result of [analysis,comments]){assert.equal(result.code,'MODEL_UNSUPPORTED');assert.match(result.error,/text model/);assert.doesNotMatch(result.error,/API Key|sign in|connect Grok/i);assert.equal(core.autoRetryDecision(result).retryable,false);}
+    bg.advanceRetryTimers(30000);await tick();assert.equal(bg.apiCalls.length,0);assert.equal(bg.commentCalls.length,0);assert.equal(bg.buildCalls.length,0);assert.equal(bg.buildCommentCalls.length,0);assert.equal(bg.oauthCalls.some(call=>call.type==='token'),false);assert.equal(port.messages.some(message=>['START','COMMENT_START','RETRY_WAIT','COMMENT_RETRY_WAIT'].includes(message.type)),false);
+    const chosen={...bg.local.data.settings,apiModel:'grok-4.3',oauthModel:'grok-4.3',buildModel:'grok-4.3'};assert.equal((await bg.message({type:'SAVE_SETTINGS',settings:chosen})).ok,true);assert.equal((await analyze(bg,port,'explicit-text-model',101)).type,'RESULT');assert.equal(bg.apiCalls.length+bg.buildCalls.length,1,'Other work advances after an explicit supported selection');
+  }
+});
+
+test('saved aliases and custom text models keep working without being silently replaced by a unified menu default',async()=>{
+  for(const source of ['api','oauth','build'])for(const model of ['grok-4.3-latest','grok-4.20-0309-reasoning','grok-build-0.1','custom-text-model']){
+    const bg=createBackground({settings:{provider:source,apiModel:model,oauthModel:model,buildModel:model,buildDefaultsVersion:1},oauthState:{...oauthConnected(),catalogModels:[model]}});await bg.ready();if(source==='build')await bg.configureBuild();
+    const config=await bg.message({type:'GET_CONFIG'});assert.equal(core.providerModel(config.settings),model);const result=await analyze(bg,bg.connect(),'saved-text-model');assert.equal(result.type,'RESULT');const call=[...bg.apiCalls,...bg.buildCalls][0];assert.equal(core.providerModel(call.settings),model);assert.equal(core.providerModel(bg.local.data.settings),model);
+  }
+});
+
 async function assertStoredKey(bg,expected,message) {
   assert.equal(bg.local.data.apiKey,undefined,message||'New storage never retains a plaintext Key');
   if(expected) {

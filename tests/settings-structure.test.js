@@ -20,8 +20,8 @@ function strictTree(html){
 const source=file=>fs.readFileSync(path.join(__dirname,'../extension',file+'.html'),'utf8');
 const ancestor=(node,target)=>{for(let current=node;current;current=current.parent)if(current===target)return true;return false;};
 
-test('Settings and setup HTML have explicit balanced nesting and unique IDs',()=>{
-  for(const file of ['options','setup'])assert.doesNotThrow(()=>strictTree(source(file)),file);
+test('Settings, history and setup HTML have explicit balanced nesting and unique IDs',()=>{
+  for(const file of ['options','history','setup'])assert.doesNotThrow(()=>strictTree(source(file)),file);
 });
 
 test('provider panels are siblings and every provider-specific control belongs to its panel and settings form',()=>{
@@ -30,9 +30,17 @@ test('provider panels are siblings and every provider-specific control belongs t
   for(const [panel,controls]of [[api,['api-key','remember-key','api-model','api-reasoning-effort','fast-preset','clear-key']],[build,['build-platform','generate-build-command','build-port','build-secret','build-model','build-reasoning-effort','check-build','build-guide','clear-build-connection']],[oauth,['oauth-login','oauth-cancel','oauth-logout','oauth-remember','oauth-model','oauth-reasoning-effort','oauth-refresh-models']]]){
     for(const id of controls){assert.ok(ancestor(ids.get(id),panel),`Provider control #${id} escaped its panel`);assert.ok(ancestor(ids.get(id),form),`#${id} escaped #settings-form`);}
   }
-  for(const id of ['provider','enabled','api-concurrency','analysis-dwell','web-search','x-search','language','interface-language','verify-prompt','comments-prompt','history-enabled','clear-cache','reload-extension']){
+  for(const id of ['provider','enabled','api-concurrency','analysis-dwell','web-search','x-search','language','interface-language','verify-prompt','comments-prompt','clear-cache','reload-extension']){
     assert.ok(ancestor(ids.get(id),form),`#${id} escaped #settings-form`);assert.equal(ancestor(ids.get(id),api)||ancestor(ids.get(id),build)||ancestor(ids.get(id),oauth),false,`Shared #${id} is trapped in a provider panel`);
   }
+});
+
+test('browsing history navigation uses a native page link and keeps recording controls only on the history page',()=>{
+  const optionsHTML=source('options'),historyHTML=source('history'),options=strictTree(optionsHTML),history=strictTree(historyHTML);
+  for(const id of ['history-heading','history-enabled','open-history','history-status'])assert.equal(options.ids.has(id),false,`Removed Settings history control #${id}`);
+  const walk=node=>node.children.flatMap(child=>[child,...walk(child)]),optionsLink=walk(options.root).find(node=>node.tag==='a'&&/data-i18n="common\.history"/.test(node.token));
+  assert.ok(optionsLink);assert.match(optionsLink.token,/href="history\.html"/);assert.doesNotMatch(optionsLink.token,/\b(?:onclick|target|role)=/,'The ordinary anchor supports same-tab, keyboard and browser new-tab navigation');
+  const historyNav=walk(history.root).find(node=>node.tag==='nav'&&/class="section-nav"/.test(node.token));assert.equal(historyNav.children[0].tag,'a');assert.match(historyNav.children[0].token,/href="options\.html"/);assert.match(historyNav.children[0].token,/common\.settings/);assert.doesNotMatch(historyNav.children[0].token,/aria-current/);assert.equal(historyNav.children[1].tag,'span');assert.match(historyNav.children[1].token,/aria-current="page"/);assert.match(historyNav.children[1].token,/history\.title/);assert.ok(history.ids.has('history-enabled'));assert.equal(history.ids.get('history-enabled').tag,'input');
 });
 
 test('a premature provider closing tag fails the structural check instead of relying on browser repair',()=>{

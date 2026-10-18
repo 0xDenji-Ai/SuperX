@@ -13,6 +13,7 @@ const server=http.createServer(async(req,res)=>{
       const surface=pathname.endsWith('/popup.html')?'popup':pathname.endsWith('/history.html')?'history':pathname.endsWith('/setup.html')?'setup':'options';
       let html=(await readFile(path.join(root,`extension/${surface}.html`),'utf8'))
         .replace(/(src|href)="([A-Za-z][\w.-]*\.(?:js|css|html))"/g,'$1="/extension/$2"')
+        .replace(/href="\/extension\/(options|history)\.html"/g,(_match,page)=>`href="/demo/${page}.html${previewURL.searchParams.has('lang')?'?lang='+encodeURIComponent(previewURL.searchParams.get('lang')):''}"`)
         .replace(/(src|href)="assets\//g,'$1="/extension/assets/')
         .replace(`<script src="/extension/${surface}.js" defer></script>`,`<script src="/demo/${surface}-preview.js" defer></script><script src="/extension/${surface}.js" defer></script>`)
         .replace(`<script src="/extension/${surface}.js"></script>`,`<script src="/demo/${surface}-preview.js"></script><script src="/extension/${surface}.js"></script>`);

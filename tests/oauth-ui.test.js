@@ -32,6 +32,38 @@ test('unexpected authorization URLs or unsafe user codes never become clickable 
  const f=fixture({oauthStatus:{state:'awaiting_authorization',connected:false,device:{userCode:'<img src=x onerror=alert(1)>',verificationUriComplete:'https://accounts.x.ai/oauth2/device?user_code=DEMO-1234'}}});await settle();assert.equal(f.ids.get('oauth-device').hidden,true);assert.equal(f.ids.get('oauth-user-code').children.length,0);
 });
 
+test('all connection menus share curated text models while the OAuth catalog only controls availability',async()=>{
+ const catalogModels=[...Core.API_MODELS.map(item=>({id:item.value})),...['grok-4.20-0309-reasoning','grok-build-0.1','grok-imagine-image','grok-imagine-video','grok-next-text'].map(id=>({id}))];
+ const f=fixture({oauthStatus:{state:'connected',connected:true,remember:true,catalogModels}});await settle();
+ for(const id of ['oauth-model','api-model','build-model'])assert.deepEqual(f.ids.get(id).children.map(option=>option.value),Core.API_MODELS.map(item=>item.value));
+ f.setStatus({state:'connected',connected:true,remember:true,catalogModels:catalogModels.filter(item=>item.id!=='grok-4.5')});await settle();
+ assert.equal(f.ids.get('oauth-model').children.find(option=>option.value==='grok-4.5').disabled,true);
+ assert.equal(f.ids.get('oauth-model').value,'grok-4.3');
+ assert.equal(f.messages.some(message=>['ANALYZE','GENERATE_COMMENTS','SAVE_SETTINGS','OAUTH_LOGIN'].includes(message.type)),false);
+});
+
+test('saved text aliases remain available per source but saved media models cannot be submitted',async()=>{
+ for(const provider of ['oauth','api','build']){
+  const modelField={oauth:'oauthModel',api:'apiModel',build:'buildModel'}[provider],id={oauth:'oauth-model',api:'api-model',build:'build-model'}[provider];
+  const alias='grok-legacy-text';
+  const saved=fixture({provider,settingsRecord:Core.normalizeSettings({provider,[modelField]:alias}),oauthStatus:{state:'connected',connected:true,remember:true,catalogModels:[{id:alias}]}});await settle();
+  assert.equal(saved.ids.get(id).value,alias);assert.deepEqual(saved.ids.get(id).children.map(option=>option.value),[...Core.API_MODELS.map(item=>item.value),alias]);
+  assert.equal(saved.ids.get(id).children.at(-1).disabled,false);
+  const media='grok-imagine-image',record=Core.normalizeSettings({provider,[modelField]:media}),f=fixture({provider,settingsRecord:record,oauthStatus:{state:'connected',connected:true,remember:true,catalogModels:[{id:media}]}});await settle();
+  assert.equal(f.ids.get(id).value,media);assert.equal(f.ids.get(id).children.at(-1).disabled,true);assert.match(f.ids.get(id).children.at(-1).textContent,/Not for fact-checking/);
+  await f.submit();assert.equal(f.local.settings[modelField],media);assert.equal(f.ids.get('status').textContent,UI.t('error.modelUnsupported','en'));
+  assert.equal(f.messages.some(message=>['SAVE_KEY','SAVE_SETTINGS','SAVE_BUILD_CONNECTION','ANALYZE','GENERATE_COMMENTS'].includes(message.type)),false);
+  f.ids.get(id).value='grok-4.3';f.ids.get(id).listeners.change();assert.equal(f.ids.get(id).value,'grok-4.3');
+ }
+});
+
+test('unsupported-model guidance is translated consistently without dynamic task data',()=>{
+ for(const language of UI.SUPPORTED_LANGUAGES){
+  assert.ok(UI.catalog[language]['error.modelUnsupported']?.trim());assert.doesNotMatch(UI.catalog[language]['error.modelUnsupported'],/\{/);
+  assert.match(UI.catalog[language]['options.unsupportedModel'],/\{model\}/);
+ }
+});
+
 test('OAuth catalog restrictions never silently replace the selected model or no-reasoning preference',async()=>{
  const f=fixture({oauthStatus:{state:'connected',connected:true,remember:true,catalogModels:[{id:'grok-4.7',efforts:['low','high']}]}});await settle();assert.equal(f.ids.get('oauth-model').value,'grok-4.3');assert.equal(f.ids.get('oauth-model').children.find(option=>option.value==='grok-4.3').disabled,true);await f.submit();assert.equal(f.messages.some(m=>m.type==='SAVE_SETTINGS'),false);assert.equal(f.ids.get('oauth-model').focused,true);
  f.ids.get('oauth-model').value='grok-4.7';f.ids.get('oauth-model').listeners.change();assert.equal(f.ids.get('oauth-reasoning-effort').value,'low');await f.submit();assert.equal(f.local.settings.oauthModel,'grok-4.7');assert.equal(f.local.settings.oauthReasoningEffort,'low');assert.equal(f.local.settings.apiModel,'grok-4.6');

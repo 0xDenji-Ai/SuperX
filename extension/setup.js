@@ -12,21 +12,22 @@
     $('address').textContent=`ws://127.0.0.1:${$('port').value || 2419}`;
     for(const id of ['generate','check','save','platform','port','secret','model','reasoning'])$(id).disabled=busy;
     $('model-choices').hidden=!ready||catalog.length===0;
-    $('save').disabled=busy||!ready||!catalog.some(entry=>entry.id===$('model').value)||!effortsFor($('model').value).includes($('reasoning').value);
+    $('save').disabled=busy||!ready||Core.isNonTextGenerationModel($('model').value)||!catalog.some(entry=>entry.id===$('model').value)||!effortsFor($('model').value).includes($('reasoning').value);
   }
   function effortsFor(model){const entry=catalog.find(item=>item.id===model);return !entry?[]:Array.isArray(entry.efforts)?BUILD_EFFORTS.filter(value=>entry.efforts.includes(value)):BUILD_EFFORTS;}
   function populateReasoning(preferred,modelChanged=false){const select=$('reasoning'),model=$('model').value,efforts=effortsFor(model),fallback=Core.buildReasoningEffort(model);select.replaceChildren();for(const effort of efforts){const option=document.createElement('option');option.value=effort;option.textContent=t('options.reasoning.'+effort);select.append(option);}const selected=efforts.includes(preferred)?preferred:!modelChanged&&BUILD_EFFORTS.includes(preferred)?preferred:efforts.includes(fallback)?fallback:efforts[0]||'';if(selected&&!efforts.includes(selected)){const option=document.createElement('option');option.value=selected;option.textContent=t('options.reasoning.'+selected);option.disabled=true;select.append(option);}select.value=selected;}
   function populateModels(raw){
     const previousModel=$('model').value||settings.buildModel,previousEffort=$('reasoning').value||settings.buildReasoningEffort;
     catalog=Array.isArray(raw)?raw.flatMap(entry=>{const id=typeof entry==='string'?entry:entry?.id;return typeof id==='string'&&/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(id)&&entry.available!==false?[{id,...(Array.isArray(entry?.efforts)?{efforts:entry.efforts}:{})}]:[];}):[];
-    const select=$('model');select.replaceChildren();for(const entry of catalog){const option=document.createElement('option');option.value=entry.id;option.textContent=entry.id;select.append(option);}
+    const choices=[...Core.API_MODELS];if(!choices.some(entry=>entry.value===settings.buildModel))choices.push({value:settings.buildModel,label:t(Core.isNonTextGenerationModel(settings.buildModel)?'options.unsupportedModel':'options.savedModel',{model:settings.buildModel})});
+    const select=$('model');select.replaceChildren();for(const entry of choices){const option=document.createElement('option');option.value=entry.value;option.textContent=entry.label;option.disabled=Core.isNonTextGenerationModel(entry.value)||!catalog.some(item=>item.id===entry.value);select.append(option);}
     // Preserve an unavailable default/saved model instead of silently choosing
     // a more expensive model. A different choice requires a user action.
-    if(previousModel&&!catalog.some(entry=>entry.id===previousModel)){const option=document.createElement('option');option.value=previousModel;option.textContent=previousModel;option.disabled=true;select.append(option);}
-    select.value=previousModel||catalog[0]?.id||'';populateReasoning(previousEffort);
+    select.value=previousModel||settings.buildModel;populateReasoning(previousEffort);
   }
   function selectionStatus(){
-    if(!catalog.some(entry=>entry.id===$('model').value))status('options.buildModelUnavailable',{model:$('model').value||settings.buildModel});
+    if(Core.isNonTextGenerationModel($('model').value))status('error.modelUnsupported');
+    else if(!catalog.some(entry=>entry.id===$('model').value))status('options.buildModelUnavailable',{model:$('model').value||settings.buildModel});
     else if(!effortsFor($('model').value).includes($('reasoning').value))status('options.reasoningInvalid');
     else status('build.ready');
   }
@@ -56,7 +57,7 @@
     catch{ready=false;status('build.unavailable');}finally{busy=false;render();}
   });
   $('save').addEventListener('click',async()=>{
-    if(busy||!ready||!catalog.some(entry=>entry.id===$('model').value)||!effortsFor($('model').value).includes($('reasoning').value))return;busy=true;render();
+    if(busy||!ready||Core.isNonTextGenerationModel($('model').value)||!catalog.some(entry=>entry.id===$('model').value)||!effortsFor($('model').value).includes($('reasoning').value))return;busy=true;render();
     const permission=requestLocalAccess();
     try{
       if(await permission!==true){ready=false;status('build.permission');return;}

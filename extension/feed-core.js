@@ -32,6 +32,12 @@
     const value=model==='grok-4.3-latest'?'grok-4.3':model;
     return API_MODELS.find(profile=>profile.value===value)||null;
   }
+  function isNonTextGenerationModel(model) {
+    // A catalog contains image/video generators as well as text models.
+    // Reject only established generation families; an unknown text/custom ID
+    // remains a compatible saved choice rather than silently becoming 4.3.
+    return typeof model==='string'&&/^grok-(?:imagine|2-image)(?:[-.]|$)/i.test(model.trim());
+  }
   function reasoningEffort(model,value) {
     const profile=modelProfile(model);
     // Unknown/custom model IDs retain their server defaults instead of
@@ -81,6 +87,7 @@
     const providers=failures.map(item=>apiFailureProviderCode(item.providerCode)).filter(Boolean);
     const statuses=failures.map(item=>item.httpStatus).concat(values.map(item=>item.requestDiagnostics?.transportStatus)).filter(item=>Number.isInteger(item)&&item>=400&&item<=599);
     if(values.some(item=>item.name==='AbortError')||codes.some(code=>RETRY_CANCEL_CODES.has(code)))return {retryable:false,reason:'cancelled'};
+    if(codes.includes('MODEL_UNSUPPORTED'))return {retryable:false,reason:'request_rejected'};
     if(codes.some(code=>RETRY_SETUP_CODES.has(code)))return {retryable:false,reason:'setup_required'};
     if(providers.some(code=>RETRY_BUDGET_CODES.has(code))||statuses.includes(402))return {retryable:false,reason:'account_limit'};
     if(failures.some(item=>item.code==='OUTPUT_LIMIT'||['max_output_tokens','content_filter'].includes(item.reason))||codes.includes('BUILD_LIMIT'))return {retryable:false,reason:'output_limit'};
@@ -631,5 +638,5 @@
     clear() { this.items.clear(); }
   }
 
-  return Object.freeze({ LANGUAGES, API_MODELS, modelProfile, reasoningEffort, buildReasoningEffort, oauthReasoningEffort, providerModel, providerEffort, apiFailureProviderCode, AUTO_RETRY_DELAY_MS, AUTO_RETRY_LIMIT, autoRetryDecision, sanitizedRequestDiagnostics, DEFAULT_SETTINGS, DEFAULT_PROMPTS, MAX_PROMPT_LENGTH, normalizePrompt, readerOutput, explanationMode, normalizeSettings, resolvePostLanguage, canonicalPostUrl, extractPost, postFingerprint, nativePostIdentity, apiPostIdentity, visibilityEligibility, BoundedPostQueue });
+  return Object.freeze({ LANGUAGES, API_MODELS, modelProfile, isNonTextGenerationModel, reasoningEffort, buildReasoningEffort, oauthReasoningEffort, providerModel, providerEffort, apiFailureProviderCode, AUTO_RETRY_DELAY_MS, AUTO_RETRY_LIMIT, autoRetryDecision, sanitizedRequestDiagnostics, DEFAULT_SETTINGS, DEFAULT_PROMPTS, MAX_PROMPT_LENGTH, normalizePrompt, readerOutput, explanationMode, normalizeSettings, resolvePostLanguage, canonicalPostUrl, extractPost, postFingerprint, nativePostIdentity, apiPostIdentity, visibilityEligibility, BoundedPostQueue });
 });

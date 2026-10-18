@@ -39,6 +39,25 @@ function completed(text = 'Final finding', extra = {}) {
 const backgroundSettings={...settings,apiModel:'grok-4.3'};
 function withUsage(text,usage={}) { return completed(text,{usage}); }
 
+test('non-text models fail before transport or token lookup for API and OAuth fact checks and comments',async()=>{
+  for(const provider of ['api','oauth'])for(const model of ['grok-imagine-image','grok-imagine-video-1.5','grok-2-image-1212'])for(const comments of [false,true]){
+    let calls=0,tokens=0,updates=0;const selected={...core.DEFAULT_SETTINGS,provider,apiModel:provider==='api'?model:'grok-4.3',oauthModel:provider==='oauth'?model:'grok-4.3'},authorization={async getAccessToken(){tokens++;return 'synthetic-access-token';}};
+    await assert.rejects((comments?api.generateComments:api.run)(post,selected,provider==='api'?'synthetic-key':undefined,{authorization,onUpdate(){updates++;},fetchImpl:async()=>{calls++;throw new Error('No transport expected');}}),error=>{
+      assert.equal(error.code,'MODEL_UNSUPPORTED');assert.equal(api.publicError(error).code,'MODEL_UNSUPPORTED');assert.match(api.publicError(error).error,/text model/);assert.equal(core.autoRetryDecision(error).retryable,false);return true;
+    });
+    assert.equal(calls,0);assert.equal(tokens,0);assert.equal(updates,0);
+    assert.throws(()=>api.buildRequest(post,selected),{code:'MODEL_UNSUPPORTED'});assert.throws(()=>api.buildCommentsRequest(post,selected),{code:'MODEL_UNSUPPORTED'});
+  }
+  assert.equal(api.publicError({code:'MODEL_UNSUPPORTED',message:'PRIVATE_RAW_MODEL_DETAIL'}).code,'MODEL_UNSUPPORTED');assert.doesNotMatch(api.publicError({code:'MODEL_UNSUPPORTED',message:'PRIVATE_RAW_MODEL_DETAIL'}).error,/PRIVATE_RAW_MODEL_DETAIL/);
+});
+
+test('unknown saved text models retain their exact request model without a catalog-derived replacement',()=>{
+  for(const provider of ['api','oauth'])for(const model of ['grok-4.3-latest','grok-4.20-0309-reasoning','grok-4.20-multi-agent','grok-build-0.1','custom-text-model']){
+    const selected=core.normalizeSettings({...core.DEFAULT_SETTINGS,provider,apiModel:provider==='api'?model:'grok-imagine-image',oauthModel:provider==='oauth'?model:'grok-imagine-video',apiReasoningEffort:'auto',oauthReasoningEffort:'auto'});
+    assert.equal(api.buildRequest(post,selected).model,model);assert.equal(api.buildCommentsRequest(post,selected).model,model);
+  }
+});
+
 test('new and legacy verification selections make exactly one direct Fact Check with no explanation or scheduler',async()=>{
   for(const apiVerification of [undefined,'only','background','inline','off','invalid'])for(const explanationMode of ['preset','custom']) {
     const requests=[],updates=[];

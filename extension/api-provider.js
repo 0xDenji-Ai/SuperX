@@ -21,7 +21,7 @@
     OAUTH_AUTH_UNAVAILABLE:'The Grok sign-in service could not be reached.',OAUTH_DEVICE_INVALID:'Grok sign-in returned an invalid authorization code.',
     OAUTH_CATALOG_UNAVAILABLE:'The available Grok models could not be loaded.'
   });
-  const SAFE_API_ERROR_CODES = new Set(['API_INCOMPLETE','API_STREAM_INTERRUPTED','API_STREAM_ERROR','API_LANGUAGE_MISMATCH','API_CAPACITY','RATE_LIMIT','API_ERROR','CANCELED','TIMEOUT',...Object.keys(OAUTH_ERROR_MESSAGES)]);
+  const SAFE_API_ERROR_CODES = new Set(['API_INCOMPLETE','API_STREAM_INTERRUPTED','API_STREAM_ERROR','API_LANGUAGE_MISMATCH','API_CAPACITY','RATE_LIMIT','API_ERROR','CANCELED','TIMEOUT','MODEL_UNSUPPORTED',...Object.keys(OAUTH_ERROR_MESSAGES)]);
   const SAFE_ERRORS = new WeakSet();
   const DIAGNOSTIC_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   const LANGUAGE_NAMES = Object.freeze({'zh-CN':'Simplified Chinese','en':'English','ja':'Japanese','ko':'Korean','zh-TW':'Traditional Chinese','es':'Spanish','fr':'French','de':'German','pt':'Portuguese','ar':'Arabic','ru':'Russian','hi':'Hindi'});
@@ -79,8 +79,12 @@
   function transportSettings(settings) {
     return settings?.provider==='oauth'?{...settings,apiModel:Core.providerModel(settings),apiReasoningEffort:Core.providerEffort(settings)}:settings;
   }
+  function assertTextModel(settings) {
+    if(Core.isNonTextGenerationModel(settings.apiModel))throw apiError('The selected model generates images or video and cannot fact-check posts. Choose a text model in Settings.','MODEL_UNSUPPORTED');
+  }
   function buildCommentsRequest(post,settings,analysis) {
     settings=transportSettings(settings);
+    assertTextModel(settings);
     const url=Core.canonicalPostUrl(post?.url);
     if(!url)throw apiError('请提供有效的 X 原帖链接。','POST_INVALID');
     return configureReasoning({
@@ -120,6 +124,7 @@
   }
   function buildRequest(post, settings, stage='verify', analysis) {
     settings=transportSettings(settings);
+    assertTextModel(settings);
     if(stage==='comments')return buildCommentsRequest(post,settings,analysis);
     stage = stage || 'verify';
     if (!Object.hasOwn(OUTPUT_LIMITS,stage)) throw new Error('不支持的 API 生成阶段。');
@@ -336,6 +341,7 @@
       API_STREAM_ERROR:'API 数据流损坏，未收到完整答案。',API_LANGUAGE_MISMATCH:'Grok 未遵循所选输出语言。',
       API_CAPACITY:CAPACITY_MESSAGE,RATE_LIMIT:'xAI 请求限速或额度耗尽，请稍后再试。',API_ERROR:'xAI 生成失败，请稍后重试。',CANCELED:'API 请求已取消。',TIMEOUT:'分析超时，Grok 未能完成响应；可手动重试。',
       NEEDS_KEY:'请在设置中填写 xAI API Key。',POST_INVALID:'请提供有效的 X 原帖链接。',URL_SEARCH_REQUIRED:'分析原帖需要开启 X 搜索或网页搜索，才能读取全文。',
+      MODEL_UNSUPPORTED:'The selected model generates images or video and cannot fact-check posts. Choose a text model in Settings.',
       COMMENTS_INVALID_RESPONSE:'Grok 未返回三个有效的评论草稿。',...OAUTH_ERROR_MESSAGES};
     const code=Object.hasOwn(messages,error?.code)?error.code:'API_ERROR';
     return {code,error:messages[code]};

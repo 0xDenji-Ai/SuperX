@@ -916,41 +916,17 @@ test('reasoning-only edits participate in unsaved status and reverting the selec
   assert.equal(fixture.local.settings.apiReasoningEffort,'none');assert.deepEqual(uiMessageTypes(fixture),['GET_UI_LANGUAGE']);
 });
 
-test('Settings and popup open browsing history without needing a Key or saving analysis settings',async()=>{
-  for(const file of ['options','popup']) {
-    const fixture=uiPageFixture(file,API_UI_SETTINGS,{session:{apiKey:undefined}});
-    await settleUI();await settleUI();
-    const button=fixture.ids.get(file==='options'?'open-history':'history');
-    assert.equal(Boolean(button.disabled),false);
-    await button.listeners.click();
-    assert.deepEqual(fixture.openedHistory,[true]);
-    assert.equal(fixture.messages.some(message=>['SAVE_KEY','SAVE_SETTINGS','ANALYZE','GENERATE_COMMENTS'].includes(message.type)),false);
-  }
-});
-
-test('history recording toggle applies independently and preserves unsaved prompt and language choices',async()=>{
-  const fixture=uiPageFixture('options',API_UI_SETTINGS);
+test('Settings history is a direct page link and popup still opens history without a Key',async()=>{
+  const settings=uiPageFixture('options',API_UI_SETTINGS,{session:{apiKey:undefined}});
   await settleUI();await settleUI();
-  const language=fixture.ids.get('language');language.value='ja';
-  const checkbox=fixture.ids.get('history-enabled');assert.equal(checkbox.checked,true);assert.equal(checkbox.disabled,false);
-  checkbox.checked=false;await checkbox.listeners.change();
-  assert.equal(fixture.local.superxHistoryEnabled,false);assert.equal(checkbox.checked,false);assert.equal(checkbox.disabled,false);
-  assert.equal(language.value,'ja');assert.equal(fixture.local.settings.language,'auto');
-  assert.equal(fixture.session.apiKey,'session-secret');
-  assert.equal(fixture.messages.some(message=>['SAVE_KEY','SAVE_SETTINGS'].includes(message.type)),false);
-  checkbox.checked=true;await checkbox.listeners.change();assert.equal(fixture.local.superxHistoryEnabled,true);
-  for(const listener of fixture.runtimeListeners)listener({type:'UI_LANGUAGE_CHANGED',language:'zh-CN'});
-  assert.equal(fixture.ids.get('history-status').textContent,ui.t('history.saved','zh-CN'));
-  assert.equal(language.value,'ja');
-});
-
-test('history setting failures restore its prior value without changing the main Settings form',async()=>{
-  const fixture=uiPageFixture('options',API_UI_SETTINGS,{}, {onMessage(message){if(message.type==='SET_HISTORY_ENABLED')return {ok:false};}});
+  assert.equal(settings.ids.has('history-enabled'),false);assert.equal(settings.ids.has('open-history'),false);
+  assert.match(fs.readFileSync(path.join(__dirname,'../extension/options.html'),'utf8'),/<a href="history.html"[^>]*data-i18n="common.history"/);
+  assert.equal(settings.messages.some(message=>['GET_HISTORY_STATUS','SET_HISTORY_ENABLED'].includes(message.type)),false);
+  const fixture=uiPageFixture('popup',API_UI_SETTINGS,{session:{apiKey:undefined}});
   await settleUI();await settleUI();
-  const checkbox=fixture.ids.get('history-enabled');checkbox.checked=false;await checkbox.listeners.change();
-  assert.equal(checkbox.checked,true);assert.equal(checkbox.disabled,false);
-  assert.equal(fixture.ids.get('history-status').textContent,ui.t('history.error','en'));
-  assert.equal(fixture.ids.get('save').disabled,false);assert.equal(fixture.local.superxHistoryEnabled,undefined);
+  assert.equal(Boolean(fixture.ids.get('history').disabled),false);
+  await fixture.ids.get('history').listeners.click();assert.deepEqual(fixture.openedHistory,[true]);
+  assert.equal(fixture.messages.some(message=>['SAVE_KEY','SAVE_SETTINGS','ANALYZE','GENERATE_COMMENTS'].includes(message.type)),false);
 });
 
 test('fresh options and popup use browser UI locale without writing credentials or analysis settings', async () => {
@@ -1987,7 +1963,7 @@ test('popup applies a fresh Build readiness broadcast without reading API creden
   assert.equal(fixture.ids.get('indicator').dataset.enabled,'true');assert.deepEqual(uiMessageTypes(fixture),['GET_UI_LANGUAGE']);
 });
 
-test('Build offers only advertised extra IDs, retains defaults and saves a selected Fast variant explicitly',async()=>{
+test('Build uses the common model list and catalog availability without advertising extra IDs',async()=>{
   const buildStatus={installed:true,available:true,authenticated:true,ready:true,modelCatalog:[{id:'grok-4.3',available:true,efforts:['none','low','high']},{id:'grok-4.7',available:true,efforts:['low','high']},{id:'grok-preview-fast',available:true,efforts:['low','high']},{id:'grok-preview-custom',available:true,efforts:['medium','high']},{id:'invalid model id',available:true}]};
   const fixture=uiPageFixture('options',core.normalizeSettings({provider:'build'}),{}, {buildStatus});await settleUI();await settleUI();
   const select=fixture.ids.get('build-model');
@@ -1995,18 +1971,16 @@ test('Build offers only advertised extra IDs, retains defaults and saves a selec
   assert.equal(select.value,'grok-4.3');assert.equal(fixture.ids.get('build-fast-help').hidden,true);
   assert.equal(fixture.permissionRequests.length,0);await fixture.ids.get('check-build').listeners.click();
   assert.equal(select.value,'grok-4.3');assert.equal(fixture.ids.get('build-reasoning-effort').value,'none');
-  assert.deepEqual(select.children.filter(option=>!core.API_MODELS.some(model=>model.value===option.value)).map(option=>option.value),['grok-preview-fast','grok-preview-custom']);
-  assert.equal(select.children.find(option=>option.value==='grok-preview-fast').textContent,'grok-preview-fast');
-  select.value='grok-preview-fast';select.listeners.change();fixture.ids.get('build-reasoning-effort').value='high';
-  assert.equal(fixture.ids.get('build-fast-help').hidden,false);assert.match(fixture.ids.get('build-fast-help').textContent,/more.*allowance/);
+  assert.deepEqual(select.children.map(option=>option.value),core.API_MODELS.map(model=>model.value));
+  assert.equal(select.children.find(option=>option.value==='grok-4.5').disabled,true);
+  select.value='grok-4.7';select.listeners.change();fixture.ids.get('build-reasoning-effort').value='high';
   fixture.runtimeListeners.forEach(listener=>listener({type:'UI_LANGUAGE_CHANGED',language:'zh-CN'}));
-  assert.equal(select.value,'grok-preview-fast');assert.equal(fixture.ids.get('build-reasoning-effort').value,'high');
+  assert.equal(select.value,'grok-4.7');assert.equal(fixture.ids.get('build-reasoning-effort').value,'high');
   const form=fixture.ids.get('settings-form');await form.listeners.submit({preventDefault(){},currentTarget:form});
-  assert.equal(fixture.local.settings.buildModel,'grok-preview-fast');assert.equal(fixture.local.settings.buildReasoningEffort,'high');
+  assert.equal(fixture.local.settings.buildModel,'grok-4.7');assert.equal(fixture.local.settings.buildReasoningEffort,'high');
   assert.equal(fixture.local.settings.apiModel,'grok-4.3');assert.equal(fixture.messages.some(message=>message.type==='SAVE_KEY'),false);
   const reopened=uiPageFixture('options',fixture.local.settings);await settleUI();await settleUI();
-  assert.equal(reopened.ids.get('build-model').value,'grok-preview-fast');assert.equal(reopened.ids.get('build-reasoning-effort').value,'high');
-  assert.equal(reopened.ids.get('build-fast-help').hidden,false);
+  assert.equal(reopened.ids.get('build-model').value,'grok-4.7');assert.equal(reopened.ids.get('build-reasoning-effort').value,'high');
 });
 
 test('official launch commands are generated explicitly for both systems and the local code is not stored in settings',async()=>{
@@ -2082,7 +2056,7 @@ test('guided setup retains an unavailable saved model until the user explicitly 
   const modelCatalog=[{id:'grok-4.6',efforts:['minimal','low','high']},{id:'grok-4.5',available:false},{id:'invalid model id'}];
   const fixture=uiPageFixture('setup',core.normalizeSettings({buildModel:'grok-4.7',buildReasoningEffort:'high'}),{}, {buildStatus:{ready:true,modelCatalog}});await settleUI();await settleUI();
   assert.equal(fixture.ids.get('model-choices').hidden,true);assert.equal(fixture.ids.get('save').disabled,true);
-  await fixture.ids.get('check').listeners.click();assert.equal(fixture.ids.get('model-choices').hidden,false);assert.equal(fixture.ids.get('model').value,'grok-4.7');assert.deepEqual(fixture.ids.get('model').children.map(option=>option.value),['grok-4.6','grok-4.7']);
+  await fixture.ids.get('check').listeners.click();assert.equal(fixture.ids.get('model-choices').hidden,false);assert.equal(fixture.ids.get('model').value,'grok-4.7');assert.deepEqual(fixture.ids.get('model').children.map(option=>option.value),core.API_MODELS.map(item=>item.value));
   assert.equal(fixture.ids.get('model').children.find(option=>option.value==='grok-4.7').disabled,true);assert.equal(fixture.ids.get('reasoning').value,'high');assert.equal(fixture.ids.get('reasoning').children.find(option=>option.value==='high').disabled,true);assert.equal(fixture.ids.get('save').disabled,true);
   await fixture.ids.get('save').listeners.click();assert.equal(fixture.messages.some(message=>message.type==='SAVE_BUILD_CONNECTION'),false);
   fixture.ids.get('model').value='grok-4.6';fixture.ids.get('model').listeners.change();assert.deepEqual(fixture.ids.get('reasoning').children.map(option=>option.value),['minimal','low','high']);assert.equal(fixture.ids.get('reasoning').value,'high');

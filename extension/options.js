@@ -22,12 +22,10 @@
   let busy = false;
   let optionsFocusPending = false;
   let lastOptionsFocusNonce;
-  let historyReady=false, historyBusy=false,historyStatusKey=null;
   let diagnosticsBusy=false,diagnosticsStatusKey=null,diagnosticsText="",diagnosticsRetentionHours=24,diagnosticsMaxEntries=30;
   let buildStatus = null, buildChecking = false, buildCheckRevision = 0;
   let buildConnection={configured:false,port:2419},buildSecretChanged=false,buildGenerating=false;
   let oauthStatus={state:"idle",connected:false,remember:true,catalogModels:null},oauthActionBusy=false,oauthLoginPending=false,oauthActionRevision=0,oauthLoaded=false,oauthPollTimer,oauthReadRevision=0,oauthActionError=null;
-  const advertisedBuildModels = new Set();
   const apiControlIds = ["api-key","remember-key","api-model","api-reasoning-effort","fast-preset","clear-key"];
   const buildControlIds = ["build-platform","build-port","build-secret","generate-build-command","copy-build-command","clear-build-connection","build-model","build-reasoning-effort","check-build","build-guide"];
   const oauthControlIds=["oauth-login","oauth-cancel","oauth-logout","oauth-remember","oauth-copy-code","oauth-model","oauth-reasoning-effort","oauth-refresh-models"];
@@ -50,9 +48,16 @@
     return result;
   }
   function oauthEfforts(model){const entry=oauthStatus.catalogModels?.find(item=>item.id===model),profile=core.modelProfile(model);return entry?.efforts||profile?.efforts||["auto"];}
+  function modelChoices(savedModel) {
+    const choices=[...core.API_MODELS];
+    // Preserve a previous configuration without advertising the provider's
+    // complete catalog, which also includes image and video generators.
+    if(!choices.some(item=>item.value===savedModel))choices.push({value:savedModel,label:ui.t(core.isNonTextGenerationModel(savedModel)?"options.unsupportedModel":"options.savedModel",uiLanguage,{model:savedModel})});
+    return choices;
+  }
   function populateOAuthModels(model=currentSettings.oauthModel||"grok-4.3",effort=$("oauth-reasoning-effort").value||currentSettings.oauthReasoningEffort||"none",modelChanged=false){
-    const select=$("oauth-model"),choices=new Map(core.API_MODELS.map(item=>[item.value,item.label]));for(const entry of oauthStatus.catalogModels||[])choices.set(entry.id,choices.get(entry.id)||entry.id);if(!choices.has(model))choices.set(model,model);select.replaceChildren();
-    for(const [value,label]of choices){const option=document.createElement("option");option.value=value;option.textContent=label;option.disabled=Array.isArray(oauthStatus.catalogModels)&&!oauthStatus.catalogModels.some(entry=>entry.id===value&&entry.available!==false);select.append(option);}select.value=model;
+    const select=$("oauth-model");select.replaceChildren();
+    for(const {value,label}of modelChoices(currentSettings.oauthModel)){const option=document.createElement("option");option.value=value;option.textContent=label;option.disabled=core.isNonTextGenerationModel(value)||Array.isArray(oauthStatus.catalogModels)&&!oauthStatus.catalogModels.some(entry=>entry.id===value&&entry.available!==false);select.append(option);}select.value=model;
     const reasoning=$("oauth-reasoning-effort"),efforts=oauthEfforts(model),preferred=core.reasoningEffort(model),selected=efforts.includes(effort)?effort:!modelChanged&&["none","minimal","low","medium","high","xhigh","auto"].includes(effort)?effort:efforts.includes(preferred)?preferred:efforts[0]||"";reasoning.replaceChildren();
     for(const value of [...efforts,...(selected&&!efforts.includes(selected)?[selected]:[])]){const option=document.createElement("option");option.value=value;option.textContent=ui.t("options.reasoning."+value,uiLanguage);option.disabled=!efforts.includes(value);reasoning.append(option);}reasoning.value=selected;
   }
@@ -66,7 +71,7 @@
     $("oauth-status").textContent=ui.t(statusKey,uiLanguage);$("oauth-status").dataset.state=oauthActionError?"error":oauthStatus.state;$("oauth-status").hidden=oauthStatus.state==="idle"&&!oauthActionError;
     const device=oauthStatus.device;$("oauth-device").hidden=!device;$("oauth-user-code").textContent=device?.userCode||"";if(device)$("oauth-official-link").setAttribute("href",device.url);else $("oauth-official-link").removeAttribute("href");
     const model=$("oauth-model").value,available=!Array.isArray(oauthStatus.catalogModels)||oauthStatus.catalogModels.some(entry=>entry.id===model&&entry.available!==false),effort=oauthEfforts(model).includes($("oauth-reasoning-effort").value);
-    $("oauth-model-status").textContent=oauthStatus.catalogError?ui.t("oauth.catalogUnavailable",uiLanguage):!available?ui.t("oauth.modelUnavailable",uiLanguage,{model}):!effort?ui.t("options.reasoningInvalid",uiLanguage):"";
+    $("oauth-model-status").textContent=core.isNonTextGenerationModel(model)?ui.t("error.modelUnsupported",uiLanguage):oauthStatus.catalogError?ui.t("oauth.catalogUnavailable",uiLanguage):!available?ui.t("oauth.modelUnavailable",uiLanguage,{model}):!effort?ui.t("options.reasoningInvalid",uiLanguage):"";
   }
   function scheduleOAuthPoll(){
     if(oauthPollTimer!==undefined)globalThis.clearTimeout?.(oauthPollTimer);oauthPollTimer=undefined;
@@ -113,7 +118,7 @@
     const unavailable = Array.isArray(catalog) && !catalog.some(item => (typeof item === "string" ? item : item.id) === selected && item.available !== false);
     const efforts=catalog?.find(item=>item&&typeof item==='object'&&item.id===selected)?.efforts;
     const effortUnavailable=Array.isArray(efforts)&&!efforts.includes($("build-reasoning-effort").value);
-    $("build-model-status").textContent = unavailable ? ui.t("options.buildModelUnavailable",uiLanguage,{model:selected}) : effortUnavailable ? ui.t("options.reasoningInvalid",uiLanguage) : "";
+    $("build-model-status").textContent = core.isNonTextGenerationModel(selected) ? ui.t("error.modelUnsupported",uiLanguage) : unavailable ? ui.t("options.buildModelUnavailable",uiLanguage,{model:selected}) : effortUnavailable ? ui.t("options.reasoningInvalid",uiLanguage) : "";
     $("build-fast-help").textContent = ui.t("options.buildFastHelp",uiLanguage);
     $("build-fast-help").hidden = !/fast/i.test(selected);
   }
@@ -131,7 +136,6 @@
   }
   function requestLocalAccess(){try{return chrome.permissions?.request({origins:["http://127.0.0.1/*"]}) || Promise.resolve(false);}catch{return Promise.resolve(false);}}
 
-  function setHistoryStatus(key) {historyStatusKey=key;$("history-status").textContent=key?ui.t(key,uiLanguage):"";}
   function renderDiagnostics(){
     $("diagnostics-help").textContent=ui.t("options.diagnosticsHelp",uiLanguage,{hours:diagnosticsRetentionHours,maxEntries:diagnosticsMaxEntries});
     $("diagnostics-status").textContent=diagnosticsStatusKey?ui.t(diagnosticsStatusKey,uiLanguage):"";
@@ -179,7 +183,6 @@
   function setBusy(value) {
     busy = value;
     for (const control of $("settings-form").elements) control.disabled = value;
-    $("history-enabled").disabled=value||!historyReady||historyBusy;
     renderSecurity();
     renderProvider();
     renderDiagnostics();
@@ -309,17 +312,10 @@
   function populateModels(model) {
     const select = $("api-model");
     select.replaceChildren();
-    for (const item of core.API_MODELS) {
+    for (const item of modelChoices(currentSettings.apiModel)) {
       const option = document.createElement("option");
       option.value = item.value;option.textContent = item.label;
-      select.append(option);
-    }
-    // Keep an already saved alias/custom ID available during upgrades without
-    // offering a free-form field or silently changing the user's model.
-    if (!core.API_MODELS.some(item => item.value === currentSettings.apiModel)) {
-      const option = document.createElement("option");
-      option.value = currentSettings.apiModel;
-      option.textContent = ui.t("options.savedModel",uiLanguage,{model:currentSettings.apiModel});
+      option.disabled=core.isNonTextGenerationModel(item.value);
       select.append(option);
     }
     select.value = model;
@@ -335,21 +331,14 @@
     select.value = core.reasoningEffort(model,effort);
   }
   function buildModelChoices() {
-    const models=[...core.API_MODELS];
-    for(const entry of buildStatus?.modelCatalog || []){
-      const id=typeof entry==="string" ? entry : entry?.id;
-      if(typeof id==="string"&&/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(id))advertisedBuildModels.add(id);
-    }
-    for(const id of advertisedBuildModels)if(!models.some(item=>item.value===id))models.push({value:id,label:id});
-    if (!models.some(item=>item.value===currentSettings.buildModel)) models.push({value:currentSettings.buildModel,label:ui.t("options.savedModel",uiLanguage,{model:currentSettings.buildModel})});
-    return models;
+    return modelChoices(currentSettings.buildModel);
   }
   function populateBuildModels(model) {
     const select = $("build-model");select.replaceChildren();
     for (const item of buildModelChoices()) {
       const option = document.createElement("option");option.value=item.value;option.textContent=item.label;
       const catalog = buildStatus?.modelCatalog;
-      option.disabled = Array.isArray(catalog) && !catalog.some(entry => (typeof entry === "string" ? entry : entry.id) === item.value && entry.available !== false);
+      option.disabled = core.isNonTextGenerationModel(item.value) || Array.isArray(catalog) && !catalog.some(entry => (typeof entry === "string" ? entry : entry.id) === item.value && entry.available !== false);
       select.append(option);
     }
     select.value = model;
@@ -383,7 +372,6 @@
     $("api-subscription-before").textContent=subscriptionIndex<0?subscriptionHelp:subscriptionHelp.slice(0,subscriptionIndex);
     $("api-subscription-link").hidden=subscriptionIndex<0;
     $("api-subscription-after").textContent=subscriptionIndex<0?"":subscriptionHelp.slice(subscriptionIndex+subscriptionName.length);
-    setHistoryStatus(historyStatusKey);
     document.title = `SuperX · ${ui.t("common.settings",uiLanguage)}`;
     $("extension-version").textContent = ui.t("options.version",uiLanguage,{version:chrome.runtime.getManifest().version});
     populateLanguages($("language").value || currentSettings.language);
@@ -589,6 +577,10 @@
     const apiKey = $("api-key").value.trim();
     const saveKey = isAPI() && keyNeedsSave();
     const remember = $("remember-key").checked;
+    const selectedModelId=isOAuth()?"oauth-model":isBuild()?"build-model":"api-model";
+    if(core.isNonTextGenerationModel($(selectedModelId).value)){
+      setStatus("error.modelUnsupported","error");$(selectedModelId).focus();return;
+    }
     if(isBuild()&&!buildConnection.configured&&!$("build-secret").value.trim()){
       setStatus("build.codeRequired","error");$("generate-build-command").focus();return;
     }
@@ -663,22 +655,6 @@
     catch (error) { setStatus("errors.operation","error",{error:error.message}); }
     finally { setBusy(false); }
   });
-  async function loadHistory() {
-    try {const result=await send({type:"GET_HISTORY_STATUS"});if(typeof result.enabled!=="boolean")throw new Error(ui.t("errors.noResponse",uiLanguage));$("history-enabled").checked=result.enabled;historyReady=true;}
-    catch {historyReady=false;setHistoryStatus("history.error");}
-    $("history-enabled").disabled=busy||historyBusy||!historyReady;
-  }
-  $("history-enabled").addEventListener("change",async () => {
-    if(busy||historyBusy||!historyReady)return;
-    const desired=$("history-enabled").checked;historyBusy=true;$("history-enabled").disabled=true;
-    try {const result=await send({type:"SET_HISTORY_ENABLED",enabled:desired});if(typeof result.enabled!=="boolean")throw new Error("Invalid history response");$("history-enabled").checked=result.enabled;setHistoryStatus("history.saved");}
-    catch {$("history-enabled").checked=!desired;setHistoryStatus("history.error");}
-    finally {historyBusy=false;$("history-enabled").disabled=busy||!historyReady;}
-  });
-  $("open-history").addEventListener("click",async () => {
-    try {await send({type:"OPEN_HISTORY"});}
-    catch {setHistoryStatus("history.error");}
-  });
   $("diagnostics-summary").addEventListener("click",()=>{if(!$("api-diagnostics").open)void refreshDiagnostics();});
   $("diagnostics-refresh").addEventListener("click",()=>refreshDiagnostics());
   $("diagnostics-copy").addEventListener("click",async()=>{
@@ -703,7 +679,6 @@
       send({type:"GET_BUILD_CONNECTION"}).then(connection=>{if(!busy&&!buildSecretChanged&&Number($("build-port").value)===buildConnection.port){buildConnection={configured:connection.configured===true,port:connection.port||currentSettings.buildPort};$("build-port").value=buildConnection.port;currentSettings={...currentSettings,buildPort:buildConnection.port};resetBuildCheck();}}).catch(()=>{});
     }
     if (area === "local" && changes.uiLanguage) { localeRevision++;applyLanguage(changes.uiLanguage.newValue); }
-    if(area==="local"&&changes.superxHistoryEnabled&&!historyBusy){$("history-enabled").checked=changes.superxHistoryEnabled.newValue!==false;historyReady=true;$("history-enabled").disabled=busy;}
     if (area === "local" && changes.settings && !busy) {
       const previousInterfaceLanguage = currentSettings.interfaceLanguage;
       const interfaceDraft = $("interface-language").value !== previousInterfaceLanguage;
@@ -724,5 +699,5 @@
       }).catch(() => { securityLoaded = false;setStatus("errors.noResponse","error");renderSecurity(); });
     }
   });
-  applyLanguage(observedUILanguage);load();void loadHistory();
+  applyLanguage(observedUILanguage);load();
 })();

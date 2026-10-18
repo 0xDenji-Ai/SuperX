@@ -374,6 +374,20 @@
     "ru": ["Уровень рассуждения","Показаны только уровни, поддерживаемые моделью. Высокие уровни могут требовать больше времени и Tokens. Fast и Priority не включаются.","Без рассуждения","Низкий","Средний","Высокий","Максимальный","По умолчанию сервиса","{model} · Сохранённая модель","Выберите поддерживаемый уровень рассуждения."],
     "hi": ["तर्क स्तर","केवल चुने गए मॉडल के समर्थित स्तर दिखते हैं। ऊँचे स्तर में अधिक समय और Tokens लग सकते हैं। इससे Fast या Priority चालू नहीं होता।","तर्क बंद","कम","मध्यम","उच्च","अधिकतम","सेवा का डिफ़ॉल्ट","{model} · सहेजा गया मॉडल","समर्थित तर्क स्तर चुनें।"]
   });
+  section(["options.unsupportedModel","error.modelUnsupported"], {
+    "en": ["{model} · Not for fact-checking","This model cannot be used for fact-checking. Choose a supported text model in Settings."],
+    "zh-CN": ["{model} · 不适用于事实核查","此模型不适用于事实核查。请在设置中选择支持的文本模型。"],
+    "zh-TW": ["{model} · 不適用於事實查核","此模型不適用於事實查核。請在設定中選擇支援的文字模型。"],
+    "ja": ["{model} · ファクトチェック非対応","このモデルはファクトチェックに使用できません。設定で対応するテキストモデルを選択してください。"],
+    "ko": ["{model} · 사실 확인 미지원","이 모델은 사실 확인에 사용할 수 없습니다. 설정에서 지원되는 텍스트 모델을 선택하세요."],
+    "es": ["{model} · No apto para verificar hechos","Este modelo no sirve para verificar hechos. Elige un modelo de texto compatible en Ajustes."],
+    "fr": ["{model} · Vérification non prise en charge","Ce modèle ne peut pas vérifier les faits. Choisissez un modèle de texte compatible dans les paramètres."],
+    "de": ["{model} · Nicht für Faktenchecks","Dieses Modell kann nicht für Faktenchecks verwendet werden. Wähle in den Einstellungen ein unterstütztes Textmodell."],
+    "pt": ["{model} · Não compatível com verificação","Este modelo não pode verificar fatos. Escolha um modelo de texto compatível nas configurações."],
+    "ar": ["{model} · غير مناسب للتحقق من الحقائق","لا يمكن استخدام هذا النموذج للتحقق من الحقائق. اختر نموذجًا نصيًا مدعومًا في الإعدادات."],
+    "ru": ["{model} · Не для проверки фактов","Эту модель нельзя использовать для проверки фактов. Выберите поддерживаемую текстовую модель в настройках."],
+    "hi": ["{model} · तथ्य-जाँच के लिए नहीं","इस मॉडल से तथ्य-जाँच नहीं की जा सकती। सेटिंग्स में समर्थित टेक्स्ट मॉडल चुनें।"]
+  });
   section(["options.modelPricing"], {
     "en": ["View models and pricing"],
     "zh-CN": ["查看模型与价格"],

@@ -2,6 +2,15 @@
 const test=require('node:test');
 const assert=require('node:assert/strict');
 const Core=require('../extension/feed-core.js');
+
+test('only established non-text generation families are rejected while saved text and custom model IDs remain intact',()=>{
+  const generators=['grok-imagine','grok-imagine-image','grok-imagine-image-quality','grok-imagine-image-2.0','grok-imagine-video','grok-imagine-video-1.5','grok-2-image','grok-2-image-1212'];
+  for(const model of generators){assert.equal(Core.isNonTextGenerationModel(model),true,model);assert.equal(Core.isNonTextGenerationModel('  '+model.toUpperCase()+'  '),true,model);for(const provider of ['api','oauth','build']){const settings=Core.normalizeSettings({provider,apiModel:model,oauthModel:model,buildModel:model,buildDefaultsVersion:1});assert.equal(Core.providerModel(settings),model,'Unsupported saved IDs are preserved for an explicit user choice');}}
+  for(const model of [...Core.API_MODELS.map(profile=>profile.value),'grok-4.3-latest','grok-4.20','grok-4.20-0309-reasoning','grok-4.20-non-reasoning','grok-4.20-multi-agent','grok-build-0.1','custom-text-model','custom-image-understanding-model','grok-imagineer']){assert.equal(Core.isNonTextGenerationModel(model),false,model);for(const provider of ['api','oauth','build']){const settings=Core.normalizeSettings({provider,apiModel:model,oauthModel:model,buildModel:model,buildDefaultsVersion:1});assert.equal(Core.providerModel(settings),model);}}
+  for(const model of [undefined,null,{},[],17])assert.equal(Core.isNonTextGenerationModel(model),false);
+  for(const provider of ['api','oauth','build'])assert.deepEqual(Core.autoRetryDecision({provider,code:'MODEL_UNSUPPORTED',verificationFailure:{stage:'verify',code:'UNKNOWN'}}),{retryable:false,reason:'request_rejected'});
+});
+
 test('provider diagnostics accept only fixed public codes and never arbitrary upstream strings',()=>{
   assert.equal(Core.apiFailureProviderCode('INVALID-API-KEY'),'invalid_api_key');assert.equal(Core.apiFailureProviderCode('spending_limit'),'spending_limit');
   for(const value of ['PRIVATE_SECRET_CANARY','account-private:spending-limit','xai-'+'a'.repeat(40),'server_error\nPRIVATE','SERVER_ERROR '.repeat(10),{},null])assert.equal(Core.apiFailureProviderCode(value),undefined);
