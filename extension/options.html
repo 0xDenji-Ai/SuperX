@@ -44,9 +44,9 @@
           <div class="field provider-field">
             <label for="provider" data-i18n="options.providerChoice">Connect with</label>
             <select id="provider" required aria-describedby="source-description">
+              <option value="oauth" data-i18n="options.providerOAuth">Sign in · The X Subscription</option>
               <option value="api" data-i18n="options.providerKey">Grok API Key</option>
-              <option value="oauth" data-i18n="options.providerOAuth">Grok subscription sign-in</option>
-              <option value="build" data-i18n="options.providerBuild">Grok CLI / ACP · Official local connection</option>
+              <option value="build" data-i18n="options.providerBuild">Grok Build · Local CLI / ACP</option>
             </select>
           </div>
           <div id="api-fields">
@@ -96,21 +96,25 @@
           </div>
           <div id="oauth-fields" hidden>
             <div class="onboarding oauth-connection" aria-labelledby="oauth-heading">
-              <h3 id="oauth-heading" data-i18n="oauth.title">Connect your Grok subscription</h3>
-              <p class="help" data-i18n="oauth.intro">Sign in on the official Grok page. No API Key, CLI or extra installation is needed.</p>
-              <p class="help" data-i18n="oauth.sharedClient">The authorization page may show Grok Build because this uses xAI’s shared OAuth client.</p>
-              <div class="onboarding-actions oauth-actions">
-                <button id="oauth-login" class="secondary-button" type="button" data-i18n="oauth.login">Sign in to Grok</button>
-                <button id="oauth-cancel" class="text-button" type="button" data-i18n="oauth.cancel" hidden>Cancel sign-in</button>
-                <button id="oauth-logout" class="text-button" type="button" data-i18n="oauth.logout" hidden>Sign out</button>
+              <h3 id="oauth-heading" class="visually-hidden" data-i18n="oauth.title">Connect your Grok subscription</h3>
+              <p id="oauth-intro" class="help oauth-intro" data-i18n="oauth.intro">Sign in on Grok. No API Key or local setup needed.</p>
+              <div class="oauth-connection-row">
+                <p id="oauth-status" class="key-state" role="status" aria-live="polite"></p>
+                <div class="onboarding-actions oauth-actions">
+                  <button id="oauth-login" class="secondary-button" type="button" data-i18n="oauth.login">Sign in to Grok</button>
+                  <button id="oauth-cancel" class="text-button" type="button" data-i18n="oauth.cancel" hidden>Cancel sign-in</button>
+                  <button id="oauth-logout" class="text-button" type="button" data-i18n="oauth.logout" hidden>Sign out</button>
+                </div>
               </div>
-              <p id="oauth-status" class="key-state" role="status" aria-live="polite"></p>
               <div id="oauth-device" class="oauth-device" hidden>
                 <p class="help" data-i18n="oauth.verifyCode">Check this code on the official authorization page:</p>
                 <div class="oauth-code-row"><code id="oauth-user-code" dir="ltr"></code><button id="oauth-copy-code" class="text-button" type="button" data-i18n="oauth.copyCode">Copy code</button></div>
                 <a id="oauth-official-link" target="_blank" rel="noopener noreferrer" data-i18n="oauth.openOfficial">Reopen official authorization page</a>
               </div>
-              <p class="help" data-i18n="oauth.startHint">When SuperX is enabled, connected posts follow your existing visibility and waiting settings. Completed results are not rerun.</p>
+              <details id="oauth-authorization-details" class="oauth-authorization-details">
+                <summary data-i18n="oauth.authorizationDetails">About authorization</summary>
+                <p class="help" data-i18n="oauth.sharedClient">The authorization page may show Grok Build because this uses xAI’s shared OAuth client.</p>
+              </details>
             </div>
             <label class="checkbox-label oauth-remember-label"><input id="oauth-remember" type="checkbox" checked><span data-i18n="oauth.remember">Remember login on this device</span></label>
             <p class="help indented" data-i18n="oauth.rememberHelp">Encrypted locally and restored after restart. Uncheck to keep the login only until the browser closes.</p>
@@ -119,7 +123,7 @@
             <div class="field model-field">
               <label for="oauth-model" data-i18n="options.model">Model</label>
               <select id="oauth-model" required dir="ltr" aria-describedby="oauth-model-help oauth-model-status"></select>
-              <p id="oauth-model-help" class="help" data-i18n="oauth.modelHelp">Model settings are separate from other connections. The available model list is checked without sending a fact-check request.</p>
+              <p id="oauth-model-help" class="help" data-i18n="oauth.modelHelp">Use the models available to your account.</p>
               <p id="oauth-model-status" class="help" role="status" aria-live="polite"></p>
               <button id="oauth-refresh-models" class="text-button" type="button" data-i18n="oauth.refreshModels">Refresh available models</button>
             </div>

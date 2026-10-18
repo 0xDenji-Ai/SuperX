@@ -1,18 +1,18 @@
 # Connect SuperX
 
-The unreleased **0.9.11** candidate offers three independent connections. **Grok API Key** remains the default; **Grok subscription (OAuth)** signs in entirely in the browser; **Grok CLI / ACP** connects to the official Grok service on your computer. All three initially select **Grok 4.3 / reasoning None** and retain their own choices. Existing API and local configurations are preserved. Switching sources never substitutes another credential, changes account budgets or bypasses quotas. Published Stable remains **0.7.26** and supports API Key mode.
+The unreleased **0.9.11** candidate offers three independent connections. **Sign in · The X Subscription** is first and the default for new installations; **Grok API Key** uses a Key you create; **Grok Build · Local CLI / ACP** connects to the official service on your computer. All three initially select **Grok 4.3 / reasoning None** and retain their own choices. Existing selections and settings are preserved. Nonempty older settings without a source keep API; missing/empty settings with legacy credentials also keep that conservative API path. Switching sources never substitutes another credential, changes account budgets or bypasses quotas. Published Stable remains **0.7.26** and supports API Key mode.
 
 | Connection | What you need | Where you sign in / manage usage |
 | --- | --- | --- |
-| Grok subscription (OAuth) | An eligible Grok account and a browser | Official xAI device-authorization page; your Grok account |
+| Sign in · The X Subscription | An eligible Grok account and a browser | Official xAI device-authorization page; your Grok account |
 | Grok API Key | A Grok Inference Key or xAI Console API Key | Grok Dashboard for subscription allowance, or xAI Console for pay-as-you-go usage |
-| Grok CLI / ACP | Official Grok installed, signed in and running locally | Official CLI login and account; SuperX connects only to its loopback service |
+| Grok Build · Local CLI / ACP | Official Grok installed, signed in and running locally | Official CLI login and account; SuperX connects only to its loopback service |
 
 ## Grok subscription (OAuth) — browser only
 
 This candidate connects directly from Chrome / Edge on Windows or macOS. **No Grok CLI, terminal, additional SuperX program or API Key is required.**
 
-1. Open **Settings → Connection**, select **Grok subscription (OAuth)** and choose **Sign in to Grok**.
+1. Open **Settings → Connection**. New installations already select **Sign in · The X Subscription**; choose **Sign in to Grok**. Setup explanations are collapsed until you need them.
 2. SuperX displays a short authorization code and opens the official `accounts.x.ai` / `auth.x.ai` device page. Check that the code matches and confirm the requested access yourself. Enter your account password only on the official site, never in SuperX.
 3. Return to SuperX. After authorization, it loads the account's model directory without sending a Fact Check, comment or other test inference request. If the page was closed, reopen the official link from Settings before the code expires; otherwise cancel and start again.
 4. Select a model available to this account and a supported reasoning level, then save settings and enable SuperX. The initial choice stays **Grok 4.3 / None**; an unavailable choice is shown explicitly rather than silently replaced by Grok 4.7.
@@ -23,7 +23,11 @@ This candidate connects directly from Chrome / Edge on Windows or macOS. **No Gr
 
 **Sign out** removes this OAuth connection and attempts to revoke the most recently known refresh token at the provider. It does not log out of your browser's Grok website, stop the CLI, erase recorded post visits, or clear saved API/local credentials. Revocation is best effort; provider-side records and account controls remain separate. Changing connection source cancels a pending device login; it does not automatically sign out an already connected OAuth account.
 
-The extension requests the additional fixed host `https://auth.x.ai/*` for device authorization, token refresh and revocation; an upgrade may require Chrome to approve this new site access. Generation and model-directory calls still go directly to `https://api.x.ai`, using OAuth Bearer authorization without CLI identity headers. The public configuration uses client ID `b1a00492-073a-47ea-816f-4c329264a828` and scopes `openid profile email offline_access grok-cli:access api:access`; these are application identifiers, not credentials. SuperX does not request a user-info profile or collect your email from it. See [Privacy](../PRIVACY.md) for local storage, isolation and network details.
+The extension requests the additional fixed host `https://auth.x.ai/*` for device authorization, token refresh and revocation; an upgrade may require Chrome to approve this new site access. Generation and model-directory calls go directly to `https://api.x.ai`, using OAuth Bearer authorization without CLI identity headers. The public client ID is `b1a00492-073a-47ea-816f-4c329264a828`; it is an application identifier, not a credential.
+
+New authorizations request four scopes: `openid offline_access grok-cli:access api:access`. They omit `profile` and `email`, the optional profile/email claim scopes described in [OpenID Connect §5.4](https://openid.net/specs/openid-connect-core-1_0.html#ScopeClaims). `offline_access` requests refresh access under [OpenID Connect §11](https://openid.net/specs/openid-connect-core-1_0.html#OfflineAccess); the two Grok access scopes are provider-defined, with the granted scope controlled by the authorization server ([OAuth 2.0 §3.3](https://www.rfc-editor.org/rfc/rfc6749.html#section-3.3)). SuperX does not fetch or use account-profile information.
+
+Existing connected logins are preserved: a narrower new request does not retroactively reduce an old grant. An unfinished device login saved with an older scope set is discarded; start sign-in again for the current request. Following the separate HTTP-200 device-code negotiation check, fresh four-scope authorization and a live Grok 4.3 Fact Check have now passed in installed Windows Chrome. The user confirmed that the official page no longer listed name/avatar or email. Four-scope restart and natural-expiry checks remain outstanding. See [acceptance scope](#acceptance-scope) and [Privacy](../PRIVACY.md).
 
 OAuth generation is not automatically replayed after an accepted HTTP 200 response, an in-stream failure, incomplete output or timeout. An initial HTTP 401 rejection can refresh authorization once and make one recovery request; a second rejection requires sign-in again. Retained partial output and reported usage stay visible, while other posts continue through the shared queue. Check the error before choosing **Reanalyze** yourself.
 
@@ -47,7 +51,7 @@ Use the official Grok installation and account login. **No separate SuperX insta
 The guide covers **Windows PowerShell** and **macOS Terminal**, including Apple silicon and Intel Macs supported by the official Grok distribution. Use desktop Chrome or Chromium-based Edge 120+. This candidate checks compatibility with **Grok Build 1.0.60** before sending a task; another version is rejected until its protocol and restrictions are reviewed.
 
 1. Follow the [official Grok installation instructions](https://github.com/xai-org/grok-build). Open PowerShell on Windows or Terminal on macOS. Run `grok --version` to check the installation, then `grok login` and finish signing in on the official page. SuperX does not ask for your account password or receive the login token.
-2. Open **SuperX Settings → Grok CLI / ACP → Step-by-step guide**. Select Windows or macOS, then **Generate launch command**. SuperX creates a random local connection code automatically; you do not need to invent a password or edit configuration files.
+2. Open **SuperX Settings → Grok Build · Local CLI / ACP → Step-by-step guide**. Select Windows or macOS, then **Generate launch command**. SuperX creates a random local connection code automatically; you do not need to invent a password or edit configuration files.
 3. Copy the generated command into that terminal and run it. It starts the official service on **127.0.0.1**, with an isolated temporary working/configuration directory and restricted discovery settings. Keep the terminal open while using this mode.
 4. Return to SuperX and select **Check connection**. Approve the browser's optional access to the local address if asked. The check confirms the official login, protocol, available models and restricted session without sending a Fact Check or comment prompt.
 5. **Save connection**, choose an available model and reasoning effort, and save settings. Enable SuperX and open X. Local settings initially select **Grok 4.3 / reasoning off (`none`)**, independently of API Key and OAuth choices. The local mode does not use your extension API Key. If the official CLI cannot confirm that model or reasoning level, SuperX keeps the choice visible and asks you to choose a supported option; it does not silently switch to Grok 4.7 or enable reasoning.
@@ -88,14 +92,16 @@ Generated cache entries and saved-history answers/comments are scoped to the sel
 
 ## Acceptance scope
 
-On October 18, 2026, the installed 0.9.11 candidate was exercised in Windows Chrome with a fresh user-approved OAuth authorization:
+On October 18, 2026, the installed 0.9.11 candidate was exercised in Windows Chrome with a fresh user-approved OAuth authorization using the earlier six scopes (`openid profile email offline_access grok-cli:access api:access`):
 
 - Live Grok 4.3 Fact Checks completed, with rendered evidence citations and clickable source links.
 - A live result generated exactly three one-line comment drafts; clicking a draft displayed **Copied**.
 - A separate tab reused a completed result and its tooltip identified the cache hit without new Token usage for that part.
 - The user fully exited and reopened Chrome, confirmed that Settings remained connected without signing in again, and subsequent new, uncached Grok 4.3 checks completed. Cached answers alone were not used to establish restored generation.
 
-The user confirmed that signing out returned the selected OAuth source to its sign-in guidance, did not silently use another source, and retained the saved API Key/Build configuration. This run did not add live API Key inference or a new CLI installation/inference acceptance. macOS installed-browser operation and actual natural token expiry were not tested. UI citation rendering was observed; raw native annotation protocol handling has automated coverage, not a captured live-protocol assertion. These results do not establish every subscription's eligibility, Included billing treatment or service availability.
+The user confirmed that signing out returned the selected OAuth source to its sign-in guidance, did not silently use another source, and retained the saved API Key/Build configuration. The four-scope device-code negotiation first received HTTP 200 without user credentials or inference. In a subsequent installed Windows Chrome run, the user reloaded the updated candidate, signed out and signed in again, confirmed that the official page no longer listed name/avatar or email, and personally approved authorization; SuperX then showed Connected. A new Grok 4.3 Fact Check completed with 23,754 reported Tokens (23,417 input and 337 output), four clickable sources, no cache marker and no authentication error. The model was verified in the live tooltip; this run did not capture the raw request body, token returned-scope field or native annotation payload. Four-scope comments, restart restoration and natural expiry were not newly verified; the six-scope results above remain separate.
+
+This run did not add live API Key inference or a new CLI installation/inference acceptance. macOS installed-browser operation and actual natural token expiry were not tested. UI citation rendering was observed; raw native annotation protocol handling has automated coverage, not a captured live-protocol assertion. These results do not establish every subscription's eligibility, Included billing treatment or service availability.
 
 Windows/macOS command generation, OAuth lifecycle and provider behavior also have automated coverage. Official CLI / ACP real-account installation and device acceptance remain separate checks. Isolated protocol probes and simulated paths are not a full-product live-device pass.
 
@@ -103,17 +109,19 @@ For API failures, open **Local diagnostic log** at the bottom of Settings. It ke
 
 ## 中文快速引导
 
-**Grok 订阅（OAuth）**仅需浏览器，Windows 和 Mac 均无需 API Key、CLI 或额外程序：在「设置 → 连接」选择订阅登录，点击登录 Grok，核对短码后由本人在官方 xAI 授权页确认，再回到 SuperX。页面可能显示 **Grok Build**，这是当前共享 OAuth 客户端的身份，并非 SuperX 独立注册的应用或官方合作声明。账号资格、模型、额度与费用以提供方现行规则为准，不保证所有套餐适用。默认 4.3／关闭推理，不可用时由用户明确改选，不自动换成 4.7。
+新安装默认选择排在首位的 **订阅登录 · The X Subscription**（OAuth），另有 **Grok API Key** 和 **本机 Grok Build · CLI / ACP**。已有来源和各自设置不变；旧设置非空但没有来源，或设置缺失／为空但留有旧凭据时，保留 API 路径。订阅登录仅需浏览器，Windows 和 Mac 均无需 API Key、CLI 或额外程序：在「设置 → 连接」点击登录 Grok，核对短码后由本人在官方 xAI 授权页确认，再回到 SuperX。说明默认折叠。页面可能显示 **Grok Build**，这是共享 OAuth 客户端的身份，并非 SuperX 独立注册的应用或官方合作声明。账号资格、模型、额度与费用以提供方规则为准；三种来源均默认 4.3／关闭推理，不可用时由用户明确改选。
+
+新授权只请求 `openid offline_access grok-cli:access api:access`，不再请求 `profile`／`email`，也不获取或使用账号资料信息。后两项属于标准可选资料权限，见 [OpenID Connect §5.4](https://openid.net/specs/openid-connect-core-1_0.html#ScopeClaims)；`offline_access` 用于请求刷新授权，见 [§11](https://openid.net/specs/openid-connect-core-1_0.html#OfflineAccess)，Grok 两项访问权限由服务商定义并决定实际授予范围，见 [OAuth 2.0 §3.3](https://www.rfc-editor.org/rfc/rfc6749.html#section-3.3)。已有登录不会自动退出，旧授权也不会追溯缩权；旧权限范围的待完成设备登录会清除，需要重新开始。
 
 默认在本机记住登录：刷新 Token 由独立 AES-GCM 密钥加密，密钥在扩展 IndexedDB，访问 Token 只保留于受限会话和内存。无需密码、不使用同步；关闭记住后，浏览器新会话需重新登录。升级新增固定 `auth.x.ai` 主机权限，Chrome 可能要求批准。轮换结果无法确认或保存失败时重新登录，不能反复消费旧刷新 Token。退出 OAuth 不清除 API Key／本机配置或本机帖子访问记录。更换来源／账号后，生成回答、评论与历史中的生成内容按来源及授权身份隔离。
 
-OAuth 已收到 HTTP 200 后的流错误、未完成或超时不自动重放；首次 HTTP 401 拒绝可刷新授权并恢复一次。其他帖子继续处理，手动重新核查前请先查看错误和部分输出。Windows Chrome 已实测新授权、真实 4.3 核查与可点出处、三条评论／复制、跨标签缓存，以及完全退出重开后无需重新授权的新核查请求。用户已实装确认 OAuth 退出正常、保持订阅来源时显示登录引导且不静默回退，原 API Key／Build 已配置项保留；本轮没有新增 API Key 实际推理或 CLI 安装／推理验收。macOS 实装和真实自然到期未测，不能据此保证所有套餐资格或 Included 计费。实测的是界面引用渲染，原生 annotation 原始协议仅有自动化覆盖；不将协议探测或模拟测试表述为完整产品通过。
+OAuth 已收到 HTTP 200 后的流错误、未完成或超时不自动重放；首次 HTTP 401 拒绝可刷新授权并恢复一次。其他帖子继续处理，手动重新核查前请先查看错误和部分输出。此前 Windows Chrome 使用六项权限实测了新授权、真实 4.3 核查与可点出处、三条评论／复制、跨标签缓存、完全退出重开后的新核查，以及退出不回退且原 API Key／Build 配置保留。四项权限先通过无用户凭据／无推理的设备码协商（HTTP 200），随后用户在已安装 Windows Chrome 候选版中重载、退出重登，确认官方页不再显示姓名／头像和邮箱，亲自授权后显示已连接。之后一条新 Grok 4.3 核查完成：23,754 Tokens（输入 23,417、输出 337），四个可点击出处，无缓存标记或认证错误。模型由实时提示框确认，本次未捕获原始请求体、Token 返回的 scope 字段或原生 annotation 协议。四项权限的评论、重启恢复和自然到期尚未新增验收，不能沿用六项权限结果宣称这些项目通过。macOS 实装、真实自然到期、新 API Key 推理和 CLI 安装／推理仍未新增验收；不保证所有套餐资格或 Included 计费，界面引用渲染也不等于已捕获原生 annotation 协议。
 
-**API Key 模式**在 Windows 和 Mac 上都只需浏览器：打开「设置 → 连接 → API Key」，按需展开获取帮助。使用订阅 API 额度时，去 [Grok Dashboard → API Keys](https://grok.com/dashboard/api-keys) 创建 **Grok Inference** 类型而非 Cursor 类型的 Key，按账号要求授权 Chat／模型；使用按量付费 API 时，去 [xAI 控制台](https://console.x.ai/) 创建 Key、购买额度。两种来源均粘贴到同一个 API Key 输入框并保存，不另选来源。默认在本机自动加密记住，无需 SuperX 密码；保存不代表已验证 API 权限或剩余额度。用量和费用请到创建 Key 的账户查看。
+**Grok API Key 模式**在 Windows 和 Mac 上都只需浏览器：打开「设置 → 连接 → Grok API Key」，按需展开获取帮助。使用订阅 API 额度时，去 [Grok Dashboard → API Keys](https://grok.com/dashboard/api-keys) 创建 **Grok Inference** 类型而非 Cursor 类型的 Key，按账号要求授权 Chat／模型；使用按量付费 API 时，去 [xAI 控制台](https://console.x.ai/) 创建 Key、购买额度。两种来源均粘贴到同一个 API Key 输入框并保存，不另选来源。默认在本机自动加密记住，无需 SuperX 密码；保存不代表已验证 API 权限或剩余额度。用量和费用请到创建 Key 的账户查看。
 
 符合条件的订阅 API 使用计入共享周额度；也可在 [xAI 控制台](https://console.x.ai/) 购买按量付费额度。购买普通额度不等于启用额外收费的 Priority Processing，SuperX 当前使用标准处理。三种模式均默认在停止滚动、帖子连续可见满 1 秒后自动分析，设置可改为 0–30 秒，0 秒立即分析；API Key／OAuth 默认共享并发上限 3（可设 1–8），本机模式逐项执行。手动重新分析、评论及浏览历史不受停留等待影响。
 
-**Grok CLI / ACP 模式**无需安装 SuperX 提供的其他程序：先按 [Grok 官方说明](https://github.com/xai-org/grok-build) 安装并用 `grok login` 登录。打开 SuperX 的逐步引导，选择 Windows 或 macOS，生成并复制启动命令；Windows 在 PowerShell、Mac 在终端执行。保持该窗口打开，回到 SuperX 检查连接、保存连接，再选择模型／推理档位并保存设置。检查连接不发送核查问题。
+**本机 Grok Build · CLI / ACP 模式**无需安装 SuperX 提供的其他程序：先按 [Grok 官方说明](https://github.com/xai-org/grok-build) 安装并用 `grok login` 登录。打开 SuperX 的逐步引导，选择 Windows 或 macOS，生成并复制启动命令；Windows 在 PowerShell、Mac 在终端执行。保持该窗口打开，回到 SuperX 检查连接、保存连接，再选择模型／推理档位并保存设置。检查连接不发送核查问题。
 
 启动命令只监听本机地址，自动生成连接码并隔离工作／配置目录。连接码只用于本机官方服务，不是账号密码或 API Key；请勿公开连接码、完整命令或相关截图。SuperX 本机加密保存连接码，不读取或复制官方登录文件。重启电脑后需要重新运行启动命令；按 Ctrl+C 停止服务。浏览器断线不等于官方任务已经停止，若提示停止未确认，请在终端按 Ctrl+C 手动停止。停止后若提示仍在，请从设置重新加载 SuperX，再启动服务并重新检查连接；停止未确认时不会自动重试，也不会转为 API 计费。
 

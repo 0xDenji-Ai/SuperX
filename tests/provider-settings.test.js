@@ -7,11 +7,14 @@ test('provider diagnostics accept only fixed public codes and never arbitrary up
   for(const value of ['PRIVATE_SECRET_CANARY','account-private:spending-limit','xai-'+'a'.repeat(40),'server_error\nPRIVATE','SERVER_ERROR '.repeat(10),{},null])assert.equal(Core.apiFailureProviderCode(value),undefined);
 });
 
-test('API remains the default; retired page automation is not Grok Build',()=>{
-  assert.equal(Core.DEFAULT_SETTINGS.provider,'api');
+test('new installations start with subscription sign-in while legacy and explicit sources are preserved',()=>{
+  assert.equal(Core.DEFAULT_SETTINGS.provider,'oauth');
+  for(const value of [undefined,null,{},[]])assert.equal(Core.normalizeSettings(value).provider,'oauth');
   for(const provider of [undefined,null,'native','invalid','API'])assert.equal(Core.normalizeSettings({provider}).provider,'api');
+  assert.equal(Core.normalizeSettings({language:'ja',apiModel:'grok-4.6'}).provider,'api');
   assert.equal(Core.normalizeSettings({provider:'build'}).provider,'build');
   assert.equal(Core.normalizeSettings({provider:'api'}).provider,'api');
+  assert.equal(Core.normalizeSettings({provider:'oauth'}).provider,'oauth');
 });
 
 test('API and Build share Grok 4.3 without reasoning as defaults and retain independent settings',()=>{

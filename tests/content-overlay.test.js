@@ -419,7 +419,7 @@ function assertRailLine(page,top,thickness,color) {
 }
 
 test('visible posts show Key guidance before credentials are ready without sending analysis', () => {
-  const page=fixture();page.flush();page.intersect();page.tick(2000);
+  const page=fixture();page.port.onMessage.emit({type:'CONFIG',settings:{...core.DEFAULT_SETTINGS,provider:'api'},ready:false,keyState:'missing'});page.flush();page.intersect();page.tick(2000);
   assert.ok(page.extractionCount()>0);assert.equal(page.cards().length,2);
   assert.ok(page.cards().every(card=>card.testShadow.querySelector('.status').textContent===ui.t('status.needsKey','zh-CN')));
   assert.equal(page.port.sent.filter(message=>['ANALYZE','GENERATE_COMMENTS'].includes(message.type)).length,0);
@@ -427,7 +427,7 @@ test('visible posts show Key guidance before credentials are ready without sendi
 });
 
 test('missing Key guidance opens Settings at the Key field without offering unusable generation actions',async()=>{
-  const page=fixture();page.flush();page.intersect();page.tick(2000);
+  const page=fixture();page.port.onMessage.emit({type:'CONFIG',settings:{...core.DEFAULT_SETTINGS,provider:'api'},ready:false,keyState:'missing'});page.flush();page.intersect();page.tick(2000);
   const card=page.cards()[0],settings=card.testShadow.querySelector('.status-settings');
   assert.ok(settings,'The Settings word in onboarding is an interactive control');
   assert.equal(settings.tagName,'BUTTON');assert.equal(settings.type,'button');
@@ -444,7 +444,7 @@ test('missing Key guidance opens Settings at the Key field without offering unus
 });
 
 test('Settings onboarding follows X locale and always opens at the API Key without forcing password focus',async()=>{
-  const page=fixture();page.flush();
+  const page=fixture();page.port.onMessage.emit({type:'CONFIG',settings:{...core.DEFAULT_SETTINGS,provider:'api'},ready:false,keyState:'missing'});page.flush();
   for(const language of ui.SUPPORTED_LANGUAGES||['en','zh-CN','zh-TW','ja','ko','es','fr','de','pt','ar','ru','hi']) {
     page.document.documentElement.lang=language;
     page.mutate([{type:'attributes',attributeName:'lang',target:page.document.documentElement}]);
@@ -453,7 +453,7 @@ test('Settings onboarding follows X locale and always opens at the API Key witho
     assert.equal(status.textContent,ui.t('status.needsKeyAction',language,{settings:ui.t('common.settings',language)}));
     assert.doesNotMatch(status.textContent,/\uFFFC|status\.needsKeyAction/);
   }
-  page.port.onMessage.emit({type:'CONFIG',settings:core.DEFAULT_SETTINGS,ready:false,keyState:'missing'});page.flush();
+  page.port.onMessage.emit({type:'CONFIG',settings:{...core.DEFAULT_SETTINGS,provider:'api'},ready:false,keyState:'missing'});page.flush();
   const card=page.cards()[0],button=card.testShadow.querySelector('.status-settings');
   assert.equal(card.testShadow.querySelector('.status').textContent,ui.t('status.needsKeyAction','hi',{settings:ui.t('common.settings','hi')}));
   button.emit('click');
@@ -483,7 +483,7 @@ test('a credential error arriving before CONFIG offers recovery and blocks stale
 
 test('a legacy consent flag does not block a ready personal API Key',()=>{
   const page=fixture();
-  page.port.onMessage.emit({type:'CONFIG',settings:{...core.DEFAULT_SETTINGS,dwellMs:0},ready:true,consentGranted:false});
+  page.port.onMessage.emit({type:'CONFIG',settings:{...core.DEFAULT_SETTINGS,provider:'api',dwellMs:0},ready:true,consentGranted:false});
   page.flush();page.intersect();page.tick();
   assert.equal(page.cards().length,2);
   assert.ok(page.port.sent.some(message=>message.type==='ANALYZE'));
@@ -492,7 +492,7 @@ test('a legacy consent flag does not block a ready personal API Key',()=>{
 test('unavailable credentials cancel requests and rejects late output without extracting secrets',()=>{
   const page=fixture();page.configure();page.intersect();page.tick();
   const request=page.port.sent.find(message=>message.type==='ANALYZE');assert.ok(request);
-  page.port.onMessage.emit({type:'CONFIG',settings:core.DEFAULT_SETTINGS,ready:false,keyState:'missing'});page.flush();
+  page.port.onMessage.emit({type:'CONFIG',settings:{...core.DEFAULT_SETTINGS,provider:'api'},ready:false,keyState:'missing'});page.flush();
   assert.ok(page.port.sent.some(message=>message.type==='CANCEL_ALL'));
   page.port.onMessage.emit({type:'RESULT',requestId:request.requestId,text:'Late private output'});page.flush();
   assert.ok(page.cards().every(card=>!card.testShadow.querySelector('.answer').textContent.includes('Late private output')));
@@ -570,11 +570,12 @@ test('losing result rail space cancels waiting requests but retains started resu
   const [running,waiting]=page.port.sent.filter(message=>message.type==='ANALYZE');assert.ok(running&&waiting);
   page.port.onMessage.emit({type:'START',requestId:running.requestId});
   page.port.onMessage.emit({type:'UPDATE',requestId:running.requestId,phase:'explain',text:'Already-started explanation'});page.flush();
+  const beforeResize=page.port.sent.length;
   page.resize(950);
   assert.equal(page.displayedCards().length,0);
   assert.ok(page.port.sent.some(message=>message.type==='CANCEL_IF_QUEUED'&&message.requestId===waiting.requestId));
   assert.equal(page.port.sent.some(message=>['CANCEL','CANCEL_IF_QUEUED'].includes(message.type)&&message.requestId===running.requestId),false);
-  assert.equal(page.port.sent.some(message=>message.type==='CANCEL_ALL'),false);
+  assert.equal(page.port.sent.slice(beforeResize).some(message=>message.type==='CANCEL_ALL'),false);
   page.port.onMessage.emit({type:'ERROR',requestId:waiting.requestId,code:'CANCELLED'});page.flush();
   page.port.onMessage.emit({type:'RESULT',requestId:running.requestId,result:{provider:'api',text:'A completed explanation in the hidden rail',sources:[]}});page.flush();
   page.port.onMessage.emit({type:'RESULT',requestId:waiting.requestId,result:{provider:'api',text:'Late cancelled answer',sources:[]}});page.flush();
@@ -2360,7 +2361,7 @@ test('profile-page Settings remains reachable through a direct runtime message a
 });
 
 test('Settings preserves its focus target when falling back to a connected older worker',async()=>{
-  const page=fixture({postCount:1});page.flush();
+  const page=fixture({postCount:1});page.port.onMessage.emit({type:'CONFIG',settings:{...core.DEFAULT_SETTINGS,provider:'api'},ready:false,keyState:'missing'});page.flush();
   page.context.chrome.runtime.sendMessage=async message=>{page.runtimeMessages.push(message);return {ok:false};};
   page.cards()[0].testShadow.querySelector('.status-settings').emit('click');
   await new Promise(resolve=>setImmediate(resolve));page.flush();
@@ -2542,7 +2543,7 @@ test('manual SuperX language relabels the rail without restarting paid explanati
 
 test('manual interface locale also localizes Key onboarding while preserving automatic X observation',()=>{
   const page=fixture({postCount:1});page.document.documentElement.lang='en';page.mutate([{type:'attributes',attributeName:'lang',target:page.document.documentElement}]);
-  const config=interfaceLanguage=>{page.port.onMessage.emit({type:'CONFIG',settings:{...core.DEFAULT_SETTINGS,interfaceLanguage},ready:false});page.flush();};
+  const config=interfaceLanguage=>{page.port.onMessage.emit({type:'CONFIG',settings:{...core.DEFAULT_SETTINGS,provider:'api',interfaceLanguage},ready:false});page.flush();};
   config('ja');const card=page.cards()[0];
   assert.equal(card.testShadow.querySelector('.status-settings').textContent,ui.t('common.settings','ja'));
   assert.equal(card.testShadow.querySelector('.status').textContent,ui.t('status.needsKeyAction','ja',{settings:ui.t('common.settings','ja')}));
@@ -2619,7 +2620,7 @@ test('clearing a Key preserves completed reading and copy actions, then replacem
   const page=fixture({postCount:1});page.configure();const {card,generate}=completeFirst(page);
   generate.emit('click');const comments=page.port.sent.find(message=>message.type==='GENERATE_COMMENTS');
   page.port.onMessage.emit({type:'COMMENT_RESULT',requestId:comments.requestId,comments:suggestions});page.flush();
-  page.port.onMessage.emit({type:'CONFIG',settings:core.DEFAULT_SETTINGS,ready:false,keyState:'missing'});page.flush();
+  page.port.onMessage.emit({type:'CONFIG',settings:{...core.DEFAULT_SETTINGS,provider:'api'},ready:false,keyState:'missing'});page.flush();
   assert.equal(card.testShadow.querySelector('.answer').textContent,'Completed original explanation');
   assert.equal(generate.hidden,true);assert.equal(card.testShadow.querySelector('.retry').hidden,true);
   card.testShadow.querySelectorAll('.comment-copy')[0].emit('click');await new Promise(resolve=>setImmediate(resolve));
@@ -3013,7 +3014,7 @@ test('a Key locked while the worker sleeps prevents deferred comment or analysis
     const {page,request,card}=tokenFixture();tokenResult(page,request,{usage:{total_tokens:40},model:'completed-model'});
     page.port.onDisconnect.emit();page.flush();page.replacePort();
     card.testShadow.querySelector(action==='comments'?'.generate-comments':'.retry').emit('click');
-    page.port.onMessage.emit({type:'CONFIG',settings:core.DEFAULT_SETTINGS,ready:false,keyState:'missing'});page.flush();page.tick();
+    page.port.onMessage.emit({type:'CONFIG',settings:{...core.DEFAULT_SETTINGS,provider:'api'},ready:false,keyState:'missing'});page.flush();page.tick();
     assert.equal(page.port.sent.some(message=>['ANALYZE','GENERATE_COMMENTS'].includes(message.type)),false);
     assert.equal(card.testShadow.querySelector('.answer').textContent,'A completed explanation.');assertTokenCount(card,40);
     assert.equal(card.testShadow.querySelector('.generate-comments').hidden,true);
@@ -3109,12 +3110,12 @@ function retryLabel(card,comments=false){return card.testShadow.querySelector(co
 test('402, 429, capacity and ordinary API failures stay local while newly visible posts continue independently',()=>{
   for(const [code,verificationFailure]of [['API_ERROR',spendingFailure],['RATE_LIMIT',{stage:'verify',code:'RATE_LIMIT',httpStatus:429}],['API_CAPACITY',capacityFailure],['API_ERROR',{stage:'verify',code:'SERVER',httpStatus:503}]]){
     for(const waiting of [true,false]){
-      const page=fixture({postCount:3});page.articles[2].rect={...page.articles[2].rect,top:1200,bottom:1480};page.configure();const [failed,sibling]=page.port.sent.filter(message=>message.type==='ANALYZE');
+      const page=fixture({postCount:3});page.articles[2].rect={...page.articles[2].rect,top:1200,bottom:1480};page.configure();const [failed,sibling]=page.port.sent.filter(message=>message.type==='ANALYZE'),beforeFailure=page.port.sent.length;
       page.port.onMessage.emit({type:'UPDATE',requestId:sibling.requestId,phase:'verify',text:'Sibling findings remain live.',usage:{total_tokens:21}});page.flush();
       if(waiting)retryWait(page,failed,{code,verificationFailure});else{page.port.onMessage.emit({type:'ERROR',requestId:failed.requestId,code,verificationFailure,retryAttempts:5});page.flush();}
       page.articles[2].rect={...page.articles[2].rect,top:650,bottom:930};page.intersect();page.elapse(10000);
       const requests=page.port.sent.filter(message=>message.type==='ANALYZE');assert.equal(requests.length,3,code);assert.equal(requests[2].post.id,'102');assert.equal(page.cards()[1].testShadow.querySelector('.answer').textContent,'Sibling findings remain live.');assertTokenCount(page.cards()[1],21);
-      assert.equal(page.cards()[2].testShadow.querySelector('.status').textContent,ui.t('status.queued','zh-CN'));assert.equal(page.port.sent.some(message=>message.type==='CANCEL_ALL'),false);assert.deepEqual(page.writes,[]);
+      assert.equal(page.cards()[2].testShadow.querySelector('.status').textContent,ui.t('status.queued','zh-CN'));assert.equal(page.port.sent.slice(beforeFailure).some(message=>message.type==='CANCEL_ALL'),false);assert.deepEqual(page.writes,[]);
     }
   }
 });
@@ -3258,7 +3259,7 @@ test('silent worker handshakes use a bounded timeout and backoff without startin
 });
 
 test('returning from Settings wakes a sleeping feed even if the previous snapshot had no available Key',()=>{
-  const page=fixture({postCount:1});page.port.onMessage.emit({type:'CONFIG',settings:core.DEFAULT_SETTINGS,ready:false,keyState:'missing'});page.flush();page.intersect();
+  const page=fixture({postCount:1});page.port.onMessage.emit({type:'CONFIG',settings:{...core.DEFAULT_SETTINGS,provider:'api'},ready:false,keyState:'missing'});page.flush();page.intersect();
   page.port.onDisconnect.emit();page.flush();page.replacePort();
   page.document.hidden=true;page.document.emit('visibilitychange');page.flush();
   page.document.hidden=false;page.document.emit('visibilitychange');page.flush();
@@ -3299,6 +3300,20 @@ test('returning to a failed feed restarts recovery after its reconnect timer exp
 function oauthFeedConfig(page,{settings={},ready=true,credentialIdentity='oauth:account-a',oauthStatus={state:'connected',connected:true,modelAvailable:true},...extra}={}){
   page.port.onMessage.emit({type:'CONFIG',settings:{...core.DEFAULT_SETTINGS,provider:'oauth',dwellMs:0,...settings},ready,credentialIdentity,oauthStatus,...extra});page.flush();
 }
+
+test('a fresh default connection requests Grok sign-in instead of misleading users to add an API Key',async()=>{
+  assert.equal(core.DEFAULT_SETTINGS.provider,'oauth');
+  const page=fixture({postCount:1});page.flush();page.intersect();page.tick(2000);
+  const card=page.cards()[0],expected=ui.t('oauth.needsLogin','zh-CN')+' '+ui.t('common.settings','zh-CN');
+  assert.equal(card.testShadow.querySelector('.status').textContent,expected);
+  page.port.onMessage.emit({type:'CONFIG',settings:core.DEFAULT_SETTINGS,ready:false,keyState:'missing',oauthStatus:{state:'disconnected',connected:false}});page.flush();
+  assert.equal(card.testShadow.querySelector('.status').textContent,expected);
+  assert.notEqual(card.testShadow.querySelector('.status').textContent,ui.t('status.needsKeyAction','zh-CN',{settings:ui.t('common.settings','zh-CN')}));
+  assert.equal(card.testShadow.querySelector('.generate-comments').hidden,true);
+  card.testShadow.querySelector('.status-settings').emit('click');await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(page.runtimeMessages.findLast(message=>message.type==='OPEN_SETTINGS').focus,'oauth');
+  page.tick(20000);assert.equal(page.port.sent.some(message=>['ANALYZE','GENERATE_COMMENTS'].includes(message.type)),false);assert.deepEqual(page.writes,[]);
+});
 
 test('subscription onboarding needs no API Key and every localized Settings action targets OAuth',async()=>{
   const page=fixture({postCount:1});oauthFeedConfig(page,{ready:false,credentialIdentity:'',oauthStatus:{state:'disconnected',connected:false},keyState:'missing'});const card=page.cards()[0];

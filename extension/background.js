@@ -32,7 +32,9 @@ async function initialize() {
   apiDiagnosticsReady=loadAPIDiagnostics();
   const local = await chrome.storage.local.get(['settings','uiLanguage','apiKey','apiKeyEncrypted','apiKeyVault','rememberApiKey','buildConnectionEncrypted','invalidAnswerSource']);
   const session = await chrome.storage.session.get(['quotas','railStates','uiLanguage','apiKey','cache','securityFault','apiBudgetPause','apiCapacityPause']);
-  settings = Core.normalizeSettings(local.settings);
+  const hasSettings=local.settings&&typeof local.settings==='object'&&!Array.isArray(local.settings)&&Object.keys(local.settings).length>0;
+  const legacyConnection=KeyStore.envelopePresent(local.apiKeyEncrypted)||validKey(local.apiKey)||local.apiKeyVault!==undefined||validKey(session.apiKey)||BuildKeyStore.envelopePresent(local.buildConnectionEncrypted);
+  settings = Core.normalizeSettings(!hasSettings&&legacyConnection?{provider:'api'}:local.settings);
   providerFault=local.invalidAnswerSource===true||Boolean(local.settings?.provider&&!['api','build','oauth','native'].includes(local.settings.provider));
   if(providerFault)await chrome.storage.local.set({invalidAnswerSource:true});
   // OAuth restoration cannot delay an independent API Key or local connection.

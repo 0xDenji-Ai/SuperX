@@ -58,11 +58,12 @@
   }
   function renderOAuth(){
     const selected=isOAuth(),pending=["authorizing","restoring","refreshing","logging_out"].includes(oauthStatus.state),authorizing=oauthStatus.state==="authorizing",connected=oauthStatus.connected;
+    $("oauth-intro").hidden=connected||oauthStatus.state==="refreshing";
     for(const id of oauthControlIds)$(id).disabled=busy||oauthActionBusy||!selected;
     $("oauth-login").hidden=authorizing||connected||["restoring","logging_out"].includes(oauthStatus.state);$("oauth-cancel").hidden=!authorizing;$("oauth-logout").hidden=!connected&&oauthStatus.state!=="reauth_required";$("oauth-remember").disabled=busy||oauthActionBusy||!selected||["restoring","logging_out"].includes(oauthStatus.state);
     $("oauth-refresh-models").disabled=busy||oauthActionBusy||!selected||!connected||pending;
     const statusKey=oauthActionError||(oauthStatus.state==="error"?oauthStatus.errorKey||"oauth.unavailable":({idle:"oauth.idle",authorizing:"oauth.authorizing",connected:"oauth.connected",refreshing:"oauth.refreshing",restoring:"oauth.restoring",reauth_required:"oauth.reauthRequired",logging_out:"oauth.loggingOut"})[oauthStatus.state]||"oauth.unavailable");
-    $("oauth-status").textContent=ui.t(statusKey,uiLanguage);$("oauth-status").dataset.state=oauthActionError?"error":oauthStatus.state;
+    $("oauth-status").textContent=ui.t(statusKey,uiLanguage);$("oauth-status").dataset.state=oauthActionError?"error":oauthStatus.state;$("oauth-status").hidden=oauthStatus.state==="idle"&&!oauthActionError;
     const device=oauthStatus.device;$("oauth-device").hidden=!device;$("oauth-user-code").textContent=device?.userCode||"";if(device)$("oauth-official-link").setAttribute("href",device.url);else $("oauth-official-link").removeAttribute("href");
     const model=$("oauth-model").value,available=!Array.isArray(oauthStatus.catalogModels)||oauthStatus.catalogModels.some(entry=>entry.id===model&&entry.available!==false),effort=oauthEfforts(model).includes($("oauth-reasoning-effort").value);
     $("oauth-model-status").textContent=oauthStatus.catalogError?ui.t("oauth.catalogUnavailable",uiLanguage):!available?ui.t("oauth.modelUnavailable",uiLanguage,{model}):!effort?ui.t("options.reasoningInvalid",uiLanguage):"";
@@ -251,9 +252,17 @@
         || !["string","number"].includes(typeof request.nonce) || request.nonce === lastOptionsFocusNonce) return;
       if (busy) { optionsFocusPending = true;return; }
       lastOptionsFocusNonce = request.nonce;
-      // Keep Build navigation on its visible setup controls. Legacy password
-      // focus requests still lead to the API Key field in API mode.
-      const id = isOAuth()?"oauth-login":request.id==="oauth"?"provider":request.id === "build" || isBuild() ? isBuild() ? "check-build" : "provider" : "api-key";
+      // Focus an actionable control for the current connection state. A
+      // restored login must never send focus to its hidden sign-in button.
+      let id=request.id==="oauth"?"provider":request.id === "build" || isBuild() ? isBuild() ? "check-build" : "provider" : "api-key";
+      if(isOAuth()){
+        const modelAvailable=!Array.isArray(oauthStatus.catalogModels)||oauthStatus.catalogModels.some(entry=>entry.id===$("oauth-model").value&&entry.available!==false);
+        if(oauthStatus.connected&&!modelAvailable&&!$("oauth-model").disabled)id="oauth-model";
+        else if(!$("oauth-login").hidden&&!$("oauth-login").disabled)id="oauth-login";
+        else if(oauthStatus.device&&!$("oauth-device").hidden&&$("oauth-official-link").getAttribute("href"))id="oauth-official-link";
+        else id="provider";
+      }
+      if($(id).hidden||$(id).disabled)id="provider";
       await chrome.storage.session.remove("superxOptionsFocus");
       $(id).scrollIntoView?.({block:"center",behavior:"instant"});
       $(id).focus({preventScroll:true});
@@ -420,10 +429,11 @@
     setBusy(true);
     const revision = localeRevision;
     try {
-      const [local,locale] = await Promise.all([
-        chrome.storage.local.get(["settings","uiLanguage"]),
-        chrome.runtime.sendMessage({type:"GET_UI_LANGUAGE"}).catch(() => null),
-      ]);
+      // This reply waits for worker initialization, including legacy-source
+      // migration. Read settings afterwards rather than keeping a pre-migration
+      // storage snapshot that a later Save could write back over the result.
+      const locale=await chrome.runtime.sendMessage({type:"GET_UI_LANGUAGE"}).catch(() => null);
+      const local=await chrome.storage.local.get(["settings","uiLanguage"]);
       // The worker hydrates remembered Keys before replying. Read its current
       // session mirror only afterwards so a browser restart cannot look empty.
       currentSettings = core.normalizeSettings(local.settings);

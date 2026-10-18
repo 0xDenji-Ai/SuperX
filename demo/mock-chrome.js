@@ -3,7 +3,7 @@
   const query=new URLSearchParams(location.search);
   if(query.get('lang'))document.documentElement.lang=GrokFirstUI.normalizeLanguage(query.get('lang'));
   const keyState=query.get('security')==='migration'?'migration':query.get('security')==='missing'?'missing':'ready';
-  const provider=['build','oauth'].includes(query.get('provider'))?query.get('provider'):'api';
+  const provider=['api','build','oauth'].includes(query.get('provider'))?query.get('provider'):XGrokCore.DEFAULT_SETTINGS.provider;
   const config={settings:XGrokCore.normalizeSettings({provider,apiVerification:'only',interfaceLanguage:query.get('interface')||'auto'}),ready:provider==='build'?query.get('permission')!=='denied'&&query.get('build')==='ready':keyState==='ready',keyState,buildStatus:provider==='build'?{installed:query.get('build')!=='missing',permission:query.get('permission')==='denied'?'denied':'granted',...(query.get('permission')==='denied'?{errorCode:'BUILD_PERMISSION_REQUIRED'}:{}),available:query.get('build')==='ready',authenticated:query.get('build')==='ready'?true:undefined}:undefined,used:0,collapsed:false};
   const listeners=[],pending=new Map(),analysisCache=new Map();let calls=0,commentCalls=0,cancelled=0,verificationPreview=false,citationsPreview=false,urlBoundaryPreview=false,markdownPreview=false,verificationFailurePreview='';
   const simulatedVerificationFailures={
@@ -12,12 +12,12 @@
     LANGUAGE_MISMATCH:{code:'LANGUAGE_MISMATCH',stage:'verify',errorCode:'API_LANGUAGE_MISMATCH'}
   };
   const emit=message=>listeners.forEach(fn=>fn(message));
-  const log=()=>{document.getElementById('log').textContent=`模拟分析 ${calls} 次 · 评论 ${commentCalls} 次 · 取消 ${cancelled} 次 · ${provider==='build'?'Grok Build':'xAI API'} · 未连接真实提供方`;};
+  const log=()=>{document.getElementById('log').textContent=`模拟分析 ${calls} 次 · 评论 ${commentCalls} 次 · 取消 ${cancelled} 次 · ${provider==='oauth'?'The X Subscription':provider==='build'?'Grok Build':'Grok API Key'} · 未连接真实提供方`;};
   const configure=()=>emit({type:'CONFIG',...config});
   if(provider==='oauth'){config.oauthStatus={state:query.get('oauth')==='ready'?'connected':'disconnected',connected:query.get('oauth')==='ready',modelAvailable:query.get('oauth')==='ready'};config.ready=config.oauthStatus.connected;}
   function openPreviewSettings(focus) {
     const destination=new URL('/demo/options.html',location.origin);destination.searchParams.set('lang',document.documentElement.lang);
-    destination.searchParams.set('provider',provider);destination.searchParams.set('focus',focus==='build'||provider==='build'?'build':'api-key');
+    destination.searchParams.set('provider',provider);destination.searchParams.set('focus',provider==='oauth'?'oauth':focus==='build'||provider==='build'?'build':'api-key');
     if(keyState==='migration')destination.searchParams.set('security','migration');
     location.assign(destination.href);
   }

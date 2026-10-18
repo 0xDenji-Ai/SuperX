@@ -515,7 +515,7 @@
   ], {
     "en": [
       "Choose an answer source. Enabled visible posts queue for fact-checking immediately.", "Connect with", "Grok API Key",
-      "Grok CLI / ACP · Official local connection", "Connect your Grok API Key", "Open Grok Dashboard → API Keys.",
+      "Grok Build · Local CLI / ACP", "Connect your Grok API Key", "Open Grok Dashboard → API Keys.",
       "Choose Grok Inference as the Key type (the default Cursor type will not work). Allow Chat and, if needed, Models for your chosen model.", "Create the Key, paste it below and save. Existing xAI Console Keys also work.", "Remember Key encrypts it on this device automatically; uncheck it for session-only storage.",
       "API requests go directly from this browser to xAI.", "Usage depends on your account and provider rules. View usage in Grok Dashboard.", "View Grok Dashboard usage",
       "Connect official Grok", "Install official Grok for Windows or macOS and sign in.", "Generate a local launch command and run it in your terminal.",
@@ -537,7 +537,7 @@
     ],
     "zh-CN": [
       "选择回答来源。开启后，进入可视区域的帖子立即排队等待事实核查。", "连接方式", "Grok API Key",
-      "Grok CLI / ACP · 官方本地连接", "连接 Grok API Key", "打开 Grok Dashboard → API Keys。",
+      "本机 Grok Build · CLI / ACP", "连接 Grok API Key", "打开 Grok Dashboard → API Keys。",
       "Key 类型选择 Grok Inference（默认 Cursor 类型不适用）。为所选模型授权 Chat，必要时也授权 Models。", "创建 Key，粘贴到下方并保存。已有的 xAI Console Key 也可使用。", "勾选后自动在此设备上加密保存；取消勾选则仅在当前浏览器会话中保存。",
       "API 请求由此浏览器直接发送至 xAI。", "用量取决于账号和提供方规则，可在 Grok Dashboard 查看。", "查看 Grok Dashboard 用量",
       "连接官方 Grok", "安装适用于 Windows 或 macOS 的官方 Grok，并登录。", "生成本地启动命令，在电脑的终端中运行。",
@@ -559,7 +559,7 @@
     ],
     "zh-TW": [
       "選擇回答來源。開啟後，可見貼文立即排隊等待事實查核。", "連線方式", "Grok API Key",
-      "Grok CLI / ACP · 官方本機連線", "連接 Grok API Key", "開啟 Grok Dashboard → API Keys。",
+      "本機 Grok Build · CLI / ACP", "連接 Grok API Key", "開啟 Grok Dashboard → API Keys。",
       "Key 類型選擇 Grok Inference（預設 Cursor 類型不適用）。為所選模型授權 Chat，必要時也授權 Models。", "建立 Key，貼到下方並儲存。現有的 xAI Console Key 也可使用。", "勾選後自動在此裝置加密儲存；取消勾選則僅在目前瀏覽器工作階段儲存。",
       "API 請求由此瀏覽器直接傳送至 xAI。", "用量取決於帳號及提供者規則，可在 Grok Dashboard 查看。", "查看 Grok Dashboard 用量",
       "連接官方 Grok", "安裝適用於 Windows 或 macOS 的官方 Grok，並登入。", "產生本機啟動命令，在電腦的終端機執行。",
@@ -581,7 +581,7 @@
     ],
     "ja": [
       "回答元を選択してください。有効にすると、表示中の投稿はすぐに事実確認の待ち行列に入ります。", "接続方法", "Grok API Key",
-      "Grok CLI / ACP · 公式ローカル接続", "Grok API Key を接続", "Grok Dashboard → API Keys を開きます。",
+      "Grok Build · ローカル CLI / ACP", "Grok API Key を接続", "Grok Dashboard → API Keys を開きます。",
       "Key の種類は Grok Inference を選びます（初期設定の Cursor は使えません）。選択モデルの Chat と、必要に応じて Models を許可します。", "Key を作成し、下に貼り付けて保存します。既存の xAI Console Key も使えます。", "Key を記憶すると、この端末で自動的に暗号化して保存します。解除すると現在のセッションだけで保持します。",
       "API リクエストはこのブラウザーから xAI に直接送信されます。", "利用量はアカウントと提供元の規則によります。Grok Dashboard で確認できます。", "Grok Dashboard で利用量を確認",
       "公式 Grok に接続", "Windows または macOS 用の公式 Grok をインストールしてログインします。", "起動コマンドを生成し、端末で実行します。",
@@ -603,7 +603,7 @@
     ],
     "ko": [
       "답변 소스를 선택하세요. 활성화하면 보이는 게시물이 즉시 사실 확인 대기열에 추가됩니다.", "연결 방식", "Grok API Key",
-      "Grok CLI / ACP · 공식 로컬 연결", "Grok API Key 연결", "Grok Dashboard → API Keys를 여세요.",
+      "Grok Build · 로컬 CLI / ACP", "Grok API Key 연결", "Grok Dashboard → API Keys를 여세요.",
       "Key 유형으로 Grok Inference를 선택하세요(기본 Cursor 유형은 사용할 수 없음). 선택한 모델에 Chat과 필요한 경우 Models 권한을 허용하세요.", "Key를 만들고 아래에 붙여넣어 저장하세요. 기존 xAI Console Key도 사용할 수 있습니다.", "Key 기억을 선택하면 이 기기에 자동으로 암호화해 저장합니다. 해제하면 현재 세션에만 보관합니다.",
       "API 요청은 이 브라우저에서 xAI로 직접 전송됩니다.", "사용량은 계정과 제공업체 규칙에 따라 다릅니다. Grok Dashboard에서 확인하세요.", "Grok Dashboard 사용량 보기",
       "공식 Grok 연결", "Windows 또는 macOS용 공식 Grok를 설치하고 로그인하세요.", "시작 명령을 생성하고 터미널에서 실행하세요.",
@@ -625,7 +625,7 @@
     ],
     "es": [
       "Elige el origen de las respuestas. Al activarlo, las publicaciones visibles entran inmediatamente en la cola de verificación.", "Conectar mediante", "Grok API Key",
-      "Grok CLI / ACP · Conexión local oficial", "Conecta tu Grok API Key", "Abre Grok Dashboard → API Keys.",
+      "Grok Build · CLI / ACP local", "Conecta tu Grok API Key", "Abre Grok Dashboard → API Keys.",
       "Elige Grok Inference como tipo de Key (el tipo Cursor predeterminado no funciona). Autoriza Chat y, si hace falta, Models para el modelo elegido.", "Crea la Key, pégala abajo y guarda. También sirven las Keys existentes de xAI Console.", "Recordar Key la cifra automáticamente en este dispositivo; desmárcalo para conservarla solo durante la sesión.",
       "Las solicitudes API van directamente de este navegador a xAI.", "El uso depende de tu cuenta y de las reglas del proveedor. Consúltalo en Grok Dashboard.", "Ver uso en Grok Dashboard",
       "Conecta el Grok oficial", "Instala el Grok oficial para Windows o macOS e inicia sesión.", "Genera el comando de inicio local y ejecútalo en la terminal.",
@@ -647,7 +647,7 @@
     ],
     "fr": [
       "Choisissez la source des réponses. Une fois activées, les publications visibles rejoignent immédiatement la file de vérification.", "Connexion avec", "Grok API Key",
-      "Grok CLI / ACP · Connexion locale officielle", "Connecter votre Grok API Key", "Ouvrez Grok Dashboard → API Keys.",
+      "Grok Build · CLI / ACP local", "Connecter votre Grok API Key", "Ouvrez Grok Dashboard → API Keys.",
       "Choisissez le type Grok Inference (le type Cursor par défaut ne fonctionne pas). Autorisez Chat et, si nécessaire, Models pour le modèle choisi.", "Créez la Key, collez-la ci-dessous et enregistrez. Les Keys xAI Console existantes fonctionnent aussi.", "Mémoriser la Key la chiffre automatiquement sur cet appareil ; décochez pour la conserver uniquement durant la session.",
       "Les requêtes API vont directement de ce navigateur à xAI.", "L’utilisation dépend de votre compte et des règles du fournisseur. Consultez-la dans Grok Dashboard.", "Voir l’utilisation dans Grok Dashboard",
       "Connecter le Grok officiel", "Installez le Grok officiel pour Windows ou macOS et connectez-vous.", "Générez la commande locale et exécutez-la dans le terminal.",
@@ -669,7 +669,7 @@
     ],
     "de": [
       "Wähle die Antwortquelle. Aktivierte sichtbare Beiträge werden sofort zur Faktenprüfung eingereiht.", "Verbinden mit", "Grok API Key",
-      "Grok CLI / ACP · Offizielle lokale Verbindung", "Grok API Key verbinden", "Öffne Grok Dashboard → API Keys.",
+      "Grok Build · Lokale CLI / ACP", "Grok API Key verbinden", "Öffne Grok Dashboard → API Keys.",
       "Wähle Grok Inference als Key-Typ (der Standardtyp Cursor funktioniert nicht). Erlaube Chat und bei Bedarf Models für das gewählte Modell.", "Erstelle den Key, füge ihn unten ein und speichere. Vorhandene xAI Console Keys funktionieren ebenfalls.", "Key merken verschlüsselt ihn automatisch auf diesem Gerät; ohne Häkchen bleibt er nur für die Sitzung erhalten.",
       "API-Anfragen gehen direkt von diesem Browser an xAI.", "Die Nutzung hängt von deinem Konto und den Anbieterregeln ab. Sieh sie im Grok Dashboard ein.", "Nutzung im Grok Dashboard ansehen",
       "Offizielles Grok verbinden", "Installiere das offizielle Grok für Windows oder macOS und melde dich an.", "Erzeuge den lokalen Startbefehl und führe ihn im Terminal aus.",
@@ -691,7 +691,7 @@
     ],
     "pt": [
       "Escolha a origem das respostas. Quando ativado, publicações visíveis entram imediatamente na fila de verificação.", "Conectar com", "Grok API Key",
-      "Grok CLI / ACP · Conexão local oficial", "Conecte sua Grok API Key", "Abra Grok Dashboard → API Keys.",
+      "Grok Build · CLI / ACP local", "Conecte sua Grok API Key", "Abra Grok Dashboard → API Keys.",
       "Escolha Grok Inference como tipo de Key (o tipo Cursor padrão não funciona). Autorize Chat e, se necessário, Models para o modelo escolhido.", "Crie a Key, cole abaixo e salve. Keys existentes do xAI Console também funcionam.", "Lembrar Key a criptografa automaticamente neste dispositivo; desmarque para mantê-la apenas durante a sessão.",
       "As solicitações API vão diretamente deste navegador para a xAI.", "O uso depende da sua conta e das regras do provedor. Consulte no Grok Dashboard.", "Ver uso no Grok Dashboard",
       "Conectar o Grok oficial", "Instale o Grok oficial para Windows ou macOS e entre na conta.", "Gere o comando local de início e execute no terminal.",
@@ -713,7 +713,7 @@
     ],
     "ar": [
       "اختر مصدر الإجابات. عند التفعيل، تدخل المنشورات المرئية قائمة التحقق فورًا.", "الاتصال عبر", "Grok API Key",
-      "Grok CLI / ACP · اتصال محلي رسمي", "ربط Grok API Key", "افتح Grok Dashboard ← API Keys.",
+      "Grok Build · CLI / ACP محلي", "ربط Grok API Key", "افتح Grok Dashboard ← API Keys.",
       "اختر Grok Inference لنوع Key (نوع Cursor الافتراضي لا يعمل). اسمح بـ Chat وModels عند الحاجة للنموذج المحدد.", "أنشئ Key والصقها أدناه ثم احفظ. مفاتيح xAI Console الحالية تعمل أيضًا.", "يؤدي تذكّر Key إلى تشفيرها تلقائيًا على هذا الجهاز؛ ألغِ الخيار للاحتفاظ بها خلال الجلسة فقط.",
       "تُرسل طلبات API مباشرة من هذا المتصفح إلى xAI.", "يعتمد الاستخدام على حسابك وقواعد المزوّد. اعرضه في Grok Dashboard.", "عرض الاستخدام في Grok Dashboard",
       "ربط Grok الرسمي", "ثبّت Grok الرسمي لنظام Windows أو macOS وسجّل الدخول.", "أنشئ أمر التشغيل المحلي ونفّذه في الطرفية.",
@@ -735,7 +735,7 @@
     ],
     "ru": [
       "Выберите источник ответов. При включении видимые публикации сразу попадают в очередь проверки.", "Способ подключения", "Grok API Key",
-      "Grok CLI / ACP · Официальное локальное подключение", "Подключите Grok API Key", "Откройте Grok Dashboard → API Keys.",
+      "Grok Build · Локальный CLI / ACP", "Подключите Grok API Key", "Откройте Grok Dashboard → API Keys.",
       "Выберите тип Grok Inference (тип Cursor по умолчанию не подходит). Разрешите Chat и при необходимости Models для выбранной модели.", "Создайте Key, вставьте ниже и сохраните. Существующие Keys из xAI Console тоже подходят.", "Запоминание Key автоматически шифрует её на этом устройстве; снимите флажок для хранения только в текущем сеансе.",
       "Запросы API отправляются из этого браузера напрямую в xAI.", "Использование зависит от аккаунта и правил провайдера. Смотрите его в Grok Dashboard.", "Использование в Grok Dashboard",
       "Подключить официальный Grok", "Установите официальный Grok для Windows или macOS и войдите в аккаунт.", "Создайте команду запуска и выполните её в терминале.",
@@ -757,7 +757,7 @@
     ],
     "hi": [
       "जवाब का स्रोत चुनें। सक्षम होने पर दिखाई देने वाली पोस्ट तुरंत तथ्य-जाँच की कतार में जुड़ती हैं।", "कनेक्ट करने का तरीका", "Grok API Key",
-      "Grok CLI / ACP · आधिकारिक स्थानीय कनेक्शन", "अपनी Grok API Key जोड़ें", "Grok Dashboard → API Keys खोलें।",
+      "Grok Build · स्थानीय CLI / ACP", "अपनी Grok API Key जोड़ें", "Grok Dashboard → API Keys खोलें।",
       "Key के प्रकार में Grok Inference चुनें (डिफ़ॉल्ट Cursor प्रकार काम नहीं करेगा)। चुने गए मॉडल के लिए Chat और ज़रूरत होने पर Models की अनुमति दें।", "Key बनाएं, नीचे पेस्ट करें और सहेजें। मौजूदा xAI Console Keys भी काम करती हैं।", "Key याद रखें चुनने पर यह डिवाइस पर अपने आप एन्क्रिप्ट होती है; केवल वर्तमान सत्र में रखने के लिए इसे हटाएं।",
       "API अनुरोध इस ब्राउज़र से सीधे xAI को भेजे जाते हैं।", "उपयोग आपके खाते और प्रदाता के नियमों पर निर्भर करता है। Grok Dashboard में उपयोग देखें।", "Grok Dashboard में उपयोग देखें",
       "आधिकारिक Grok कनेक्ट करें", "Windows या macOS के लिए आधिकारिक Grok इंस्टॉल करके साइन इन करें।", "स्थानीय लॉन्च कमांड बनाएँ और टर्मिनल में चलाएँ।",
@@ -1110,9 +1110,9 @@
   });
   section(["options.providerOAuth","oauth.title","oauth.intro","oauth.sharedClient","oauth.login","oauth.cancel","oauth.logout","oauth.remember","oauth.rememberHelp","oauth.verifyCode","oauth.copyCode","oauth.openOfficial","oauth.startHint","oauth.idle","oauth.authorizing","oauth.connected","oauth.refreshing","oauth.restoring","oauth.reauthRequired","oauth.loggingOut","oauth.unavailable","oauth.denied","oauth.expired","oauth.networkError","oauth.storageError","oauth.canceled","oauth.billing","oauth.modelHelp","oauth.refreshModels","oauth.modelUnavailable","oauth.catalogUnavailable","oauth.needsLogin","oauth.settingsAction","oauth.verificationHelp","oauth.modeLabel","oauth.usageError","oauth.permissionError","popup.oauthLabel","popup.oauthHint","popup.signInGrok"], {
   "en": [
-    "Grok subscription sign-in",
+    "Sign in · The X Subscription",
     "Connect your Grok subscription",
-    "Sign in on the official Grok page. No API Key, CLI or extra installation is needed.",
+    "Sign in on Grok. No API Key or local setup needed.",
     "The authorization page may show Grok Build because this uses xAI’s shared OAuth client.",
     "Sign in to Grok",
     "Cancel sign-in",
@@ -1137,7 +1137,7 @@
     "Login storage failed. Sign in again; other connections are unchanged.",
     "Sign-in canceled.",
     "Uses eligible subscription allowance. Availability, limits and additional usage follow your Grok account settings.",
-    "Model settings are separate from other connections. Refreshing this list does not send a fact-check request.",
+    "Use the models available to your account.",
     "Refresh available models",
     "{model} is unavailable for this login. Choose an available model.",
     "Could not load available models. Refresh the list when connected.",
@@ -1152,9 +1152,9 @@
     "Sign in to Grok"
   ],
   "zh-CN": [
-    "Grok 订阅登录",
+    "订阅登录 · The X Subscription",
     "连接 Grok 订阅",
-    "在 Grok 官方页面登录，无需 API Key、CLI 或额外安装。",
+    "在 Grok 官方页面登录，无需 API Key 或本机配置。",
     "授权页可能显示 Grok Build，因为此方式使用 xAI 的共享 OAuth 客户端。",
     "登录 Grok",
     "取消登录",
@@ -1179,7 +1179,7 @@
     "登录保存失败，请重新登录；其他连接方式不受影响。",
     "已取消登录。",
     "使用符合条件的订阅额度，具体可用范围、限额及额外用量以 Grok 账户设置为准。",
-    "模型设置与其他连接方式独立保存；刷新列表不会发送事实核查请求。",
+    "使用当前账号可用的模型。",
     "刷新可用模型",
     "当前登录无法使用 {model}，请选择可用模型。",
     "无法获取可用模型，请在连接后刷新列表。",
@@ -1194,9 +1194,9 @@
     "登录 Grok"
   ],
   "zh-TW": [
-    "Grok 訂閱登入",
+    "訂閱登入 · The X Subscription",
     "連接 Grok 訂閱",
-    "在 Grok 官方頁面登入，無須 API Key、CLI 或額外安裝。",
+    "在 Grok 官方頁面登入，無需 API Key 或本機設定。",
     "授權頁可能顯示 Grok Build，因為此方式使用 xAI 的共用 OAuth 用戶端。",
     "登入 Grok",
     "取消登入",
@@ -1221,7 +1221,7 @@
     "登入儲存失敗，請重新登入；其他連線方式不受影響。",
     "已取消登入。",
     "使用符合條件的訂閱額度；可用範圍、限制及額外用量以 Grok 帳戶設定為準。",
-    "模型設定與其他連線方式分開儲存；更新清單不會傳送事實查核請求。",
+    "使用目前帳號可用的模型。",
     "更新可用模型",
     "目前登入無法使用 {model}，請選擇可用模型。",
     "無法取得可用模型，請在連線後更新清單。",
@@ -1236,9 +1236,9 @@
     "登入 Grok"
   ],
   "ja": [
-    "Grok サブスクリプションでログイン",
+    "ログイン · The X Subscription",
     "Grok サブスクリプションを接続",
-    "Grok 公式ページでログインします。API Key、CLI、追加インストールは不要です。",
+    "Grok 公式ページでログイン。API Key やローカル設定は不要です。",
     "xAI の共有 OAuth クライアントを使うため、認証画面に Grok Build と表示される場合があります。",
     "Grok にログイン",
     "ログインをキャンセル",
@@ -1263,7 +1263,7 @@
     "ログインを保存できませんでした。再ログインしてください。他の接続は変わりません。",
     "ログインをキャンセルしました。",
     "対象のサブスクリプション枠を使います。利用範囲、制限、追加利用は Grok アカウントの設定に従います。",
-    "モデル設定は他の接続と別に保存されます。リストの更新では事実確認を送信しません。",
+    "アカウントで利用可能なモデルを選べます。",
     "利用可能なモデルを更新",
     "このログインでは {model} を利用できません。別のモデルを選んでください。",
     "モデルを取得できません。接続後にリストを更新してください。",
@@ -1278,9 +1278,9 @@
     "Grok にログイン"
   ],
   "ko": [
-    "Grok 구독 로그인",
+    "구독 로그인 · The X Subscription",
     "Grok 구독 연결",
-    "Grok 공식 페이지에서 로그인하세요. API Key, CLI 또는 추가 설치가 필요 없습니다.",
+    "Grok 공식 페이지에서 로그인하세요. API Key나 로컬 설정이 필요 없습니다.",
     "xAI의 공유 OAuth 클라이언트를 사용하므로 승인 페이지에 Grok Build가 표시될 수 있습니다.",
     "Grok 로그인",
     "로그인 취소",
@@ -1305,7 +1305,7 @@
     "로그인 저장에 실패했습니다. 다시 로그인하세요. 다른 연결은 유지됩니다.",
     "로그인이 취소되었습니다.",
     "적용 가능한 구독 사용량을 사용합니다. 범위, 한도 및 추가 사용량은 Grok 계정 설정에 따릅니다.",
-    "모델 설정은 다른 연결과 별도로 저장됩니다. 목록 갱신은 사실 확인 요청을 보내지 않습니다.",
+    "계정에서 사용 가능한 모델을 선택하세요.",
     "사용 가능한 모델 새로고침",
     "이 로그인에서 {model}을 사용할 수 없습니다. 사용 가능한 모델을 선택하세요.",
     "모델을 불러올 수 없습니다. 연결 후 목록을 새로고침하세요.",
@@ -1320,9 +1320,9 @@
     "Grok 로그인"
   ],
   "es": [
-    "Inicio de sesión con suscripción Grok",
+    "Iniciar sesión · The X Subscription",
     "Conecta tu suscripción Grok",
-    "Inicia sesión en la página oficial de Grok. No necesitas API Key, CLI ni otra instalación.",
+    "Inicia sesión en Grok. Sin API Key ni configuración local.",
     "La autorización puede mostrar Grok Build porque usa el cliente OAuth compartido de xAI.",
     "Iniciar sesión en Grok",
     "Cancelar inicio",
@@ -1347,7 +1347,7 @@
     "No se pudo guardar la sesión. Inicia sesión de nuevo; las demás conexiones no cambian.",
     "Inicio de sesión cancelado.",
     "Usa la cuota de suscripción elegible. Disponibilidad, límites y uso adicional dependen de tu cuenta Grok.",
-    "Los modelos se guardan por conexión. Actualizar la lista no envía una solicitud de verificación.",
+    "Usa los modelos disponibles en tu cuenta.",
     "Actualizar modelos disponibles",
     "{model} no está disponible para esta sesión. Elige un modelo disponible.",
     "No se pudieron cargar los modelos. Actualiza la lista cuando estés conectado.",
@@ -1362,9 +1362,9 @@
     "Iniciar sesión en Grok"
   ],
   "fr": [
-    "Connexion par abonnement Grok",
+    "Se connecter · The X Subscription",
     "Connecter votre abonnement Grok",
-    "Connectez-vous sur la page officielle de Grok. Aucune API Key, CLI ou installation supplémentaire.",
+    "Connectez-vous sur Grok. Sans API Key ni configuration locale.",
     "La page peut afficher Grok Build, car le client OAuth partagé de xAI est utilisé.",
     "Se connecter à Grok",
     "Annuler la connexion",
@@ -1389,7 +1389,7 @@
     "Échec de l’enregistrement. Reconnectez-vous ; les autres connexions restent inchangées.",
     "Connexion annulée.",
     "Utilise le quota d’abonnement éligible. Disponibilité, limites et usage supplémentaire dépendent de votre compte Grok.",
-    "Les modèles sont enregistrés par connexion. Actualiser la liste ne lance aucune vérification.",
+    "Utilisez les modèles disponibles pour votre compte.",
     "Actualiser les modèles disponibles",
     "{model} est indisponible pour cette connexion. Choisissez un modèle disponible.",
     "Impossible de charger les modèles. Actualisez la liste une fois connecté.",
@@ -1404,9 +1404,9 @@
     "Se connecter à Grok"
   ],
   "de": [
-    "Mit Grok-Abonnement anmelden",
+    "Anmelden · The X Subscription",
     "Grok-Abonnement verbinden",
-    "Melde dich auf der offiziellen Grok-Seite an. Kein API Key, keine CLI und keine zusätzliche Installation nötig.",
+    "Auf Grok anmelden. Kein API Key und keine lokale Einrichtung nötig.",
     "Die Freigabeseite kann Grok Build anzeigen, da der gemeinsame OAuth-Client von xAI verwendet wird.",
     "Bei Grok anmelden",
     "Anmeldung abbrechen",
@@ -1431,7 +1431,7 @@
     "Anmeldung konnte nicht gespeichert werden. Erneut anmelden; andere Verbindungen bleiben unverändert.",
     "Anmeldung abgebrochen.",
     "Nutzt berechtigtes Abonnementkontingent. Verfügbarkeit, Grenzen und Zusatznutzung richten sich nach deinem Grok-Konto.",
-    "Modelle werden je Verbindung gespeichert. Die Listenaktualisierung startet keine Faktenprüfung.",
+    "Nutze die für dein Konto verfügbaren Modelle.",
     "Verfügbare Modelle aktualisieren",
     "{model} ist für diese Anmeldung nicht verfügbar. Wähle ein verfügbares Modell.",
     "Modelle konnten nicht geladen werden. Liste nach der Verbindung aktualisieren.",
@@ -1446,9 +1446,9 @@
     "Bei Grok anmelden"
   ],
   "pt": [
-    "Entrar com assinatura Grok",
+    "Entrar · The X Subscription",
     "Conectar sua assinatura Grok",
-    "Entre na página oficial do Grok. Não precisa de API Key, CLI ou outra instalação.",
+    "Entre no Grok. Sem API Key nem configuração local.",
     "A autorização pode mostrar Grok Build porque usa o cliente OAuth compartilhado da xAI.",
     "Entrar no Grok",
     "Cancelar entrada",
@@ -1473,7 +1473,7 @@
     "Falha ao salvar o login. Entre novamente; outras conexões não mudam.",
     "Login cancelado.",
     "Usa a franquia elegível da assinatura. Disponibilidade, limites e uso adicional seguem sua conta Grok.",
-    "Os modelos são salvos por conexão. Atualizar a lista não envia uma verificação.",
+    "Use os modelos disponíveis na sua conta.",
     "Atualizar modelos disponíveis",
     "{model} não está disponível para este login. Escolha um modelo disponível.",
     "Não foi possível carregar os modelos. Atualize a lista após conectar.",
@@ -1488,9 +1488,9 @@
     "Entrar no Grok"
   ],
   "ar": [
-    "تسجيل الدخول باشتراك Grok",
+    "تسجيل الدخول · The X Subscription",
     "ربط اشتراك Grok",
-    "سجّل الدخول في صفحة Grok الرسمية. لا حاجة إلى API Key أو CLI أو تثبيت إضافي.",
+    "سجّل الدخول على Grok. لا حاجة إلى API Key أو إعداد محلي.",
     "قد تظهر صفحة التفويض باسم Grok Build لاستخدام عميل OAuth المشترك من xAI.",
     "تسجيل الدخول إلى Grok",
     "إلغاء تسجيل الدخول",
@@ -1515,7 +1515,7 @@
     "تعذّر حفظ تسجيل الدخول. أعد الدخول؛ الاتصالات الأخرى لا تتغير.",
     "أُلغي تسجيل الدخول.",
     "يستخدم حصة الاشتراك المؤهلة. يتبع التوفر والحدود والاستخدام الإضافي إعدادات حساب Grok.",
-    "تُحفظ النماذج لكل اتصال على حدة. تحديث القائمة لا يرسل طلب تحقق.",
+    "استخدم النماذج المتاحة لحسابك.",
     "تحديث النماذج المتاحة",
     "النموذج {model} غير متاح لهذا الدخول. اختر نموذجًا متاحًا.",
     "تعذّر تحميل النماذج. حدّث القائمة بعد الاتصال.",
@@ -1530,9 +1530,9 @@
     "تسجيل الدخول إلى Grok"
   ],
   "ru": [
-    "Вход по подписке Grok",
+    "Войти · The X Subscription",
     "Подключить подписку Grok",
-    "Войдите на официальной странице Grok. API Key, CLI и дополнительная установка не нужны.",
+    "Войдите на Grok. API Key и локальная настройка не нужны.",
     "Страница разрешения может показывать Grok Build: используется общий OAuth-клиент xAI.",
     "Войти в Grok",
     "Отменить вход",
@@ -1557,7 +1557,7 @@
     "Не удалось сохранить вход. Войдите снова; другие подключения не изменены.",
     "Вход отменён.",
     "Используется доступный лимит подписки. Доступ, ограничения и дополнительное использование зависят от настроек Grok.",
-    "Модели сохраняются отдельно для каждого подключения. Обновление списка не запускает проверку.",
+    "Используйте модели, доступные вашему аккаунту.",
     "Обновить доступные модели",
     "Модель {model} недоступна для этого входа. Выберите доступную модель.",
     "Не удалось загрузить модели. Обновите список после подключения.",
@@ -1572,9 +1572,9 @@
     "Войти в Grok"
   ],
   "hi": [
-    "Grok सदस्यता से साइन इन",
+    "साइन इन · The X Subscription",
     "अपनी Grok सदस्यता जोड़ें",
-    "Grok के आधिकारिक पेज पर साइन इन करें। API Key, CLI या अतिरिक्त इंस्टॉलेशन की ज़रूरत नहीं।",
+    "Grok पर साइन इन करें। API Key या स्थानीय सेटअप की ज़रूरत नहीं।",
     "xAI के साझा OAuth क्लाइंट के कारण अनुमति पेज पर Grok Build दिख सकता है।",
     "Grok में साइन इन",
     "साइन इन रद्द करें",
@@ -1599,7 +1599,7 @@
     "लॉगिन सहेजा नहीं जा सका। फिर साइन इन करें; दूसरे कनेक्शन नहीं बदलते।",
     "साइन इन रद्द हुआ।",
     "पात्र सदस्यता सीमा का उपयोग होता है। उपलब्धता, सीमाएँ और अतिरिक्त उपयोग Grok खाते की सेटिंग के अनुसार हैं।",
-    "मॉडल हर कनेक्शन के लिए अलग सहेजे जाते हैं। सूची रीफ़्रेश करने से तथ्य-जाँच अनुरोध नहीं जाता।",
+    "अपने खाते के लिए उपलब्ध मॉडल चुनें।",
     "उपलब्ध मॉडल रीफ़्रेश करें",
     "इस लॉगिन के लिए {model} उपलब्ध नहीं। उपलब्ध मॉडल चुनें।",
     "मॉडल लोड नहीं हुए। कनेक्ट होने पर सूची रीफ़्रेश करें।",
@@ -1612,6 +1612,44 @@
     "Grok सदस्यता",
     "Grok खाते की सीमा और उपयोग सेटिंग का उपयोग करता है।",
     "Grok में साइन इन"
+  ]
+});
+  section(["oauth.authorizationDetails"], {
+  "en": [
+    "About authorization"
+  ],
+  "zh-CN": [
+    "关于授权"
+  ],
+  "zh-TW": [
+    "關於授權"
+  ],
+  "ja": [
+    "認証について"
+  ],
+  "ko": [
+    "승인 안내"
+  ],
+  "es": [
+    "Sobre la autorización"
+  ],
+  "fr": [
+    "À propos de l’autorisation"
+  ],
+  "de": [
+    "Zur Autorisierung"
+  ],
+  "pt": [
+    "Sobre a autorização"
+  ],
+  "ar": [
+    "حول التفويض"
+  ],
+  "ru": [
+    "Об авторизации"
+  ],
+  "hi": [
+    "अनुमति के बारे में"
   ]
 });
   const aliases = {'common.auto':'lang.auto','common.failed':'status.failed','tooltip.collapse':'common.collapse','tooltip.expand':'common.expand'};

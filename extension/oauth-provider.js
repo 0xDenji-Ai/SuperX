@@ -1,7 +1,7 @@
 /* SuperX: device authorization and rotating tokens stay in the trusted worker. */
 (function(root){
   'use strict';
-  const CONFIG=Object.freeze({clientId:'b1a00492-073a-47ea-816f-4c329264a828',scope:'openid profile email offline_access grok-cli:access api:access',
+  const CONFIG=Object.freeze({clientId:'b1a00492-073a-47ea-816f-4c329264a828',scope:'openid offline_access grok-cli:access api:access',
     deviceEndpoint:'https://auth.x.ai/oauth2/device/code',tokenEndpoint:'https://auth.x.ai/oauth2/token',revokeEndpoint:'https://auth.x.ai/oauth2/revoke',modelsEndpoint:'https://api.x.ai/v1/models'});
   const STORAGE_KEY='superxOAuthCredential',ALARMS=Object.freeze({poll:'SUPERX_OAUTH_DEVICE_POLL',refresh:'SUPERX_OAUTH_REFRESH'});
   const MAX_TOKEN=16384,MAX_JSON=1024*1024,UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -179,7 +179,7 @@
       }catch(error){if(current(ticket)){catalogErrorCode='OAUTH_CATALOG_UNAVAILABLE';changed();}}return status();})();
       catalogFlight=flight;try{return await waitSignal(flight.promise,signal);}finally{if(catalogFlight===flight)catalogFlight=null;}
     }
-    async function saveDevice(ticket){return serial(ticket,async()=>{if(!device)throw failure('OAUTH_CANCELLED');try{const local={schema:1,kind:'device',credentialId:device.id,remember};await writeVerified(chrome.storage.local,local,ticket);await writeVerified(chrome.storage.session,{...local,device:{...device}},ticket);}catch(error){if(!current(ticket))throw error;throw failure('OAUTH_STORAGE_ERROR');}});}
+    async function saveDevice(ticket){return serial(ticket,async()=>{if(!device)throw failure('OAUTH_CANCELLED');try{const local={schema:1,kind:'device',credentialId:device.id,remember,scope:CONFIG.scope};await writeVerified(chrome.storage.local,local,ticket);await writeVerified(chrome.storage.session,{...local,device:{...device}},ticket);}catch(error){if(!current(ticket))throw error;throw failure('OAUTH_STORAGE_ERROR');}});}
     async function poll(){
       const ticket=generation;if(pollFlight?.ticket===ticket)return pollFlight.promise;if(!device||!current(ticket))return status();
       const flight={ticket,promise:null};flight.promise=(async()=>{
@@ -218,6 +218,9 @@
           if(!local||local.kind==='signed_out'){remember=typeof local?.remember==='boolean'?local.remember:true;state='disconnected';try{await alarmsClear(ticket);}catch{}return status();}
           if(local.kind==='blocked'){state='reauth_required';errorCode=Object.hasOwn(MESSAGES,local.errorCode)?local.errorCode:'OAUTH_REAUTH_REQUIRED';try{await alarmsClear(ticket);}catch{}return status();}
           if(local.kind==='device'){
+            // An issued challenge keeps its original requested permissions.
+            // Only a new user action may replace a legacy wider-scope login.
+            if(local.scope!==CONFIG.scope||session?.scope!==CONFIG.scope){remember=local.remember!==false;await clearStored(ticket);state='disconnected';errorCode='';return status();}
             const saved=session?.device;if(local.schema===1&&UUID.test(local.credentialId||'')&&session?.schema===1&&session.kind==='device'&&session.credentialId===local.credentialId&&saved&&saved.id===local.credentialId&&saved.polling===false&&token(saved.deviceCode)&&typeof saved.userCode==='string'&&/^[A-Za-z0-9-]{4,32}$/.test(saved.userCode)&&finiteTime(saved.expiresAt)&&Number.isSafeInteger(saved.intervalMs)&&saved.intervalMs>=1000&&saved.intervalMs<=3600000&&finiteTime(saved.nextPollAt)){
               if(saved.expiresAt<=now()){await block('OAUTH_DEVICE_EXPIRED',ticket);return status();}
               const complete=verificationUri(saved.verificationUriComplete,saved.userCode,{complete:true});if(!privateDeviceCode(saved.deviceCode,saved.userCode,complete))throw failure('OAUTH_DEVICE_INVALID');

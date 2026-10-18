@@ -225,7 +225,7 @@
     return ['preset', 'custom'].includes(settings?.explanationMode) ? settings.explanationMode : 'preset';
   }
   const DEFAULT_SETTINGS = Object.freeze({
-    provider: 'api',
+    provider: 'oauth',
     enabled: true,
     analysisDefaultsVersion: 1,
     dwellMs: 1000,
@@ -310,7 +310,10 @@
   }
 
   function normalizeSettings(input) {
-    const value = input && typeof input === 'object' ? input : {};
+    const value = input && typeof input === 'object' && !Array.isArray(input) ? input : {};
+    // New installations start with subscription sign-in. Nonempty legacy
+    // settings without a source keep their previous API default on upgrade.
+    const defaultProvider = Object.keys(value).length ? 'api' : DEFAULT_SETTINGS.provider;
     const language = typeof value.language === 'string' ? value.language.trim() : '';
     const interfaceLanguage = typeof value.interfaceLanguage === 'string' ? value.interfaceLanguage.trim().toLowerCase() : '';
     const model = typeof value.apiModel === 'string' ? value.apiModel.trim() : '';
@@ -328,7 +331,7 @@
     const concurrency=boundedNumber(value.apiConcurrency,DEFAULT_SETTINGS.apiConcurrency,1,8);
     return {
       // The retired page automation provider is unrelated to Grok Build.
-      provider: ['build','oauth'].includes(value.provider) ? value.provider : 'api',
+      provider: ['api','build','oauth'].includes(value.provider) ? value.provider : defaultProvider,
       enabled: typeof value.enabled === 'boolean' ? value.enabled : DEFAULT_SETTINGS.enabled,
       // Upgrade former zero-delay/default-four records once. The versioned
       // output preserves later explicit selections of zero or four.

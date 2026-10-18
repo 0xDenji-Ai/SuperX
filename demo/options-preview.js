@@ -23,7 +23,7 @@
   if(query.has('oauth')){const selected={pending:'awaiting_authorization',ready:'connected',reauth:'reauth_required'}[query.get('oauth')]||query.get('oauth');setOAuthState(selected);}
   const previewSession={};
   let buildConfigured=query.get('saved')==='0'?false:query.get('build')==='ready',buildPort=2419;
-  if(query.has('focus'))previewSession.superxOptionsFocus={id:query.get('focus')==='build'?'build':'api-key',nonce:'local-preview-focus'};
+  if(query.has('focus'))previewSession.superxOptionsFocus={id:['build','oauth'].includes(query.get('focus'))?query.get('focus'):'api-key',nonce:'local-preview-focus'};
   const buildStatus=()=>({connected:query.get('build')==='ready',available:query.get('build')==='ready',authenticated:query.get('build')==='ready'?true:query.get('build')==='login'?false:undefined,ready:query.get('build')==='ready',errorCode:query.get('build')==='login'?'BUILD_LOGIN_REQUIRED':query.get('build')==='ready'?undefined:'BUILD_UNAVAILABLE',version:'preview',...(query.get('build')==='models'?{modelCatalog:[{id:'grok-4.7',available:true,efforts:['low','high']},{id:'grok-preview-fast',available:true,efforts:['low','high']}]}:{})});
   const security=()=>({keyState:previewKey?'ready':state.migration?'migration':'missing',remember:state.rememberApiKey,hasSavedKey:state.hasSavedKey});
   const banner=document.createElement('div');banner.id='preview-note';
@@ -33,7 +33,7 @@
   localeLabel.style.cssText='display:flex;align-items:center;gap:6px;margin:0;font:inherit;color:inherit';
   const localeSelect=document.createElement('select');localeSelect.id='preview-locale';
   localeSelect.style.cssText='width:auto;min-height:28px;padding:3px 6px;font:inherit';
-  for(const [value,label] of [['zh-CN','简体中文'],['en','English'],['ja','日本語'],['de','Deutsch'],['ar','العربية']]){
+  for(const {value,label} of GrokFirstUI.INTERFACE_LANGUAGES.filter(item=>item.value!=='auto')){
     const option=document.createElement('option');option.value=value;option.textContent=label;localeSelect.append(option);
   }
   localeSelect.value=state.uiLanguage;
@@ -51,7 +51,7 @@
   window.chrome={
     permissions:{request:()=>Promise.resolve(query.get('permission')!=='denied')},
     runtime:{
-      getManifest:()=>({version:'0.9.10-preview'}),reload:()=>location.reload(),
+      getManifest:()=>({version:'0.9.11-preview'}),reload:()=>location.reload(),
       onMessage:{addListener:fn=>runtimeListeners.push(fn)},
       async sendMessage(message){
         if(message.type==='GET_UI_LANGUAGE')return {ok:true,language:state.uiLanguage};

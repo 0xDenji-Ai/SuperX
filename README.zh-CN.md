@@ -8,7 +8,7 @@ SuperX 是 Chrome / Edge 扩展，通过 Grok 订阅登录、自己的 API Key �
 
 **当前源码候选：0.9.11，尚未发布。** 此候选暂时移除解释步骤，直接进行 Fact Check，优先提供简洁结论、相关证据和出处，避免在右栏复述左侧已有的原帖。同时区分中间过程、工具指令和最终回答；没有收到面向读者的回答时，提示核查未完成。下方 Chrome 商店及 GitHub 稳定版下载仍为包含解释功能的 **0.7.26**。「功能」「设置与运行方式」以下描述的是 0.9.11 候选行为。
 
-0.9.11 候选包含三种独立连接方式：**Grok 订阅（OAuth）**通过官方授权页登录，无需 CLI 或额外程序；**Grok API Key**继续作为默认方式；**Grok CLI／ACP**连接本机运行的官方服务。三种均提供 **Windows 和 macOS** 引导，保留语言同步、自定义指令、评论、历史及 Token／模型信息。已有 API 和本机设置保留，不会自动切换来源或绕过额度。见 [连接引导](docs/CONNECTIONS.md)。Windows Chrome 已实测新的 OAuth 授权、真实核查、评论／复制、跨标签缓存复用，以及完全重启 Chrome 后无需重新授权的新请求；用户也确认退出正常、已有 API／本机配置保留。剩余项目见 [验收范围](docs/CONNECTIONS.md#acceptance-scope)。
+0.9.11 候选依次提供三种独立连接方式：**订阅登录 · The X Subscription**（浏览器内 OAuth，新安装默认）、**Grok API Key**、**本机 Grok Build · CLI / ACP**。三种均提供 **Windows 和 macOS** 引导，保留语言同步、自定义指令、评论、历史及 Token／模型信息。已有来源和设置保留；旧设置非空但没有来源选项，或设置缺失／为空而留有旧版凭据时，继续使用 API 路径。不会自动切换来源或绕过额度。见 [连接引导](docs/CONNECTIONS.md)。此前 Windows Chrome 验收使用六项授权范围。新的四项权限现已由用户确认官方页不再显示姓名／头像和邮箱，重新授权后已连接；随后真实 Grok 4.3 核查及可点击出处通过。四项权限的重启恢复和自然到期仍待单独验收。见 [验收范围](docs/CONNECTIONS.md#acceptance-scope)。
 
 使用 Manifest V3 和原生 JavaScript，浏览器 API 模式安装无需构建或下载依赖。目前为 Beta；X 页面结构变化、模型表现与 API 可用性会影响结果。SuperX 是独立项目，与 X 或 xAI 没有隶属关系。
 
@@ -68,9 +68,11 @@ Chrome 优先从商店安装：
 
 ## Grok 订阅登录——仅候选版
 
-在「设置 → 连接」选择「Grok 订阅（OAuth）」，点击「登录 Grok」。核对短码后，由你本人在官方 xAI 授权页确认权限，再返回 SuperX。Windows 和 macOS 均无需填写 API Key、安装 CLI 或额外 SuperX 程序。登录成功后只加载账号模型目录，不发送测试核查；三种来源分别默认 **Grok 4.3／关闭推理**，账号不提供该模型时，需要你明确选择可用模型，不会自动改成 4.7。
+新安装在「设置 → 连接」默认选择「订阅登录 · The X Subscription」，点击「登录 Grok」。核对短码后，由你本人在官方 xAI 授权页确认权限，再返回 SuperX。Windows 和 macOS 均无需填写 API Key、安装 CLI 或额外 SuperX 程序。登录成功后只加载账号模型目录，不发送测试核查；三种来源分别默认 **Grok 4.3／关闭推理**，账号不提供该模型时，需要你明确选择可用模型，不会自动改成 4.7。
 
 授权页可能显示 **Grok Build**，因为当前使用 xAI 共享的公开 OAuth 客户端，并非单独注册的 SuperX 授权身份，也不表示官方合作。套餐资格、模型、额度和费用以提供方现行规则及你的账号为准，不保证所有订阅均可用。具体流程见 [连接引导](docs/CONNECTIONS.md#grok-subscription-oauth--browser-only)。
+
+新登录只请求 `openid offline_access grok-cli:access api:access`，不再请求 `profile` 或 `email`，扩展不获取或使用账号资料信息。已有登录不会自动退出；缩小新请求范围不会追溯缩减旧授权。配置说明默认折叠，需要时再展开。
 
 默认勾选「在本机记住登录」。可轮换的刷新 Token 使用独立 AES-GCM 密钥加密保存，加密密钥位于扩展 IndexedDB；访问 Token 仅保存在受限浏览器会话存储和内存中。无需 SuperX 密码，不使用浏览器同步。关闭记住登录后，本次登录只保留到浏览器会话结束。刷新结果无法确认或安全保存时，需要重新登录。退出 OAuth 不会清除已有 API Key 或本机 Grok 配置。详见 [隐私说明](PRIVACY.md)。
 

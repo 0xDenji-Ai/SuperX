@@ -453,9 +453,9 @@ test('native parent identity tolerates preview hydration but distinguishes edits
   assert.notEqual(core.nativePostIdentity(post),core.nativePostIdentity({...post,id:'999',url:'https://x.com/person/status/999'}));
 });
 
-test('API defaults use bounded parallelism and only Fact Check while preserving explicit model choices',()=>{
+test('subscription defaults share bounded parallelism and Fact Check while preserving explicit API choices',()=>{
   const settings=core.normalizeSettings({});
-  assert.equal(settings.provider,'api');assert.equal(settings.apiModel,'grok-4.3');
+  assert.equal(settings.provider,'oauth');assert.equal(settings.apiModel,'grok-4.3');
   assert.equal(settings.apiConcurrency,3);assert.equal(settings.apiVerification,'only');
   assert.equal(settings.dwellMs,1000);assert.equal(settings.cooldownMs,0);assert.equal(settings.maxPerSession,0);
   assert.equal(core.normalizeSettings({provider:'native'}).provider,'api');
@@ -517,7 +517,7 @@ test('reasoning migration keeps previous model defaults and preserves language, 
     assert.equal(Object.hasOwn(settings,'apiKey'),false);assert.equal(Object.hasOwn(settings,'rememberApiKey'),false);
     assert.deepEqual(original,snapshot,'Migration must not mutate the caller or credential storage');
   }
-  assert.deepEqual(core.normalizeSettings({apiModel:'invalid model',apiReasoningEffort:'high'}),{...core.DEFAULT_SETTINGS,apiReasoningEffort:'high'});
+  assert.deepEqual(core.normalizeSettings({apiModel:'invalid model',apiReasoningEffort:'high'}),{...core.DEFAULT_SETTINGS,provider:'api',apiReasoningEffort:'high'});
 });
 
 test('default and explicit infinite queues retain every visible post beyond the old capacity', () => {
@@ -686,7 +686,10 @@ function assertUIRememberedKey(fixture,apiKey) {
   assert.equal(JSON.stringify(fixture.local).includes(apiKey),false,'Local data contains no raw API Key');
 }
 
-function uiPageFixture(file, settings=core.DEFAULT_SETTINGS, storage={}, environment={}) {
+// These legacy credential/setup cases explicitly exercise API mode.
+const API_UI_SETTINGS=Object.freeze({...core.DEFAULT_SETTINGS,provider:'api'});
+
+function uiPageFixture(file, settings=API_UI_SETTINGS, storage={}, environment={}) {
   const html=fs.readFileSync(path.join(__dirname,'../extension',`${file}.html`),'utf8');
   const nodes=[];const ids=new Map();
   for(const tag of html.matchAll(/<[A-Za-z][\w-]*\b([^>]*)>/g)) {
@@ -811,7 +814,7 @@ test('changing the Settings model keeps a supported effort and falls back only w
   model.value='grok-4.3';model.listeners.change();assert.equal(effort.value,'none');
   model.value='grok-4.5';model.listeners.change();assert.equal(effort.value,'low');
   model.value='grok-4.3';model.listeners.change();assert.equal(effort.value,'low','A supported explicit choice survives a model switch');
-  assert.equal(fixture.local.settings,core.DEFAULT_SETTINGS);
+  assert.equal(fixture.local.settings,API_UI_SETTINGS);
 });
 
 test('every model and effort choice persists through Save and reopening without resending an untouched Key',async()=>{
@@ -838,7 +841,7 @@ test('saved legacy model IDs stay selectable without a free-form field or silent
   for(const [apiModel,expectedEfforts,expectedEffort] of [
     ['saved-custom-id',['auto'],'auto'],['grok-4.3-latest',['none','low','medium','high'],'none']
   ]) {
-    const fixture=uiPageFixture('options',{...core.DEFAULT_SETTINGS,apiModel});await settleUI();await settleUI();
+    const fixture=uiPageFixture('options',{...API_UI_SETTINGS,apiModel});await settleUI();await settleUI();
     const model=fixture.ids.get('api-model'),effort=fixture.ids.get('api-reasoning-effort');
     assert.equal(model.value,apiModel);assert.equal(model.children.length,5);
     assert.equal(model.children.at(-1).value,apiModel);
@@ -870,7 +873,7 @@ test('injected unknown models and unsupported reasoning values are rejected befo
     const form=fixture.ids.get('settings-form');await form.listeners.submit({preventDefault(){},currentTarget:form});
     assert.equal(fixture.ids.get('status').textContent,ui.t(invalid.error,'en'));
     assert.equal(fixture.ids.get(invalid.focus).focused,true);assert.equal(fixture.session.apiKey,'session-secret');
-    assert.equal(fixture.local.settings,core.DEFAULT_SETTINGS);assert.deepEqual(uiMessageTypes(fixture),['GET_UI_LANGUAGE']);
+    assert.equal(fixture.local.settings,API_UI_SETTINGS);assert.deepEqual(uiMessageTypes(fixture),['GET_UI_LANGUAGE']);
   }
 });
 
@@ -915,7 +918,7 @@ test('reasoning-only edits participate in unsaved status and reverting the selec
 
 test('Settings and popup open browsing history without needing a Key or saving analysis settings',async()=>{
   for(const file of ['options','popup']) {
-    const fixture=uiPageFixture(file,core.DEFAULT_SETTINGS,{session:{apiKey:undefined}});
+    const fixture=uiPageFixture(file,API_UI_SETTINGS,{session:{apiKey:undefined}});
     await settleUI();await settleUI();
     const button=fixture.ids.get(file==='options'?'open-history':'history');
     assert.equal(Boolean(button.disabled),false);
@@ -926,7 +929,7 @@ test('Settings and popup open browsing history without needing a Key or saving a
 });
 
 test('history recording toggle applies independently and preserves unsaved prompt and language choices',async()=>{
-  const fixture=uiPageFixture('options',core.DEFAULT_SETTINGS);
+  const fixture=uiPageFixture('options',API_UI_SETTINGS);
   await settleUI();await settleUI();
   const language=fixture.ids.get('language');language.value='ja';
   const checkbox=fixture.ids.get('history-enabled');assert.equal(checkbox.checked,true);assert.equal(checkbox.disabled,false);
@@ -942,7 +945,7 @@ test('history recording toggle applies independently and preserves unsaved promp
 });
 
 test('history setting failures restore its prior value without changing the main Settings form',async()=>{
-  const fixture=uiPageFixture('options',core.DEFAULT_SETTINGS,{}, {onMessage(message){if(message.type==='SET_HISTORY_ENABLED')return {ok:false};}});
+  const fixture=uiPageFixture('options',API_UI_SETTINGS,{}, {onMessage(message){if(message.type==='SET_HISTORY_ENABLED')return {ok:false};}});
   await settleUI();await settleUI();
   const checkbox=fixture.ids.get('history-enabled');checkbox.checked=false;await checkbox.listeners.change();
   assert.equal(checkbox.checked,true);assert.equal(checkbox.disabled,false);
@@ -973,7 +976,7 @@ test('fresh options and popup use browser UI locale without writing credentials 
 
 test('options and popup retain browser fallback when the language worker is temporarily unavailable', async () => {
   for(const file of ['options','popup']) {
-    const fixture=uiPageFixture(file,core.DEFAULT_SETTINGS,{local:{uiLanguage:undefined}},
+    const fixture=uiPageFixture(file,API_UI_SETTINGS,{local:{uiLanguage:undefined}},
       {browserLanguage:'de-DE',navigatorLanguage:'ja-JP',localeFailure:true});
     await settleUI();await settleUI();
     assert.equal(fixture.document.documentElement.lang,'de',file);
@@ -1014,7 +1017,7 @@ test('all options, popup and setup translation markers are supplied for every UI
 });
 
 test('fresh language controls both default to Auto and keep answer and interface settings separate', async () => {
-  const fixture=uiPageFixture('options',core.DEFAULT_SETTINGS);
+  const fixture=uiPageFixture('options',API_UI_SETTINGS);
   await settleUI();await settleUI();
   assert.equal(fixture.ids.get('language').value,'auto');
   assert.equal(fixture.ids.get('interface-language').value,'auto');
@@ -1091,7 +1094,7 @@ test('open Settings and popup apply saved interface choices without replacing Se
 
 test('ready Key text distinguishes remembered device storage from session-only storage', async () => {
   for(const saved of [false,true]) {
-    const fixture=uiPageFixture('options',core.DEFAULT_SETTINGS,
+    const fixture=uiPageFixture('options',API_UI_SETTINGS,
       {local:{apiKey:saved?'fixture-key':undefined,rememberApiKey:saved},session:{apiKey:'fixture-key'}});
     await settleUI();await settleUI();
     assert.equal(fixture.ids.get('key-security-state').textContent,ui.t(saved?'options.keyReadySaved':'options.keyReady','en'));
@@ -1130,7 +1133,7 @@ test('live options locale changes preserve drafts and never save settings or sen
 });
 
 test('a first remembered Key saves without password setup and is ready again after browser restart', async () => {
-  const fixture=uiPageFixture('options',core.DEFAULT_SETTINGS,{local:{apiKey:undefined},session:{apiKey:undefined}});
+  const fixture=uiPageFixture('options',API_UI_SETTINGS,{local:{apiKey:undefined},session:{apiKey:undefined}});
   await settleUI();await settleUI();
   assert.equal(fixture.ids.get('api-key').value,'');
   assert.equal(fixture.ids.get('remember-key').checked,true);
@@ -1165,7 +1168,7 @@ test('remember-Key loading honors explicit booleans without promoting a session-
     {name:'nonboolean preference cannot persist a session Key',local:{apiKey:undefined,rememberApiKey:'true'},session:{apiKey:'session-only'},expected:false,key:'session-only'},
   ];
   for(const item of cases) {
-    const fixture=uiPageFixture('options',core.DEFAULT_SETTINGS,{local:item.local,session:item.session});
+    const fixture=uiPageFixture('options',API_UI_SETTINGS,{local:item.local,session:item.session});
     await settleUI();await settleUI();
     assert.equal(fixture.ids.get('remember-key').checked,item.expected,item.name);
     assert.equal(fixture.ids.get('api-key').value,item.key,item.name);
@@ -1177,7 +1180,7 @@ test('remember-Key loading honors explicit booleans without promoting a session-
 });
 
 test('demoting a remembered Key to session-only is explicit and saves credentials and settings together once', async () => {
-  const fixture=uiPageFixture('options',core.DEFAULT_SETTINGS,{local:{apiKey:'remembered-to-demote',rememberApiKey:true},session:{apiKey:undefined}});
+  const fixture=uiPageFixture('options',API_UI_SETTINGS,{local:{apiKey:'remembered-to-demote',rememberApiKey:true},session:{apiKey:undefined}});
   await settleUI();await settleUI();
   assert.equal(fixture.ids.get('api-key').value,'remembered-to-demote');
   assertUIRememberedKey(fixture,'remembered-to-demote');assert.deepEqual(uiMessageTypes(fixture),['GET_UI_LANGUAGE']);
@@ -1196,7 +1199,7 @@ test('demoting a remembered Key to session-only is explicit and saves credential
 });
 
 test('an explicit session-only choice survives reopening after the browser session ends', async () => {
-  const fixture=uiPageFixture('options',core.DEFAULT_SETTINGS,{local:{apiKey:undefined},session:{apiKey:undefined}});
+  const fixture=uiPageFixture('options',API_UI_SETTINGS,{local:{apiKey:undefined},session:{apiKey:undefined}});
   await settleUI();await settleUI();
   const remember=fixture.ids.get('remember-key');remember.checked=false;remember.listeners.change();
   const input=fixture.ids.get('api-key');input.value='session-fixture-key';input.listeners.input();
@@ -1213,7 +1216,7 @@ test('an explicit session-only choice survives reopening after the browser sessi
 
 test('clearing a Key preserves the remember choice and the next replacement saves without password fields', async () => {
   for(const remember of [true,false]) {
-    const fixture=uiPageFixture('options',core.DEFAULT_SETTINGS,{local:{rememberApiKey:!remember}});
+    const fixture=uiPageFixture('options',API_UI_SETTINGS,{local:{rememberApiKey:!remember}});
     await settleUI();await settleUI();
     const choice=fixture.ids.get('remember-key');choice.checked=remember;choice.listeners.change();
     await fixture.ids.get('clear-key').listeners.click();
@@ -1238,8 +1241,8 @@ test('clearing a Key preserves the remember choice and the next replacement save
 });
 
 test('Key storage preferences and credentials cannot become normalized feed settings', () => {
-  const settings=core.normalizeSettings({...core.DEFAULT_SETTINGS,rememberApiKey:true,remember:false,apiKey:'fixture-only-secret'});
-  assert.deepEqual(settings,core.normalizeSettings(core.DEFAULT_SETTINGS));
+  const settings=core.normalizeSettings({...API_UI_SETTINGS,rememberApiKey:true,remember:false,apiKey:'fixture-only-secret'});
+  assert.deepEqual(settings,core.normalizeSettings(API_UI_SETTINGS));
   for(const key of ['rememberApiKey','remember','apiKey'])assert.equal(Object.hasOwn(settings,key),false,key);
   assert.equal(JSON.stringify(settings).includes('fixture-only-secret'),false);
 });
@@ -1360,7 +1363,7 @@ test('live popup locale changes do not read keys or start paid generation', asyn
 });
 
 test('settings upgrade migrates retired selections without discarding saved custom prompt drafts',async()=>{
-  const fixture=uiPageFixture('options',{...core.DEFAULT_SETTINGS,provider:'native',explanationMode:'url',language:'ja',apiModel:'my-model',explainPrompt:'Saved explanation.',verifyPrompt:'Saved evidence.',commentsPrompt:'Saved comments.'});
+  const fixture=uiPageFixture('options',{...API_UI_SETTINGS,provider:'native',explanationMode:'url',language:'ja',apiModel:'my-model',explainPrompt:'Saved explanation.',verifyPrompt:'Saved evidence.',commentsPrompt:'Saved comments.'});
   await settleUI();await settleUI();assert.equal(fixture.ids.get('explanation-mode').value,'preset');
   assert.equal(fixture.ids.get('api-model').value,'my-model');assert.equal(fixture.ids.get('language').value,'ja');
   const form=fixture.ids.get('settings-form');await form.listeners.submit({preventDefault(){},currentTarget:form});
@@ -1371,7 +1374,7 @@ test('settings upgrade migrates retired selections without discarding saved cust
 
 test('changing model and Key together sends one transaction without exposing settings under the old Key',async()=>{
   const dispatches=[];
-  const fixture=uiPageFixture('options',core.DEFAULT_SETTINGS,
+  const fixture=uiPageFixture('options',API_UI_SETTINGS,
     {local:{apiKey:'old-account-key',rememberApiKey:true},session:{apiKey:'old-account-key'}},
     {onMessage(message,state){
       if(message.type==='SAVE_SETTINGS'&&message.settings.enabled&&state.session.apiKey)
@@ -1392,7 +1395,7 @@ test('changing model and Key together sends one transaction without exposing set
 });
 
 test('a failed Clear Key action retains the active credential and shows its actual state',async()=>{
-  const fixture=uiPageFixture('options',core.DEFAULT_SETTINGS,
+  const fixture=uiPageFixture('options',API_UI_SETTINGS,
     {local:{apiKey:'old-account-key',rememberApiKey:true},session:{apiKey:'old-account-key'}},
     {onMessage(message){if(message.type==='SAVE_KEY')return {ok:false,errorKey:'errors.keyStorage'};}});
   await settleUI();await settleUI();
@@ -1410,7 +1413,7 @@ test('a failed Clear Key action retains the active credential and shows its actu
 
 test('ordinary personal xAI Keys save directly regardless of stale legacy consent records', async()=>{
   for(const dataConsent of [undefined,{version:1,accepted:false}]) {
-    const fixture=uiPageFixture('options',core.DEFAULT_SETTINGS,{local:{dataConsent},session:{apiKey:undefined}});
+    const fixture=uiPageFixture('options',API_UI_SETTINGS,{local:{dataConsent},session:{apiKey:undefined}});
     await settleUI();await settleUI();
     assert.equal(fixture.ids.has('data-consent'),false);assert.equal(fixture.ids.has('revoke-consent'),false);
     fixture.ids.get('remember-key').checked=false;fixture.ids.get('remember-key').listeners.change();
@@ -1424,7 +1427,7 @@ test('ordinary personal xAI Keys save directly regardless of stale legacy consen
 });
 
 test('an old encrypted Key without plaintext asks only for API Key reentry once', async()=>{
-  const fixture=uiPageFixture('options',core.DEFAULT_SETTINGS,
+  const fixture=uiPageFixture('options',API_UI_SETTINGS,
     {local:{apiKeyVault:{fixture:'old-encrypted'},rememberApiKey:true},session:{apiKey:undefined}});
   await settleUI();await settleUI();
   assert.equal(fixture.ids.get('api-key').value,'');assert.equal(fixture.ids.get('remember-key').checked,true);
@@ -1443,7 +1446,7 @@ test('an old encrypted Key without plaintext asks only for API Key reentry once'
 test('unreadable automatic ciphertext requires API Key reentry without falling back to stale credentials',async()=>{
   for(const failure of ['missing-device-key','damaged-envelope']) {
     const envelope={fixtureId:failure,unreadable:true};
-    const fixture=uiPageFixture('options',core.DEFAULT_SETTINGS,
+    const fixture=uiPageFixture('options',API_UI_SETTINGS,
       {local:{apiKeyEncrypted:envelope,apiKey:'stale-plaintext',rememberApiKey:true},session:{apiKey:'stale-session'}});
     await settleUI();await settleUI();
     assert.equal(fixture.ids.get('key-security-state').dataset.state,'migration');
@@ -1466,7 +1469,7 @@ test('unreadable automatic ciphertext requires API Key reentry without falling b
 });
 
 test('an unreadable automatic ciphertext can be cleared without a device password or API Key',async()=>{
-  const fixture=uiPageFixture('options',core.DEFAULT_SETTINGS,
+  const fixture=uiPageFixture('options',API_UI_SETTINGS,
     {local:{apiKeyEncrypted:{fixtureId:'missing-device-key'},rememberApiKey:true},session:{apiKey:undefined}});
   await settleUI();await settleUI();
   assert.equal(fixture.ids.get('clear-key').hidden,false);
@@ -1481,7 +1484,7 @@ test('an unreadable automatic ciphertext can be cleared without a device passwor
 test('missing or migration states allow ordinary settings saves without clearing or requiring Key input', async()=>{
   for(const migration of [false,true]) {
     const envelope=migration?{fixture:'old-encrypted'}:undefined;
-    const fixture=uiPageFixture('options',core.DEFAULT_SETTINGS,
+    const fixture=uiPageFixture('options',API_UI_SETTINGS,
       {local:{apiKeyVault:envelope,rememberApiKey:true},session:{apiKey:undefined}});
     await settleUI();await settleUI();
     assert.equal(fixture.ids.get('api-key').value,'');
@@ -1496,7 +1499,7 @@ test('missing or migration states allow ordinary settings saves without clearing
 
 test('initial Options reads the session Key after worker hydration and never reads the local credential',async()=>{
   let ready=false;
-  const fixture=uiPageFixture('options',core.DEFAULT_SETTINGS,
+  const fixture=uiPageFixture('options',API_UI_SETTINGS,
     {local:{apiKeyEncrypted:uiFixtureEncryptedKey('persisted-startup-key'),rememberApiKey:true},session:{apiKey:undefined}},
     {onMessage(message,state){
       if(message.type==='GET_SECURITY_STATUS') {
@@ -1512,7 +1515,7 @@ test('initial Options reads the session Key after worker hydration and never rea
 
 test('usable old vault plaintext migrates without prompting or resaving through Options',async()=>{
   for(const remembered of [false,true]) {
-    const fixture=uiPageFixture('options',core.DEFAULT_SETTINGS,
+    const fixture=uiPageFixture('options',API_UI_SETTINGS,
       {local:{apiKeyVault:{fixture:'old-encrypted'},rememberApiKey:remembered},session:{apiKey:'usable-migration-key'}});
     await settleUI();await settleUI();
     assert.equal(fixture.ids.get('api-key').value,'usable-migration-key');
@@ -1527,7 +1530,7 @@ test('usable old vault plaintext migrates without prompting or resaving through 
 });
 
 test('Clear saved Key removes a retained old encrypted vault without password controls',async()=>{
-  const fixture=uiPageFixture('options',core.DEFAULT_SETTINGS,
+  const fixture=uiPageFixture('options',API_UI_SETTINGS,
     {local:{apiKeyVault:{fixture:'old-encrypted'},rememberApiKey:true},session:{apiKey:undefined}});
   await settleUI();await settleUI();
   await fixture.ids.get('clear-key').listeners.click();
@@ -1538,7 +1541,7 @@ test('Clear saved Key removes a retained old encrypted vault without password co
 });
 
 test('an untouched Key follows another Settings tab before changing its storage preference',async()=>{
-  const fixture=uiPageFixture('options',core.DEFAULT_SETTINGS,
+  const fixture=uiPageFixture('options',API_UI_SETTINGS,
     {local:{apiKey:'account-a-fixture',rememberApiKey:true},session:{apiKey:'account-a-fixture'}});
   await settleUI();await settleUI();
   fixture.local.apiKeyEncrypted=uiFixtureEncryptedKey('account-b-fixture');fixture.session.apiKey='account-b-fixture';
@@ -1552,7 +1555,7 @@ test('an untouched Key follows another Settings tab before changing its storage 
 });
 
 test('a replacement Key draft survives external credential changes without being silently saved',async()=>{
-  const fixture=uiPageFixture('options',core.DEFAULT_SETTINGS,
+  const fixture=uiPageFixture('options',API_UI_SETTINGS,
     {local:{rememberApiKey:false},session:{apiKey:'account-a-fixture'}});
   await settleUI();await settleUI();
   fixture.ids.get('api-key').value='replacement-c-fixture';fixture.ids.get('api-key').listeners.input();
@@ -1568,7 +1571,7 @@ test('a replacement Key draft survives external credential changes without being
 test('local encrypted Key changes update untouched input while preserving edited Key and settings drafts',async()=>{
   for(const edited of [false,true]) {
     const oldEnvelope=uiFixtureEncryptedKey('account-a-fixture');
-    const fixture=uiPageFixture('options',core.DEFAULT_SETTINGS,
+    const fixture=uiPageFixture('options',API_UI_SETTINGS,
       {local:{apiKeyEncrypted:oldEnvelope,rememberApiKey:true},session:{apiKey:undefined}});
     await settleUI();await settleUI();
     fixture.ids.get('api-model').value='grok-4.7';fixture.ids.get('api-model').listeners.change();
@@ -1594,7 +1597,7 @@ test('local encrypted Key changes update untouched input while preserving edited
 });
 
 test('external credentials become the draft baseline without resending an unchanged Key',async()=>{
-  const fixture=uiPageFixture('options',core.DEFAULT_SETTINGS,
+  const fixture=uiPageFixture('options',API_UI_SETTINGS,
     {local:{apiKey:'account-a-fixture',rememberApiKey:true},session:{apiKey:'account-a-fixture'}});
   await settleUI();await settleUI();
   fixture.ids.get('api-key').value='account-b-fixture';fixture.ids.get('api-key').listeners.input();
@@ -1611,14 +1614,14 @@ test('external credentials become the draft baseline without resending an unchan
 test('failed atomic replacement saves preserve credentials and settings while retaining a retryable draft',async()=>{
   for(const remembered of [false,true]) {
     let fail=true;
-    const fixture=uiPageFixture('options',core.DEFAULT_SETTINGS,
+    const fixture=uiPageFixture('options',API_UI_SETTINGS,
       {local:{rememberApiKey:remembered,...(remembered?{apiKey:'old-account-fixture'}:{})},session:{apiKey:'old-account-fixture'}},
       {onMessage(message){if(message.type==='SAVE_KEY'&&fail)return {ok:false,errorKey:'errors.keyStorage'};}});
     await settleUI();await settleUI();
     fixture.ids.get('api-model').value='grok-4.7';fixture.ids.get('api-model').listeners.change();
     fixture.ids.get('api-key').value='replacement-fixture';fixture.ids.get('api-key').listeners.input();
     const form=fixture.ids.get('settings-form');await form.listeners.submit({preventDefault(){},currentTarget:form});
-    assert.equal(fixture.session.apiKey,'old-account-fixture');assert.equal(fixture.local.settings.apiModel,core.DEFAULT_SETTINGS.apiModel);
+    assert.equal(fixture.session.apiKey,'old-account-fixture');assert.equal(fixture.local.settings.apiModel,API_UI_SETTINGS.apiModel);
     assert.equal(fixture.ids.get('api-key').value,'replacement-fixture');assert.equal(fixture.ids.get('api-model').value,'grok-4.7');
     assert.equal(fixture.ids.get('key-security-state').dataset.state,'ready');
     assert.equal(fixture.ids.get('key-security-state').textContent,ui.t(remembered?'options.keyReadySaved':'options.keyReady','en'));
@@ -1631,7 +1634,7 @@ test('failed atomic replacement saves preserve credentials and settings while re
 
 test('invalid or emptied Key edits are rejected before credential or settings mutation',async()=>{
   for(const draft of ['', 'invalid\nkey', 'x'.repeat(501)]) {
-    const fixture=uiPageFixture('options',core.DEFAULT_SETTINGS,
+    const fixture=uiPageFixture('options',API_UI_SETTINGS,
       {local:{apiKey:'existing-fixture',rememberApiKey:true},session:{apiKey:'existing-fixture'}});
     await settleUI();await settleUI();
     fixture.ids.get('api-key').value=draft;fixture.ids.get('api-key').listeners.input();
@@ -1640,7 +1643,7 @@ test('invalid or emptied Key edits are rejected before credential or settings mu
     assert.equal(fixture.ids.get('status').textContent,ui.t(draft?'errors.keyInvalid':'options.keyRequired','en'));
     assert.equal(fixture.ids.get('api-key').focused,true);
     assertUIRememberedKey(fixture,'existing-fixture');assert.equal(fixture.session.apiKey,'existing-fixture');
-    assert.equal(fixture.local.settings.apiModel,core.DEFAULT_SETTINGS.apiModel);
+    assert.equal(fixture.local.settings.apiModel,API_UI_SETTINGS.apiModel);
     assert.deepEqual(uiMessageTypes(fixture),['GET_UI_LANGUAGE']);
   }
 });
@@ -1653,7 +1656,7 @@ test('editing after Save replaces stale success with an unsaved hint and reverti
   const language=fixture.ids.get('language');language.value='ja';language.listeners.change();
   assert.equal(fixture.ids.get('status').textContent,ui.t('options.unsavedChanges','en'));
   assert.equal(fixture.messages.filter(message=>message.type==='SAVE_SETTINGS').length,savedCount);
-  language.value=core.DEFAULT_SETTINGS.language;language.listeners.change();
+  language.value=API_UI_SETTINGS.language;language.listeners.change();
   assert.equal(fixture.ids.get('status').textContent,'');
   fixture.ids.get('api-model').value='grok-4.7';fixture.ids.get('api-model').listeners.change();
   assert.equal(fixture.ids.get('status').textContent,ui.t('options.unsavedChanges','en'));
@@ -1671,7 +1674,7 @@ test('Clear saved Key is hidden on a fresh install and available only for an exi
     {local:{apiKey:'legacy-fixture'},session:{apiKey:undefined},hidden:false},
   ];
   for(const item of cases) {
-    const fixture=uiPageFixture('options',core.DEFAULT_SETTINGS,item);await settleUI();await settleUI();
+    const fixture=uiPageFixture('options',API_UI_SETTINGS,item);await settleUI();await settleUI();
     assert.equal(fixture.ids.get('clear-key').hidden,item.hidden);
   }
 });
@@ -1684,7 +1687,7 @@ test('opening Settings focuses API Key for both current and legacy trusted entri
     {request:'unlock-passphrase',expected:'api-key',local:{},session:{apiKey:undefined}},
   ];
   for(const item of cases) {
-    const fixture=uiPageFixture('options',core.DEFAULT_SETTINGS,
+    const fixture=uiPageFixture('options',API_UI_SETTINGS,
       {local:item.local,session:{...item.session,superxOptionsFocus:{id:item.request,nonce:'initial-fixture'}}});
     await settleUI();await settleUI();await settleUI();
     assert.equal(fixture.ids.get(item.expected).focused,true);
@@ -1697,7 +1700,7 @@ test('opening Settings focuses API Key for both current and legacy trusted entri
 });
 
 test('an existing migration Settings page handles fresh or legacy focus requests once without saving drafts or accepting arbitrary targets',async()=>{
-  const fixture=uiPageFixture('options',core.DEFAULT_SETTINGS,{local:{apiKeyVault:{fixture:'encrypted'},rememberApiKey:true},session:{apiKey:undefined}});await settleUI();await settleUI();
+  const fixture=uiPageFixture('options',API_UI_SETTINGS,{local:{apiKeyVault:{fixture:'encrypted'},rememberApiKey:true},session:{apiKey:undefined}});await settleUI();await settleUI();
   fixture.ids.get('api-model').value='grok-4.7';fixture.ids.get('api-model').listeners.change();
   fixture.session.superxOptionsFocus={id:'save',nonce:'invalid-fixture'};
   for(const listener of fixture.storageListeners)listener({superxOptionsFocus:{newValue:fixture.session.superxOptionsFocus}},'session');
@@ -1720,7 +1723,7 @@ test('an existing migration Settings page handles fresh or legacy focus requests
 });
 
 test('a Settings focus request received during Save waits until completion and focuses API Key without an extra save',async()=>{
-  const fixture=uiPageFixture('options',core.DEFAULT_SETTINGS,{local:{apiKeyVault:{fixture:'encrypted'},rememberApiKey:true},session:{apiKey:undefined}},
+  const fixture=uiPageFixture('options',API_UI_SETTINGS,{local:{apiKeyVault:{fixture:'encrypted'},rememberApiKey:true},session:{apiKey:undefined}},
     {onMessage(message,state){
       if(message.type==='SAVE_SETTINGS') {
         state.session.superxOptionsFocus={id:'unlock-passphrase',nonce:'busy-focus-fixture'};
@@ -1739,7 +1742,7 @@ test('a Settings focus request received during Save waits until completion and f
 });
 
 test('migration Settings navigation leaves the API Key editable without adding password controls or hidden mutations',async()=>{
-  const fixture=uiPageFixture('options',core.DEFAULT_SETTINGS,
+  const fixture=uiPageFixture('options',API_UI_SETTINGS,
     {local:{apiKeyVault:{fixture:'encrypted'},rememberApiKey:true},session:{apiKey:undefined,superxOptionsFocus:{id:'api-key',nonce:'migration-navigation-fixture'}}});
   await settleUI();await settleUI();await settleUI();
   assert.equal(fixture.ids.get('api-key').focused,true);assert.equal(fixture.ids.get('api-key').disabled,false);
@@ -1755,7 +1758,7 @@ test('popup shows Add API Key guidance for missing or migration states without m
     {local:{rememberApiKey:false},session:{apiKey:undefined},reason:'status.needsKey',hint:'popup.apiHint'},
   ];
   for(const item of cases) {
-    const fixture=uiPageFixture('popup',core.DEFAULT_SETTINGS,item);await settleUI();await settleUI();
+    const fixture=uiPageFixture('popup',API_UI_SETTINGS,item);await settleUI();await settleUI();
     assert.equal(fixture.ids.get('enabled-label').textContent,ui.t(item.reason,'en'));
     assert.equal(fixture.ids.get('provider-hint').textContent,ui.t(item.hint,'en'));
     assert.equal(fixture.ids.get('indicator').dataset.enabled,'false');
@@ -1771,7 +1774,7 @@ test('popup shows Add API Key guidance for missing or migration states without m
 
 test('popup onboarding navigation failures restore the action and allow retry without saving settings',async()=>{
   let fail=true;
-  const fixture=uiPageFixture('popup',core.DEFAULT_SETTINGS,{session:{apiKey:undefined}},
+  const fixture=uiPageFixture('popup',API_UI_SETTINGS,{session:{apiKey:undefined}},
     {onMessage(message){if(message.type==='OPEN_SETTINGS'&&fail)return {ok:false};}});
   await settleUI();await settleUI();
   await fixture.ids.get('toggle').listeners.click();
@@ -1789,9 +1792,9 @@ test('popup onboarding navigation failures restore the action and allow retry wi
 
 test('popup rechecks credentials before toggling and opens API Key settings if the Key becomes unavailable',async()=>{
   let configReads=0;
-  const fixture=uiPageFixture('popup',core.DEFAULT_SETTINGS,{},
+  const fixture=uiPageFixture('popup',API_UI_SETTINGS,{},
     {onMessage(message){
-      if(message.type==='GET_CONFIG'&&++configReads>1)return {ok:true,settings:core.DEFAULT_SETTINGS,ready:false,keyMigration:true,keyState:'migration'};
+      if(message.type==='GET_CONFIG'&&++configReads>1)return {ok:true,settings:API_UI_SETTINGS,ready:false,keyMigration:true,keyState:'migration'};
     }});
   await settleUI();await settleUI();
   assert.equal(fixture.ids.get('options').hidden,false);
@@ -1803,7 +1806,7 @@ test('popup rechecks credentials before toggling and opens API Key settings if t
 });
 
 test('the ready popup Open settings entry requests API Key focus without toggling or changing credentials',async()=>{
-  const fixture=uiPageFixture('popup',core.DEFAULT_SETTINGS,{local:{apiKey:'ready-fixture-key',rememberApiKey:true},session:{apiKey:'ready-fixture-key'}});
+  const fixture=uiPageFixture('popup',API_UI_SETTINGS,{local:{apiKey:'ready-fixture-key',rememberApiKey:true},session:{apiKey:'ready-fixture-key'}});
   await settleUI();await settleUI();
   assert.equal(fixture.ids.get('options').hidden,false);
   await fixture.ids.get('options').listeners.click();await settleUI();
@@ -1814,7 +1817,7 @@ test('the ready popup Open settings entry requests API Key focus without togglin
 });
 
 test('security-status failure disables Settings save rather than assuming Key access', async()=>{
-  const fixture=uiPageFixture('options',core.DEFAULT_SETTINGS,{}, {securityFailure:true});
+  const fixture=uiPageFixture('options',API_UI_SETTINGS,{}, {securityFailure:true});
   await settleUI();await settleUI();
   assert.equal(fixture.ids.get('save').disabled,true);
   const form=fixture.ids.get('settings-form');await form.listeners.submit({preventDefault(){},currentTarget:form});
@@ -2036,7 +2039,7 @@ test('a saved local code is reused without exposing it to the form and forgettin
 test('both modes and all twelve locales offer official setup without an extra SuperX installer or native permission prompt',()=>{
   const html=fs.readFileSync(path.join(__dirname,'../extension/options.html'),'utf8'),guide=fs.readFileSync(path.join(__dirname,'../extension/setup.html'),'utf8');
   assert.doesNotMatch(html,/id="build-transport"|nativeMessaging|SuperX.connector/i);assert.doesNotMatch(guide,/SuperX-Connector|install-windows|install-macos|nativeMessaging/);
-  assert.match(guide,/github.com\/xai-org\/grok-build/);assert.match(ui.t('options.providerBuild','en'),/Grok CLI \/ ACP/);
+  assert.match(guide,/github.com\/xai-org\/grok-build/);assert.match(ui.t('options.providerBuild','en'),/Grok Build/);assert.match(ui.t('options.providerBuild','en'),/CLI \/ ACP/);
   for(const locale of ui.SUPPORTED_LANGUAGES)for(const key of ['build.platform','build.generate','build.commandHelp','build.localPrivacy','build.code','build.codeHelp','build.codeRequired','build.codeInvalid','build.savedCode','build.setupIntro']){
     assert.ok(ui.catalog[locale][key]);if(locale!=='en')assert.notEqual(ui.catalog[locale][key],ui.catalog.en[key],locale+': '+key);
   }
@@ -2050,7 +2053,7 @@ test('erasing a replacement local code keeps the saved code and setup cannot sav
   ids.get('build-secret').value='replacement-local-code';ids.get('build-secret').listeners.input();ids.get('build-secret').value='';ids.get('build-secret').listeners.input();
   await ids.get('check-build').listeners.click();assert.equal(Object.hasOwn(fixture.messages.find(message=>message.type==='GET_BUILD_STATUS'),'secret'),false);
   const form=ids.get('settings-form');await form.listeners.submit({preventDefault(){},currentTarget:form});assert.equal(Object.hasOwn(fixture.messages.find(message=>message.type==='SAVE_BUILD_CONNECTION'),'secret'),false);
-  const guide=uiPageFixture('setup',core.DEFAULT_SETTINGS,{}, {buildConfigured:false,buildStatus:{ready:true}});await settleUI();await settleUI();
+  const guide=uiPageFixture('setup',API_UI_SETTINGS,{}, {buildConfigured:false,buildStatus:{ready:true}});await settleUI();await settleUI();
   assert.equal(guide.ids.get('save').disabled,true);await guide.ids.get('save').listeners.click();assert.equal(guide.messages.some(message=>message.type==='SAVE_BUILD_CONNECTION'),false);
   await guide.ids.get('generate').listeners.click();await guide.ids.get('check').listeners.click();assert.equal(guide.ids.get('save').disabled,false);
   await guide.ids.get('save').listeners.click();const saved=guide.messages.find(message=>message.type==='SAVE_BUILD_CONNECTION');assert.equal(saved.settings.provider,'build');assert.equal(saved.settings.buildTransport,'acp');assert.equal(saved.secret,'local-connection-fixture-code');
@@ -2059,7 +2062,7 @@ test('erasing a replacement local code keeps the saved code and setup cannot sav
 
 test('loopback access is requested from an explicit check and denial cannot mutate credentials or provider settings',async()=>{
   let resolvePermission;
-  const fixture=uiPageFixture('options',core.DEFAULT_SETTINGS,{}, {onPermissionRequest(){return new Promise(resolve=>{resolvePermission=resolve;});}});await settleUI();await settleUI();
+  const fixture=uiPageFixture('options',API_UI_SETTINGS,{}, {onPermissionRequest(){return new Promise(resolve=>{resolvePermission=resolve;});}});await settleUI();await settleUI();
   const {ids}=fixture;ids.get('api-key').value='private-api-draft';ids.get('api-key').listeners.input();ids.get('provider').value='build';ids.get('provider').listeners.change();
   assert.equal(fixture.permissionRequests.length,0);const pending=ids.get('check-build').listeners.click();
   assert.equal(fixture.permissionRequests.length,1);assert.deepEqual(Array.from(fixture.permissionRequests[0].origins),['http://127.0.0.1/*']);assert.equal(fixture.messages.some(message=>message.type==='GET_BUILD_STATUS'),false);
@@ -2092,12 +2095,12 @@ test('guided setup preserves an available saved model and reasoning and never sa
   const fixture=uiPageFixture('setup',core.normalizeSettings({buildModel:'grok-4.5',buildReasoningEffort:'high'}),{}, {buildStatus:{ready:true,modelCatalog}});await settleUI();await settleUI();await fixture.ids.get('check').listeners.click();
   assert.equal(fixture.ids.get('model').value,'grok-4.5');assert.equal(fixture.ids.get('reasoning').value,'high');fixture.ids.get('model').value='grok-4.6';fixture.ids.get('model').listeners.change();assert.equal(fixture.ids.get('reasoning').value,'low');
   fixture.ids.get('port').value=2420;fixture.ids.get('port').listeners.input();assert.equal(fixture.ids.get('model-choices').hidden,true);assert.equal(fixture.ids.get('save').disabled,true);
-  const noModels=uiPageFixture('setup',core.DEFAULT_SETTINGS,{}, {buildStatus:{ready:true,modelCatalog:[]}});await settleUI();await settleUI();await noModels.ids.get('check').listeners.click();assert.equal(noModels.ids.get('save').disabled,true);await noModels.ids.get('save').listeners.click();assert.equal(noModels.messages.some(message=>message.type==='SAVE_BUILD_CONNECTION'),false);
+  const noModels=uiPageFixture('setup',API_UI_SETTINGS,{}, {buildStatus:{ready:true,modelCatalog:[]}});await settleUI();await settleUI();await noModels.ids.get('check').listeners.click();assert.equal(noModels.ids.get('save').disabled,true);await noModels.ids.get('save').listeners.click();assert.equal(noModels.messages.some(message=>message.type==='SAVE_BUILD_CONNECTION'),false);
 });
 
 test('fresh Settings and guided setup retain Grok 4.3 without reasoning through check, save and reopen without an API Key',async()=>{
   for(const file of ['options','setup']){
-    const environment={buildStatus:{ready:true,installed:true,available:true,authenticated:true}},fixture=uiPageFixture(file,core.DEFAULT_SETTINGS,{session:{apiKey:undefined}},environment);await settleUI();await settleUI();
+    const environment={buildStatus:{ready:true,installed:true,available:true,authenticated:true}},fixture=uiPageFixture(file,API_UI_SETTINGS,{session:{apiKey:undefined}},environment);await settleUI();await settleUI();
     const modelId=file==='options'?'build-model':'model',effortId=file==='options'?'build-reasoning-effort':'reasoning',checkId=file==='options'?'check-build':'check';
     if(file==='options'){
       fixture.ids.get('provider').value='build';fixture.ids.get('provider').listeners.change();
@@ -2131,7 +2134,7 @@ test('Settings never substitutes a missing Grok 4.3 or unsupported no-reasoning 
 test('guided setup preserves unavailable defaults and blocks Save until an explicit supported model or reasoning choice',async()=>{
   for(const missing of ['model','effort']){
     const modelCatalog=[...(missing==='effort'?[{id:'grok-4.3',efforts:['minimal','low','high']}]:[]),{id:'grok-4.7',efforts:['low','high']}];
-    const fixture=uiPageFixture('setup',core.DEFAULT_SETTINGS,{session:{apiKey:undefined}}, {buildStatus:{ready:true,modelCatalog}});await settleUI();await settleUI();await fixture.ids.get('check').listeners.click();
+    const fixture=uiPageFixture('setup',API_UI_SETTINGS,{session:{apiKey:undefined}}, {buildStatus:{ready:true,modelCatalog}});await settleUI();await settleUI();await fixture.ids.get('check').listeners.click();
     const {ids}=fixture;assert.equal(ids.get('model').value,'grok-4.3');assert.equal(ids.get('reasoning').value,'none');assert.equal(ids.get('save').disabled,true);
     assert.equal(ids.get('status').textContent,ui.t(missing==='model'?'options.buildModelUnavailable':'options.reasoningInvalid','en',{model:'grok-4.3'}));
     const blocked=missing==='model'?ids.get('model').children.find(option=>option.value==='grok-4.3'):ids.get('reasoning').children.find(option=>option.value==='none');assert.equal(blocked.disabled,true);
@@ -2151,7 +2154,7 @@ test('Build reasoning choices use concrete ACP levels independently of API model
 const optionsDiagnosticRecord=()=>({recordedAt:1792152000000,code:'API_ERROR',apiKey:'ENTRY_PRIVATE_KEY',post:'ENTRY_PRIVATE_POST',verificationFailure:{stage:'verify',code:'ACCESS',errorCode:'API_ERROR',httpStatus:402,providerCode:'spending_limit',prompt:'DIAGNOSTIC_PRIVATE_PROMPT'},requestDiagnostics:{failureOrigin:'http',transportStatus:402,requestId:'123e4567-e89b-12d3-a456-426614174000',responseId:'123e4567-e89b-12d3-a456-426614174001',providerMessage:'<img src=x onerror=alert(1)> Spending limit reached; '+['xai','privatefixturetoken'].join('-')+'0'.repeat(19),startedAt:1792151999800,failedAt:1792152000000,elapsedMs:200,requestedModel:'grok-4.3',requestedEffort:'none',apiKey:'DIAGNOSTIC_PRIVATE_KEY',post:'DIAGNOSTIC_PRIVATE_POST',prompt:'DIAGNOSTIC_PRIVATE_PROMPT'}});
 
 test('local API diagnostics load only on explicit expansion and render a safe JSON snapshot as text',async()=>{
-  const record=optionsDiagnosticRecord(),fixture=uiPageFixture('options',core.DEFAULT_SETTINGS,{}, {onMessage(message){if(message.type==='GET_API_DIAGNOSTICS')return Promise.resolve({ok:true,entries:[record],retentionHours:24,maxEntries:30});}});await settleUI();await settleUI();
+  const record=optionsDiagnosticRecord(),fixture=uiPageFixture('options',API_UI_SETTINGS,{}, {onMessage(message){if(message.type==='GET_API_DIAGNOSTICS')return Promise.resolve({ok:true,entries:[record],retentionHours:24,maxEntries:30});}});await settleUI();await settleUI();
   assert.equal(fixture.messages.some(message=>message.type==='GET_API_DIAGNOSTICS'),false);assert.equal(fixture.ids.get('diagnostics-copy').disabled,true);
   fixture.ids.get('diagnostics-summary').listeners.click();await settleUI();await settleUI();
   const text=fixture.ids.get('diagnostics-output').textContent,shown=JSON.parse(text);assert.equal(shown.length,1);assert.equal(shown[0].requestDiagnostics.transportStatus,402);assert.equal(shown[0].requestDiagnostics.requestedModel,'grok-4.3');assert.match(text,/<img src=x onerror=alert\(1\)>/);assert.doesNotMatch(text,/ENTRY_PRIVATE_|DIAGNOSTIC_PRIVATE_|xai-privatefixture/);
@@ -2163,15 +2166,15 @@ test('local API diagnostics load only on explicit expansion and render a safe JS
 
 test('copying and clearing diagnostics are explicit actions that preserve Key, settings, cache and history',async()=>{
   let entries=[optionsDiagnosticRecord()],copied;
-  const fixture=uiPageFixture('options',core.DEFAULT_SETTINGS,{}, {onCopy(value){copied=value;},onMessage(message){if(message.type==='GET_API_DIAGNOSTICS')return {ok:true,entries};if(message.type==='CLEAR_API_DIAGNOSTICS'){entries=[];return {ok:true};}}});await settleUI();await settleUI();await fixture.ids.get('diagnostics-refresh').listeners.click();
+  const fixture=uiPageFixture('options',API_UI_SETTINGS,{}, {onCopy(value){copied=value;},onMessage(message){if(message.type==='GET_API_DIAGNOSTICS')return {ok:true,entries};if(message.type==='CLEAR_API_DIAGNOSTICS'){entries=[];return {ok:true};}}});await settleUI();await settleUI();await fixture.ids.get('diagnostics-refresh').listeners.click();
   const before=fixture.ids.get('diagnostics-output').textContent;assert.equal(copied,undefined);await fixture.ids.get('diagnostics-copy').listeners.click();assert.equal(copied,before);assert.equal(fixture.ids.get('diagnostics-status').textContent,ui.t('options.diagnosticsCopied','en'));
   await fixture.ids.get('diagnostics-clear').listeners.click();assert.equal(fixture.ids.get('diagnostics-output').textContent,'');assert.equal(fixture.ids.get('diagnostics-output').hidden,true);assert.equal(fixture.ids.get('diagnostics-copy').disabled,true);assert.equal(fixture.ids.get('diagnostics-status').textContent,ui.t('options.diagnosticsEmpty','en'));
-  assert.equal(fixture.session.apiKey,'session-secret');assert.equal(fixture.local.settings,core.DEFAULT_SETTINGS);assert.equal(fixture.messages.some(message=>['CLEAR_CACHE','CLEAR_HISTORY','SAVE_KEY','SAVE_SETTINGS','SET_HISTORY_ENABLED'].includes(message.type)),false);assert.equal(fixture.messages.filter(message=>message.type==='CLEAR_API_DIAGNOSTICS').length,1);
+  assert.equal(fixture.session.apiKey,'session-secret');assert.equal(fixture.local.settings,API_UI_SETTINGS);assert.equal(fixture.messages.some(message=>['CLEAR_CACHE','CLEAR_HISTORY','SAVE_KEY','SAVE_SETTINGS','SET_HISTORY_ENABLED'].includes(message.type)),false);assert.equal(fixture.messages.filter(message=>message.type==='CLEAR_API_DIAGNOSTICS').length,1);
 });
 
 test('diagnostic loading, failures and locale changes remain local and do not replace form drafts',async()=>{
   let resolveLogs,fail=false;
-  const fixture=uiPageFixture('options',core.DEFAULT_SETTINGS,{}, {copyFailure:true,onMessage(message){if(message.type==='GET_API_DIAGNOSTICS')return fail?{ok:false}:new Promise(resolve=>{resolveLogs=resolve;});}});await settleUI();await settleUI();
+  const fixture=uiPageFixture('options',API_UI_SETTINGS,{}, {copyFailure:true,onMessage(message){if(message.type==='GET_API_DIAGNOSTICS')return fail?{ok:false}:new Promise(resolve=>{resolveLogs=resolve;});}});await settleUI();await settleUI();
   fixture.ids.get('api-key').value='keep-unsaved-api-draft';fixture.ids.get('api-key').listeners.input();const pending=fixture.ids.get('diagnostics-refresh').listeners.click();assert.equal(fixture.ids.get('diagnostics-status').textContent,ui.t('common.loading','en'));assert.equal(fixture.ids.get('diagnostics-refresh').disabled,true);await fixture.ids.get('diagnostics-refresh').listeners.click();assert.equal(fixture.messages.filter(message=>message.type==='GET_API_DIAGNOSTICS').length,1);
   resolveLogs({ok:true,entries:[optionsDiagnosticRecord()]});await pending;const before=fixture.ids.get('diagnostics-output').textContent;
   fixture.runtimeListeners.forEach(listener=>listener({type:'UI_LANGUAGE_CHANGED',language:'zh-CN'}));assert.equal(fixture.ids.get('diagnostics-output').textContent,before);assert.equal(fixture.ids.get('api-key').value,'keep-unsaved-api-draft');assert.equal(fixture.messages.filter(message=>message.type==='GET_API_DIAGNOSTICS').length,1);
@@ -2181,14 +2184,14 @@ test('diagnostic loading, failures and locale changes remain local and do not re
 
 test('diagnostics are bounded and malformed snapshots or failed clears cannot expose stale private fields',async()=>{
   let mode='many';const records=Array.from({length:40},()=>optionsDiagnosticRecord());
-  const fixture=uiPageFixture('options',core.DEFAULT_SETTINGS,{}, {onMessage(message){if(message.type==='GET_API_DIAGNOSTICS')return {ok:true,entries:mode==='many'?records:{apiKey:'PRIVATE_FAILURE'}};if(message.type==='CLEAR_API_DIAGNOSTICS')return {ok:false};}});await settleUI();await settleUI();await fixture.ids.get('diagnostics-refresh').listeners.click();assert.equal(JSON.parse(fixture.ids.get('diagnostics-output').textContent).length,30);
+  const fixture=uiPageFixture('options',API_UI_SETTINGS,{}, {onMessage(message){if(message.type==='GET_API_DIAGNOSTICS')return {ok:true,entries:mode==='many'?records:{apiKey:'PRIVATE_FAILURE'}};if(message.type==='CLEAR_API_DIAGNOSTICS')return {ok:false};}});await settleUI();await settleUI();await fixture.ids.get('diagnostics-refresh').listeners.click();assert.equal(JSON.parse(fixture.ids.get('diagnostics-output').textContent).length,30);
   await fixture.ids.get('diagnostics-clear').listeners.click();assert.equal(fixture.ids.get('diagnostics-output').textContent,'');assert.equal(fixture.ids.get('diagnostics-copy').disabled,true);assert.equal(fixture.ids.get('diagnostics-status').textContent,ui.t('options.diagnosticsUnavailable','en'));
   mode='malformed';await fixture.ids.get('diagnostics-refresh').listeners.click();assert.equal(fixture.ids.get('diagnostics-status').textContent,ui.t('options.diagnosticsUnavailable','en'));assert.doesNotMatch(fixture.ids.get('diagnostics-output').textContent,/PRIVATE_FAILURE/);
 });
 
 test('diagnostic logs preserve stream error classification without inventing an HTTP status',async()=>{
   const record=optionsDiagnosticRecord();record.requestDiagnostics.failureOrigin='stream';record.requestDiagnostics.transportStatus=200;record.verificationFailure={stage:'verify',code:'ACCESS',errorCode:'API_ERROR',providerCode:'spending_limit',reason:'max_output_tokens',apiKey:'PRIVATE_VF_KEY'};
-  const fixture=uiPageFixture('options',core.DEFAULT_SETTINGS,{}, {onMessage(message){if(message.type==='GET_API_DIAGNOSTICS')return {ok:true,entries:[record]};}});await settleUI();await settleUI();await fixture.ids.get('diagnostics-refresh').listeners.click();const shown=JSON.parse(fixture.ids.get('diagnostics-output').textContent)[0];
+  const fixture=uiPageFixture('options',API_UI_SETTINGS,{}, {onMessage(message){if(message.type==='GET_API_DIAGNOSTICS')return {ok:true,entries:[record]};}});await settleUI();await settleUI();await fixture.ids.get('diagnostics-refresh').listeners.click();const shown=JSON.parse(fixture.ids.get('diagnostics-output').textContent)[0];
   assert.equal(shown.requestDiagnostics.transportStatus,200);assert.equal(shown.requestDiagnostics.failureOrigin,'stream');assert.equal(shown.verificationFailure.providerCode,'spending_limit');assert.equal(shown.verificationFailure.reason,'max_output_tokens');assert.equal(Object.hasOwn(shown.verificationFailure,'httpStatus'),false);assert.equal(Object.hasOwn(shown.verificationFailure,'apiKey'),false);
 });
 
@@ -2196,7 +2199,7 @@ test('Settings diagnostics retain a local capacity classification without invent
   const record=optionsDiagnosticRecord();record.code='API_CAPACITY';record.requestDiagnostics.failureOrigin='stream';record.requestDiagnostics.transportStatus=200;
   record.requestDiagnostics.providerMessage='The model is currently at capacity due to high demand.';
   record.verificationFailure={stage:'verify',code:'SERVER',errorCode:'API_CAPACITY',privateField:'PRIVATE_CAPACITY_FIELD'};
-  const fixture=uiPageFixture('options',core.DEFAULT_SETTINGS,{}, {onMessage(message){if(message.type==='GET_API_DIAGNOSTICS')return {ok:true,entries:[record]};}});
+  const fixture=uiPageFixture('options',API_UI_SETTINGS,{}, {onMessage(message){if(message.type==='GET_API_DIAGNOSTICS')return {ok:true,entries:[record]};}});
   await settleUI();await settleUI();await fixture.ids.get('diagnostics-refresh').listeners.click();
   const shown=JSON.parse(fixture.ids.get('diagnostics-output').textContent)[0];
   assert.equal(shown.code,'API_CAPACITY');assert.equal(shown.requestDiagnostics.transportStatus,200);

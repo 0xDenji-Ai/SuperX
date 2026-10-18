@@ -39,3 +39,16 @@ test('a premature provider closing tag fails the structural check instead of rel
   const html=source('options'),marker=html.match(/<div class="connection-actions">[^\n]*<\/div>/)?.[0];assert.ok(marker);
   assert.throws(()=>strictTree(html.replace(marker,marker+'\n</div>')),/Unexpected/);
 });
+
+test('connection choices prioritize subscription sign-in with distinct short labels',()=>{
+  const {ids}=strictTree(source('options')),choices=ids.get('provider').children;
+  assert.deepEqual(choices.map(node=>node.token.match(/\bvalue="([^"]+)"/)[1]),['oauth','api','build']);
+  assert.match(choices[0].token,/options\.providerOAuth/);assert.match(choices[1].token,/options\.providerKey/);assert.match(choices[2].token,/options\.providerBuild/);
+});
+
+test('OAuth authorization implementation detail is opt-in and the removed automation paragraph is absent',()=>{
+  const html=source('options'),{ids}=strictTree(html),details=ids.get('oauth-authorization-details'),row=ids.get('oauth-status').parent;
+  assert.equal(details.tag,'details');assert.doesNotMatch(details.token,/\bopen(?:\s|=|>)/);assert.equal(details.children[0].tag,'summary');assert.match(details.children[0].token,/oauth\.authorizationDetails/);assert.ok(details.children.some(node=>/oauth\.sharedClient/.test(node.token)));assert.ok(ancestor(details,ids.get('oauth-fields')));assert.doesNotMatch(html,/data-i18n="oauth\.startHint"/);
+  assert.match(row.token,/oauth-connection-row/);assert.ok(row.children.some(node=>ancestor(ids.get('oauth-login'),node)));assert.ok(row.children.some(node=>ancestor(ids.get('oauth-logout'),node)));
+  const css=fs.readFileSync(path.join(__dirname,'../extension/options.css'),'utf8');assert.match(css,/#oauth-fields\s*>\s*\.oauth-remember-label\s*\{[^}]*margin-top:\s*20px/,'Remember spacing must outrank the shared checkbox reset');
+});
