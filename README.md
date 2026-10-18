@@ -8,7 +8,7 @@ SuperX is a Chrome / Edge extension that checks factual claims in visible X post
 
 **Source candidate: 0.9.11 (not released).** This candidate temporarily removes the explanation step and runs Fact Check directly. It asks for concise findings, relevant evidence and sources rather than retelling the post beside its original text. It also separates intermediate/tool-command output from the final answer and reports an incomplete check if no reader-facing answer arrives. The Chrome Web Store and GitHub stable download below remain **0.7.26**, which includes explanations. The behavior described under Features and Settings applies to the 0.9.11 candidate.
 
-The 0.9.11 candidate offers three independent connections: **Grok subscription (OAuth)** signs in through the official authorization page with no CLI or extra program; **Grok API Key** remains the default; **Grok CLI / ACP** uses the official service running on your computer. All three have guidance for **Windows and macOS**, and retain language following, custom prompts, comments, history and Token/model information. Existing API and local settings are preserved. There is no automatic provider fallback or quota bypass. See [connection setup](docs/CONNECTIONS.md). Fresh authorization and installed-browser acceptance of the integrated OAuth feature remain pending.
+The 0.9.11 candidate offers three independent connections: **Grok subscription (OAuth)** signs in through the official authorization page with no CLI or extra program; **Grok API Key** remains the default; **Grok CLI / ACP** uses the official service running on your computer. All three have guidance for **Windows and macOS**, and retain language following, custom prompts, comments, history and Token/model information. Existing API and local settings are preserved. There is no automatic provider fallback or quota bypass. See [connection setup](docs/CONNECTIONS.md). Windows Chrome acceptance has confirmed fresh OAuth authorization, live checks, comments/copying, cross-tab cache reuse and new uncached checks after fully restarting Chrome without reauthorization, plus user-confirmed sign-out and preservation of saved API/local configuration. See [acceptance scope](docs/CONNECTIONS.md#acceptance-scope) for remaining checks.
 
 The extension uses Manifest V3 and plain JavaScript. Browser-only API installation needs no build step or package dependencies. This is a Beta: X's changing page structure, model behavior and API availability can affect results.
 
@@ -47,7 +47,7 @@ SuperX's AI features require a configured connection; local browsing history wor
 
 ## Install
 
-Requirements: desktop Chrome or Chromium-based Edge 120+, and provider access to the selected model and search tools. API Key and OAuth modes run entirely in the browser. The optional local mode provides Windows PowerShell and macOS Terminal guidance for official Grok. The integrated candidate still needs fresh OAuth authorization and real-account installed-browser acceptance, including macOS; automated tests are not a live-device pass.
+Requirements: desktop Chrome or Chromium-based Edge 120+, and provider access to the selected model and search tools. API Key and OAuth modes run entirely in the browser. The optional local mode provides Windows PowerShell and macOS Terminal guidance for official Grok. OAuth has been exercised in installed Windows Chrome; macOS, other browsers and local CLI acceptance remain separate checks. Automated tests are not a live-device pass.
 
 For Chrome, install from the store:
 

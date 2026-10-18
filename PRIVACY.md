@@ -1,6 +1,6 @@
 # Privacy and data handling
 
-This document describes the unreleased SuperX 0.9.11 candidate's Fact Check data flow through Grok subscription OAuth, API Key or a direct local connection to official Grok. Last updated: 2026-10-18. The currently published 0.7.26 stable release retains its earlier explanation-then-check flow and API-only connection. The integrated OAuth feature still requires fresh user authorization and installed-browser acceptance; this policy does not claim those checks have passed.
+This document describes the unreleased SuperX 0.9.11 candidate's Fact Check data flow through Grok subscription OAuth, API Key or a direct local connection to official Grok. Last updated: 2026-10-18. The currently published 0.7.26 stable release retains its earlier explanation-then-check flow and API-only connection. Fresh OAuth authorization, full Chrome restart restoration without reauthorization, and new subsequent checks have been observed on Windows. The user also confirmed sign-out without silent fallback and retention of the saved API/local configuration. Remaining manual checks are listed in the [connection guide](docs/CONNECTIONS.md#acceptance-scope); macOS and natural token expiry have not been established by this run.
 
 ## Setup and control
 

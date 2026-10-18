@@ -8,7 +8,7 @@ SuperX 是 Chrome / Edge 扩展，通过 Grok 订阅登录、自己的 API Key �
 
 **当前源码候选：0.9.11，尚未发布。** 此候选暂时移除解释步骤，直接进行 Fact Check，优先提供简洁结论、相关证据和出处，避免在右栏复述左侧已有的原帖。同时区分中间过程、工具指令和最终回答；没有收到面向读者的回答时，提示核查未完成。下方 Chrome 商店及 GitHub 稳定版下载仍为包含解释功能的 **0.7.26**。「功能」「设置与运行方式」以下描述的是 0.9.11 候选行为。
 
-0.9.11 候选包含三种独立连接方式：**Grok 订阅（OAuth）**通过官方授权页登录，无需 CLI 或额外程序；**Grok API Key**继续作为默认方式；**Grok CLI／ACP**连接本机运行的官方服务。三种均提供 **Windows 和 macOS** 引导，保留语言同步、自定义指令、评论、历史及 Token／模型信息。已有 API 和本机设置保留，不会自动切换来源或绕过额度。见 [连接引导](docs/CONNECTIONS.md)。集成后的 OAuth 仍待用户重新授权及浏览器实装验收。
+0.9.11 候选包含三种独立连接方式：**Grok 订阅（OAuth）**通过官方授权页登录，无需 CLI 或额外程序；**Grok API Key**继续作为默认方式；**Grok CLI／ACP**连接本机运行的官方服务。三种均提供 **Windows 和 macOS** 引导，保留语言同步、自定义指令、评论、历史及 Token／模型信息。已有 API 和本机设置保留，不会自动切换来源或绕过额度。见 [连接引导](docs/CONNECTIONS.md)。Windows Chrome 已实测新的 OAuth 授权、真实核查、评论／复制、跨标签缓存复用，以及完全重启 Chrome 后无需重新授权的新请求；用户也确认退出正常、已有 API／本机配置保留。剩余项目见 [验收范围](docs/CONNECTIONS.md#acceptance-scope)。
 
 使用 Manifest V3 和原生 JavaScript，浏览器 API 模式安装无需构建或下载依赖。目前为 Beta；X 页面结构变化、模型表现与 API 可用性会影响结果。SuperX 是独立项目，与 X 或 xAI 没有隶属关系。
 
@@ -47,7 +47,7 @@ AI 功能需要配置一种连接；本机浏览历史不依赖连接。订阅 O
 
 ## 安装与升级
 
-需要桌面版 Chrome 或 Chromium 版 Edge 120 及以上，以及所选模型／工具的使用权限。API Key 和 OAuth 均仅需浏览器；可选本机模式提供 Windows PowerShell 和 macOS 终端引导。集成候选仍待新的 OAuth 授权及真实账号浏览器验收，包括 macOS；自动化测试不等于实机通过。
+需要桌面版 Chrome 或 Chromium 版 Edge 120 及以上，以及所选模型／工具的使用权限。API Key 和 OAuth 均仅需浏览器；可选本机模式提供 Windows PowerShell 和 macOS 终端引导。OAuth 已在 Windows Chrome 实装测试；macOS、其他浏览器及本机 CLI 仍需各自验收。自动化测试不等于实机通过。
 
 Chrome 优先从商店安装：
 

@@ -86,7 +86,18 @@ Generated cache entries and saved-history answers/comments are scoped to the sel
 | Usage / account limit | Check the matching account's usage and billing, then retry the affected post manually. This task does not automatically retry; other posts are not globally paused. Switching transport is not a quota workaround. |
 | Rate limit / model busy / interrupted stream | API Key/local transient failures retry after 3 seconds, up to 5 times. OAuth does not replay accepted requests; inspect the retained error/partial output before a manual retry. Other posts continue. |
 
-Windows/macOS command generation, OAuth lifecycle and provider behavior have automated coverage. Integrated OAuth acceptance still needs a fresh user-approved authorization and installed-browser checks; macOS and other real-device checks remain separate release work. Isolated protocol probes and simulated paths are not a full-product live-device pass.
+## Acceptance scope
+
+On October 18, 2026, the installed 0.9.11 candidate was exercised in Windows Chrome with a fresh user-approved OAuth authorization:
+
+- Live Grok 4.3 Fact Checks completed, with rendered evidence citations and clickable source links.
+- A live result generated exactly three one-line comment drafts; clicking a draft displayed **Copied**.
+- A separate tab reused a completed result and its tooltip identified the cache hit without new Token usage for that part.
+- The user fully exited and reopened Chrome, confirmed that Settings remained connected without signing in again, and subsequent new, uncached Grok 4.3 checks completed. Cached answers alone were not used to establish restored generation.
+
+The user confirmed that signing out returned the selected OAuth source to its sign-in guidance, did not silently use another source, and retained the saved API Key/Build configuration. This run did not add live API Key inference or a new CLI installation/inference acceptance. macOS installed-browser operation and actual natural token expiry were not tested. UI citation rendering was observed; raw native annotation protocol handling has automated coverage, not a captured live-protocol assertion. These results do not establish every subscription's eligibility, Included billing treatment or service availability.
+
+Windows/macOS command generation, OAuth lifecycle and provider behavior also have automated coverage. Official CLI / ACP real-account installation and device acceptance remain separate checks. Isolated protocol probes and simulated paths are not a full-product live-device pass.
 
 For API failures, open **Local diagnostic log** at the bottom of Settings. It keeps up to 30 failures from the last 24 hours of the current browser session, with redacted provider details and supported trace IDs. Transport HTTP status and an error event's status are separate: an HTTP 200 stream can still fail later, and a `spending_limit` event alone does not establish HTTP 402 or an exhausted subscription. Review the matching account's usage and the recorded cause before deciding what to change. Existing failures whose details were not retained cannot be reconstructed. Copying or clearing this local log does not call the provider or clear browsing history.
 
@@ -96,7 +107,7 @@ For API failures, open **Local diagnostic log** at the bottom of Settings. It ke
 
 默认在本机记住登录：刷新 Token 由独立 AES-GCM 密钥加密，密钥在扩展 IndexedDB，访问 Token 只保留于受限会话和内存。无需密码、不使用同步；关闭记住后，浏览器新会话需重新登录。升级新增固定 `auth.x.ai` 主机权限，Chrome 可能要求批准。轮换结果无法确认或保存失败时重新登录，不能反复消费旧刷新 Token。退出 OAuth 不清除 API Key／本机配置或本机帖子访问记录。更换来源／账号后，生成回答、评论与历史中的生成内容按来源及授权身份隔离。
 
-OAuth 已收到 HTTP 200 后的流错误、未完成或超时不自动重放；首次 HTTP 401 拒绝可刷新授权并恢复一次。其他帖子继续处理，手动重新核查前请先查看错误和部分输出。集成版本仍待用户新授权与实装验收，不将协议探测或模拟测试表述为完整产品通过。
+OAuth 已收到 HTTP 200 后的流错误、未完成或超时不自动重放；首次 HTTP 401 拒绝可刷新授权并恢复一次。其他帖子继续处理，手动重新核查前请先查看错误和部分输出。Windows Chrome 已实测新授权、真实 4.3 核查与可点出处、三条评论／复制、跨标签缓存，以及完全退出重开后无需重新授权的新核查请求。用户已实装确认 OAuth 退出正常、保持订阅来源时显示登录引导且不静默回退，原 API Key／Build 已配置项保留；本轮没有新增 API Key 实际推理或 CLI 安装／推理验收。macOS 实装和真实自然到期未测，不能据此保证所有套餐资格或 Included 计费。实测的是界面引用渲染，原生 annotation 原始协议仅有自动化覆盖；不将协议探测或模拟测试表述为完整产品通过。
 
 **API Key 模式**在 Windows 和 Mac 上都只需浏览器：打开「设置 → 连接 → API Key」，按需展开获取帮助。使用订阅 API 额度时，去 [Grok Dashboard → API Keys](https://grok.com/dashboard/api-keys) 创建 **Grok Inference** 类型而非 Cursor 类型的 Key，按账号要求授权 Chat／模型；使用按量付费 API 时，去 [xAI 控制台](https://console.x.ai/) 创建 Key、购买额度。两种来源均粘贴到同一个 API Key 输入框并保存，不另选来源。默认在本机自动加密记住，无需 SuperX 密码；保存不代表已验证 API 权限或剩余额度。用量和费用请到创建 Key 的账户查看。
 
@@ -106,6 +117,6 @@ OAuth 已收到 HTTP 200 后的流错误、未完成或超时不自动重放；�
 
 启动命令只监听本机地址，自动生成连接码并隔离工作／配置目录。连接码只用于本机官方服务，不是账号密码或 API Key；请勿公开连接码、完整命令或相关截图。SuperX 本机加密保存连接码，不读取或复制官方登录文件。重启电脑后需要重新运行启动命令；按 Ctrl+C 停止服务。浏览器断线不等于官方任务已经停止，若提示停止未确认，请在终端按 Ctrl+C 手动停止。停止后若提示仍在，请从设置重新加载 SuperX，再启动服务并重新检查连接；停止未确认时不会自动重试，也不会转为 API 计费。
 
-支持 Windows 和 macOS 引导；此候选按官方 Grok 1.0.60 检查兼容性。工具限制不等同于系统沙箱，Mac 及真实账号实机验收仍需另行完成。完整数据说明见 [隐私说明](../PRIVACY.md)。
+CLI／ACP 支持 Windows 和 macOS 引导；此候选按官方 Grok 1.0.60 检查兼容性。工具限制不等同于系统沙箱，本机 CLI 的 Mac 及真实账号实机验收仍需另行完成。完整数据说明见 [隐私说明](../PRIVACY.md)。
 
 Sources: [official Grok Build installation](https://github.com/xai-org/grok-build), [official agent / WebSocket mode](https://github.com/xai-org/grok-build/blob/main/crates/codegen/xai-grok-pager/docs/user-guide/15-agent-mode.md), [headless CLI and ACP](https://docs.x.ai/build/cli/headless-scripting).
