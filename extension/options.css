@@ -38,6 +38,7 @@ a:hover { text-decoration: underline; }
 .section-nav a { display: block; padding: 14px 0; color: var(--foreground); font-size: 15px; line-height: 1.4; text-decoration: none; }
 .section-nav a:hover { background: var(--hover); }
 .section-nav a:focus-visible { outline-offset: 2px; }
+.section-nav .sidebar-page-link { margin-top: 14px; font-size: 20px; font-weight: 700; }
 .settings-main { min-width: 0; border-inline-end: 1px solid var(--line); }
 .page-header { position: sticky; top: 0; z-index: 2; min-height: 62px; padding: 12px 20px; border-bottom: 1px solid var(--line); background: var(--background); }
 .header-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
@@ -157,6 +158,7 @@ button:disabled, input:disabled, select:disabled, textarea:disabled { opacity: .
   .section-nav { flex-direction: row; flex-wrap: wrap; gap: 3px 12px; }
   .section-nav a { max-width: 100%; padding: 7px 0; color: var(--muted); font-size: 13px; }
   .section-nav a:hover { color: var(--foreground); }
+  .section-nav .sidebar-page-link { flex-basis: 100%; margin-top: 9px; color: var(--foreground); font-size: 18px; }
   .settings-main { border-inline-end: 0; }
   .page-header { padding-inline: 16px; }
   .header-row { gap: 12px; }

@@ -27,8 +27,7 @@ button:focus-visible, input:focus-visible, a:focus-visible, summary:focus-visibl
 .brand-logo { display: block; width: 200px; max-width: 100%; aspect-ratio: 1374 / 321; background: var(--foreground); -webkit-mask-image: url("assets/superx-logo.svg"); mask-image: url("assets/superx-logo.svg"); -webkit-mask-size: 116.448326055% 174.454828661%; mask-size: 116.448326055% 174.454828661%; -webkit-mask-position: 48.672566372% 49.372384937%; mask-position: 48.672566372% 49.372384937%; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; mask-mode: alpha; }
 .brand-tagline { margin: 6px 0 0; color: var(--muted); font-size: 13px; line-height: 1.45; }
 .section-nav { display: flex; flex-direction: column; gap: 3px; margin-top: 32px; }
-.section-nav > * { display: block; padding: 14px 0; color: var(--foreground); font-size: 15px; line-height: 1.4; }
-.section-nav [aria-current] { font-size: 20px; font-weight: 700; }
+.section-nav > * { display: block; padding: 14px 0; color: var(--foreground); font-size: 20px; line-height: 1.4; font-weight: 700; }
 .section-nav a:hover { background: var(--hover); text-decoration: none; }
 .history-main { min-width: 0; border-inline-end: 1px solid var(--line); }
 .page-header { position: sticky; top: 0; z-index: 2; padding: 14px 20px; border-bottom: 1px solid var(--line); background: var(--background); }
@@ -101,7 +100,7 @@ h2 { margin: 0; font-size: 20px; line-height: 1.4; }
   .brand-logo { width: 190px; }
   .section-nav { flex-direction: row; flex-wrap: wrap; gap: 0 24px; margin-top: 12px; }
   .section-nav > * { padding: 7px 0; }
-  .section-nav [aria-current] { font-size: 15px; }
+  .section-nav > * { font-size: 18px; }
   .history-main { border-inline-end: 0; }
   .page-header, .history-tools, .history-entry, .history-more, .page-intro, .confirmation, .empty-state { padding-inline: 16px; }
   .header-row { gap: 10px; }
