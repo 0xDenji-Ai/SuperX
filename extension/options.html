@@ -63,8 +63,9 @@
                   <p id="api-subscription-help" class="help"><span id="api-subscription-before">Use eligible API allowance from </span><a id="api-subscription-link" href="https://docs.x.ai/x-subscription/overview" target="_blank" rel="noopener noreferrer" dir="ltr">The X Subscription</a><span id="api-subscription-after">. Check your Grok Dashboard account for availability and limits.</span></p>
                   <p class="help" data-i18n="options.apiSubscriptionSetup">Choose Grok Inference (not Cursor) and allow Chat and your chosen model.</p>
                   <div class="api-access-links">
+                    <a href="https://x.ai/pricing" target="_blank" rel="noopener noreferrer" data-i18n="options.pricing">Pricing</a>
                     <a href="https://grok.com/dashboard/api-keys" target="_blank" rel="noopener noreferrer" data-i18n="options.apiSubscriptionLink">Create Grok API Key</a>
-                    <a href="https://grok.com/dashboard/usage" target="_blank" rel="noopener noreferrer" data-i18n="options.dashboardUsage">View usage</a>
+                    <a href="https://grok.com/dashboard/usage" target="_blank" rel="noopener noreferrer" data-i18n="options.dashboardUsage">View Usage</a>
                   </div>
                 </div>
                 <div>
@@ -111,15 +112,15 @@
                 <div class="oauth-code-row"><code id="oauth-user-code" dir="ltr"></code><button id="oauth-copy-code" class="text-button" type="button" data-i18n="oauth.copyCode">Copy code</button></div>
                 <a id="oauth-official-link" target="_blank" rel="noopener noreferrer" data-i18n="oauth.openOfficial">Reopen official authorization page</a>
               </div>
-              <details id="oauth-authorization-details" class="oauth-authorization-details">
-                <summary data-i18n="oauth.authorizationDetails">About authorization</summary>
-                <p class="help" data-i18n="oauth.sharedClient">The authorization page may show Grok Build because this uses xAI’s shared OAuth client.</p>
-              </details>
             </div>
             <label class="checkbox-label oauth-remember-label"><input id="oauth-remember" type="checkbox" checked><span data-i18n="oauth.remember">Remember login on this device</span></label>
             <p class="help indented" data-i18n="oauth.rememberHelp">Encrypted locally and restored after restart. Uncheck to keep the login only until the browser closes.</p>
             <p class="help" data-i18n="oauth.billing">Uses eligible subscription allowance. Availability, limits and additional usage follow your Grok account settings.</p>
-            <div class="api-access-links"><a href="https://grok.com/dashboard/usage" target="_blank" rel="noopener noreferrer" data-i18n="options.dashboardUsage">View usage</a><a href="https://docs.x.ai/x-subscription/overview" target="_blank" rel="noopener noreferrer" dir="ltr">The X Subscription</a></div>
+            <div class="api-access-links">
+              <a href="https://docs.x.ai/x-subscription/overview" target="_blank" rel="noopener noreferrer" dir="ltr">The X Subscription</a>
+              <a href="https://x.ai/pricing" target="_blank" rel="noopener noreferrer" data-i18n="options.pricing">Pricing</a>
+              <a href="https://grok.com/dashboard/usage" target="_blank" rel="noopener noreferrer" data-i18n="options.dashboardUsage">View Usage</a>
+            </div>
             <div class="field model-field">
               <label for="oauth-model" data-i18n="options.model">Model</label>
               <select id="oauth-model" required dir="ltr" aria-describedby="oauth-model-help oauth-model-status"></select>

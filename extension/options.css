@@ -81,10 +81,6 @@ h2 { margin: 0 0 20px; font-size: 20px; line-height: 1.35; font-weight: 700; scr
 .oauth-connection-row > .key-state { flex: 1 1 180px; min-width: 0; margin: 0; }
 .oauth-connection-row > .oauth-actions { flex: 0 1 auto; min-width: 0; margin: 0; }
 .oauth-actions .text-button { margin: 0; }
-.oauth-authorization-details { margin-top: 12px; font-size: 13px; line-height: 1.5; }
-.oauth-authorization-details > summary { width: fit-content; max-width: 100%; color: var(--muted); cursor: pointer; overflow-wrap: anywhere; }
-.oauth-authorization-details > summary:hover { color: var(--accent); }
-.oauth-authorization-details > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .oauth-device { min-width: 0; margin-top: 14px; padding: 12px; border: 1px solid var(--line); background: var(--background); font-size: 13px; line-height: 1.5; }
 .oauth-device > .help { margin-top: 0; }
 .oauth-code-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 16px; margin: 8px 0; }

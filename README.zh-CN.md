@@ -72,7 +72,7 @@ Chrome 优先从商店安装：
 
 授权页可能显示 **Grok Build**，因为当前使用 xAI 共享的公开 OAuth 客户端，并非单独注册的 SuperX 授权身份，也不表示官方合作。套餐资格、模型、额度和费用以提供方现行规则及你的账号为准，不保证所有订阅均可用。具体流程见 [连接引导](docs/CONNECTIONS.md#grok-subscription-oauth--browser-only)。
 
-新登录只请求 `openid offline_access grok-cli:access api:access`，不再请求 `profile` 或 `email`，扩展不获取或使用账号资料信息。已有登录不会自动退出；缩小新请求范围不会追溯缩减旧授权。配置说明默认折叠，需要时再展开。
+新登录只请求 `openid offline_access grok-cli:access api:access`，不再请求 `profile` 或 `email`，扩展不获取或使用账号资料信息。已有登录不会自动退出；缩小新请求范围不会追溯缩减旧授权。
 
 默认勾选「在本机记住登录」。可轮换的刷新 Token 使用独立 AES-GCM 密钥加密保存，加密密钥位于扩展 IndexedDB；访问 Token 仅保存在受限浏览器会话存储和内存中。无需 SuperX 密码，不使用浏览器同步。关闭记住登录后，本次登录只保留到浏览器会话结束。刷新结果无法确认或安全保存时，需要重新登录。退出 OAuth 不会清除已有 API Key 或本机 Grok 配置。详见 [隐私说明](PRIVACY.md)。
 

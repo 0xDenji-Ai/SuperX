@@ -281,7 +281,7 @@ test('compact connection and Key guidance is translated without guessing account
   assert.equal(ui.t('options.apiKeyHint','en'),'Grok API Keys from grok.com and xAI Console both work here.');
   assert.equal(ui.t('options.apiAccess','en'),'Get a Grok API Key or check usage');
   assert.equal(ui.t('options.apiSubscriptionTitle','en'),'grok.com · The X Subscription');
-  assert.equal(ui.t('options.apiSubscriptionLink','en'),'Create Grok API Key');assert.equal(ui.t('options.dashboardUsage','en'),'View usage');
+  assert.equal(ui.t('options.apiSubscriptionLink','en'),'Create Grok API Key');assert.equal(ui.t('options.dashboardUsage','en'),'View Usage');
   assert.equal(ui.t('options.apiMeteredTitle','en'),'xAI Console · Pay as you go');assert.equal(ui.t('options.apiMeteredLink','en'),'Keys & billing');
   assert.equal(ui.t('options.apiAccountHelp','en'),'Check usage and charges at the site where you created your Key.');
   assert.equal(ui.t('options.keyMissing','en'),'Paste a Grok API Key above and save settings.');

@@ -950,7 +950,7 @@
     en:[
       'Connection','Enable SuperX','Grok API Key','Paste your Grok API Key','Grok API Keys from grok.com and xAI Console both work here.','Get a Grok API Key or check usage',
       'grok.com · The X Subscription','Use eligible API allowance from The X Subscription. Check your Grok Dashboard account for availability and limits.',
-      'Choose Grok Inference (not Cursor) and allow Chat and your chosen model.','Create Grok API Key','View usage',
+      'Choose Grok Inference (not Cursor) and allow Chat and your chosen model.','Create Grok API Key','View Usage',
       'xAI Console · Pay as you go','Add API credits and pay for the Tokens and tools you use. Manage usage and billing in xAI Console.','Keys & billing',
       'Check usage and charges at the site where you created your Key.',
       'Encrypted locally and restored after restart. Uncheck to keep the Key only until the browser closes.',
@@ -1108,12 +1108,11 @@
     "ru": ["Повтор через {seconds} с ({attempt}/{max})","Автоповтор {attempt}/{max}","После {max} автоматических попыток запрос не выполнен. Можно повторить вручную."],
     "hi": ["{seconds} सेकंड में फिर कोशिश ({attempt}/{max})","स्वतः पुनः प्रयास {attempt}/{max}","{max} स्वतः प्रयासों के बाद भी सफलता नहीं मिली। आप मैन्युअल कोशिश कर सकते हैं।"]
   });
-  section(["options.providerOAuth","oauth.title","oauth.intro","oauth.sharedClient","oauth.login","oauth.cancel","oauth.logout","oauth.remember","oauth.rememberHelp","oauth.verifyCode","oauth.copyCode","oauth.openOfficial","oauth.startHint","oauth.idle","oauth.authorizing","oauth.connected","oauth.refreshing","oauth.restoring","oauth.reauthRequired","oauth.loggingOut","oauth.unavailable","oauth.denied","oauth.expired","oauth.networkError","oauth.storageError","oauth.canceled","oauth.billing","oauth.modelHelp","oauth.refreshModels","oauth.modelUnavailable","oauth.catalogUnavailable","oauth.needsLogin","oauth.settingsAction","oauth.verificationHelp","oauth.modeLabel","oauth.usageError","oauth.permissionError","popup.oauthLabel","popup.oauthHint","popup.signInGrok"], {
+  section(["options.providerOAuth","oauth.title","oauth.intro","oauth.login","oauth.cancel","oauth.logout","oauth.remember","oauth.rememberHelp","oauth.verifyCode","oauth.copyCode","oauth.openOfficial","oauth.startHint","oauth.idle","oauth.authorizing","oauth.connected","oauth.refreshing","oauth.restoring","oauth.reauthRequired","oauth.loggingOut","oauth.unavailable","oauth.denied","oauth.expired","oauth.networkError","oauth.storageError","oauth.canceled","oauth.billing","oauth.modelHelp","oauth.refreshModels","oauth.modelUnavailable","oauth.catalogUnavailable","oauth.needsLogin","oauth.settingsAction","oauth.verificationHelp","oauth.modeLabel","oauth.usageError","oauth.permissionError","popup.oauthLabel","popup.oauthHint","popup.signInGrok"], {
   "en": [
     "Sign in · The X Subscription",
     "Connect your Grok subscription",
     "Sign in on Grok. No API Key or local setup needed.",
-    "The authorization page may show Grok Build because this uses xAI’s shared OAuth client.",
     "Sign in to Grok",
     "Cancel sign-in",
     "Sign out",
@@ -1155,7 +1154,6 @@
     "订阅登录 · The X Subscription",
     "连接 Grok 订阅",
     "在 Grok 官方页面登录，无需 API Key 或本机配置。",
-    "授权页可能显示 Grok Build，因为此方式使用 xAI 的共享 OAuth 客户端。",
     "登录 Grok",
     "取消登录",
     "退出登录",
@@ -1197,7 +1195,6 @@
     "訂閱登入 · The X Subscription",
     "連接 Grok 訂閱",
     "在 Grok 官方頁面登入，無需 API Key 或本機設定。",
-    "授權頁可能顯示 Grok Build，因為此方式使用 xAI 的共用 OAuth 用戶端。",
     "登入 Grok",
     "取消登入",
     "登出",
@@ -1239,7 +1236,6 @@
     "ログイン · The X Subscription",
     "Grok サブスクリプションを接続",
     "Grok 公式ページでログイン。API Key やローカル設定は不要です。",
-    "xAI の共有 OAuth クライアントを使うため、認証画面に Grok Build と表示される場合があります。",
     "Grok にログイン",
     "ログインをキャンセル",
     "ログアウト",
@@ -1281,7 +1277,6 @@
     "구독 로그인 · The X Subscription",
     "Grok 구독 연결",
     "Grok 공식 페이지에서 로그인하세요. API Key나 로컬 설정이 필요 없습니다.",
-    "xAI의 공유 OAuth 클라이언트를 사용하므로 승인 페이지에 Grok Build가 표시될 수 있습니다.",
     "Grok 로그인",
     "로그인 취소",
     "로그아웃",
@@ -1323,7 +1318,6 @@
     "Iniciar sesión · The X Subscription",
     "Conecta tu suscripción Grok",
     "Inicia sesión en Grok. Sin API Key ni configuración local.",
-    "La autorización puede mostrar Grok Build porque usa el cliente OAuth compartido de xAI.",
     "Iniciar sesión en Grok",
     "Cancelar inicio",
     "Cerrar sesión",
@@ -1365,7 +1359,6 @@
     "Se connecter · The X Subscription",
     "Connecter votre abonnement Grok",
     "Connectez-vous sur Grok. Sans API Key ni configuration locale.",
-    "La page peut afficher Grok Build, car le client OAuth partagé de xAI est utilisé.",
     "Se connecter à Grok",
     "Annuler la connexion",
     "Se déconnecter",
@@ -1407,7 +1400,6 @@
     "Anmelden · The X Subscription",
     "Grok-Abonnement verbinden",
     "Auf Grok anmelden. Kein API Key und keine lokale Einrichtung nötig.",
-    "Die Freigabeseite kann Grok Build anzeigen, da der gemeinsame OAuth-Client von xAI verwendet wird.",
     "Bei Grok anmelden",
     "Anmeldung abbrechen",
     "Abmelden",
@@ -1449,7 +1441,6 @@
     "Entrar · The X Subscription",
     "Conectar sua assinatura Grok",
     "Entre no Grok. Sem API Key nem configuração local.",
-    "A autorização pode mostrar Grok Build porque usa o cliente OAuth compartilhado da xAI.",
     "Entrar no Grok",
     "Cancelar entrada",
     "Sair",
@@ -1491,7 +1482,6 @@
     "تسجيل الدخول · The X Subscription",
     "ربط اشتراك Grok",
     "سجّل الدخول على Grok. لا حاجة إلى API Key أو إعداد محلي.",
-    "قد تظهر صفحة التفويض باسم Grok Build لاستخدام عميل OAuth المشترك من xAI.",
     "تسجيل الدخول إلى Grok",
     "إلغاء تسجيل الدخول",
     "تسجيل الخروج",
@@ -1533,7 +1523,6 @@
     "Войти · The X Subscription",
     "Подключить подписку Grok",
     "Войдите на Grok. API Key и локальная настройка не нужны.",
-    "Страница разрешения может показывать Grok Build: используется общий OAuth-клиент xAI.",
     "Войти в Grok",
     "Отменить вход",
     "Выйти",
@@ -1575,7 +1564,6 @@
     "साइन इन · The X Subscription",
     "अपनी Grok सदस्यता जोड़ें",
     "Grok पर साइन इन करें। API Key या स्थानीय सेटअप की ज़रूरत नहीं।",
-    "xAI के साझा OAuth क्लाइंट के कारण अनुमति पेज पर Grok Build दिख सकता है।",
     "Grok में साइन इन",
     "साइन इन रद्द करें",
     "साइन आउट",
@@ -1614,44 +1602,10 @@
     "Grok में साइन इन"
   ]
 });
-  section(["oauth.authorizationDetails"], {
-  "en": [
-    "About authorization"
-  ],
-  "zh-CN": [
-    "关于授权"
-  ],
-  "zh-TW": [
-    "關於授權"
-  ],
-  "ja": [
-    "認証について"
-  ],
-  "ko": [
-    "승인 안내"
-  ],
-  "es": [
-    "Sobre la autorización"
-  ],
-  "fr": [
-    "À propos de l’autorisation"
-  ],
-  "de": [
-    "Zur Autorisierung"
-  ],
-  "pt": [
-    "Sobre a autorização"
-  ],
-  "ar": [
-    "حول التفويض"
-  ],
-  "ru": [
-    "Об авторизации"
-  ],
-  "hi": [
-    "अनुमति के बारे में"
-  ]
-});
+  section(['options.pricing'], {
+    en:['Pricing'],'zh-CN':['定价'],'zh-TW':['定價'],ja:['料金'],ko:['요금'],es:['Precios'],
+    fr:['Tarifs'],de:['Preise'],pt:['Preços'],ar:['الأسعار'],ru:['Цены'],hi:['कीमतें']
+  });
   const aliases = {'common.auto':'lang.auto','common.failed':'status.failed','tooltip.collapse':'common.collapse','tooltip.expand':'common.expand'};
   for (const language of SUPPORTED_LANGUAGES) {
     for (const [key, source] of Object.entries(aliases)) catalog[language][key] = catalog[language][source];

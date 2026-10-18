@@ -12,7 +12,7 @@ The unreleased **0.9.11** candidate offers three independent connections. **Sign
 
 This candidate connects directly from Chrome / Edge on Windows or macOS. **No Grok CLI, terminal, additional SuperX program or API Key is required.**
 
-1. Open **Settings → Connection**. New installations already select **Sign in · The X Subscription**; choose **Sign in to Grok**. Setup explanations are collapsed until you need them.
+1. Open **Settings → Connection**. New installations already select **Sign in · The X Subscription**; choose **Sign in to Grok**.
 2. SuperX displays a short authorization code and opens the official `accounts.x.ai` / `auth.x.ai` device page. Check that the code matches and confirm the requested access yourself. Enter your account password only on the official site, never in SuperX.
 3. Return to SuperX. After authorization, it loads the account's model directory without sending a Fact Check, comment or other test inference request. If the page was closed, reopen the official link from Settings before the code expires; otherwise cancel and start again.
 4. Select a model available to this account and a supported reasoning level, then save settings and enable SuperX. The initial choice stays **Grok 4.3 / None**; an unavailable choice is shown explicitly rather than silently replaced by Grok 4.7.
@@ -109,7 +109,7 @@ For API failures, open **Local diagnostic log** at the bottom of Settings. It ke
 
 ## 中文快速引导
 
-新安装默认选择排在首位的 **订阅登录 · The X Subscription**（OAuth），另有 **Grok API Key** 和 **本机 Grok Build · CLI / ACP**。已有来源和各自设置不变；旧设置非空但没有来源，或设置缺失／为空但留有旧凭据时，保留 API 路径。订阅登录仅需浏览器，Windows 和 Mac 均无需 API Key、CLI 或额外程序：在「设置 → 连接」点击登录 Grok，核对短码后由本人在官方 xAI 授权页确认，再回到 SuperX。说明默认折叠。页面可能显示 **Grok Build**，这是共享 OAuth 客户端的身份，并非 SuperX 独立注册的应用或官方合作声明。账号资格、模型、额度与费用以提供方规则为准；三种来源均默认 4.3／关闭推理，不可用时由用户明确改选。
+新安装默认选择排在首位的 **订阅登录 · The X Subscription**（OAuth），另有 **Grok API Key** 和 **本机 Grok Build · CLI / ACP**。已有来源和各自设置不变；旧设置非空但没有来源，或设置缺失／为空但留有旧凭据时，保留 API 路径。订阅登录仅需浏览器，Windows 和 Mac 均无需 API Key、CLI 或额外程序：在「设置 → 连接」点击登录 Grok，核对短码后由本人在官方 xAI 授权页确认，再回到 SuperX。页面可能显示 **Grok Build**，这是共享 OAuth 客户端的身份，并非 SuperX 独立注册的应用或官方合作声明。账号资格、模型、额度与费用以提供方规则为准；三种来源均默认 4.3／关闭推理，不可用时由用户明确改选。
 
 新授权只请求 `openid offline_access grok-cli:access api:access`，不再请求 `profile`／`email`，也不获取或使用账号资料信息。后两项属于标准可选资料权限，见 [OpenID Connect §5.4](https://openid.net/specs/openid-connect-core-1_0.html#ScopeClaims)；`offline_access` 用于请求刷新授权，见 [§11](https://openid.net/specs/openid-connect-core-1_0.html#OfflineAccess)，Grok 两项访问权限由服务商定义并决定实际授予范围，见 [OAuth 2.0 §3.3](https://www.rfc-editor.org/rfc/rfc6749.html#section-3.3)。已有登录不会自动退出，旧授权也不会追溯缩权；旧权限范围的待完成设备登录会清除，需要重新开始。
 

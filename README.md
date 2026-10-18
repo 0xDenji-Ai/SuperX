@@ -72,7 +72,7 @@ In **Settings → Connection**, new installations start with **Sign in · The X 
 
 The authorization page can display **Grok Build** because this route uses xAI's shared public OAuth client; it is not a separately registered SuperX identity or an official partnership claim. Account eligibility, models, allowance and charges follow the provider's current rules; not every subscription is guaranteed to work. [Connection details](docs/CONNECTIONS.md#grok-subscription-oauth--browser-only) explain the identity and supported flow.
 
-New sign-ins request only `openid offline_access grok-cli:access api:access`, without `profile` or `email`; SuperX does not fetch or use account-profile information. Existing connected logins stay connected, and this change does not reduce an already granted authorization retroactively. Setup details stay collapsed until needed.
+New sign-ins request only `openid offline_access grok-cli:access api:access`, without `profile` or `email`; SuperX does not fetch or use account-profile information. Existing connected logins stay connected, and this change does not reduce an already granted authorization retroactively.
 
 **Remember login on this device** is selected by default. The rotating refresh token is encrypted locally with its own AES-GCM key in extension IndexedDB; access tokens stay in restricted browser-session storage and memory. No SuperX password or browser sync is used. Turn Remember login off to keep this login only for the browser session. If a refresh result cannot be safely confirmed or saved, sign in again. Signing out removes this connection without clearing your saved API Key or local Grok configuration. See [Privacy](PRIVACY.md).
 
