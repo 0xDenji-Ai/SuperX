@@ -64,13 +64,14 @@ function runWindows(root,fixture,command){
 }
 
 test('Windows actual shell isolates the official invocation and restores environment/CWD without retaining a temp tree',{skip:!ps},()=>withFixture(root=>{
-  const fixture=windowsFixture(root),result=runWindows(root,fixture,Setup.command(input));assert.equal(result.parent.launchError,null);assert.equal(result.parent.grok,'prior');assert.equal(result.parent.xai,'unused-test-value');assert.equal(result.parent.loader,'--require missing-setup-test-loader');assert.equal(result.parent.cwd,root);
+  // Native realpath resolves 8.3 TEMP aliases that PowerShell expands on cd.
+  const fixture=windowsFixture(root),result=runWindows(root,fixture,Setup.command(input));assert.equal(result.parent.launchError,null);assert.equal(result.parent.grok,'prior');assert.equal(result.parent.xai,'unused-test-value');assert.equal(result.parent.loader,'--require missing-setup-test-loader');assert.equal(fs.realpathSync.native(result.parent.cwd),fs.realpathSync.native(root));
   assert.equal(result.observed.secret,secret);assert.equal(result.observed.auth,path.join(fixture.home,'.grok','auth.json'));assert.deepEqual(result.observed.unsafe,[]);assert.ok(Object.values(result.observed.disabled).length>=23);assert.ok(Object.values(result.observed.disabled).every(value=>value==='0'));
   assert.deepEqual(result.observed.args,['--permission-mode','dontAsk','--no-subagents','--deny','Bash','--deny','Read','--deny','Edit','--deny','Write','--deny','Grep','--deny','MCPTool','agent','--no-leader','serve','--bind','127.0.0.1:2419']);assert.equal(result.observed.args.includes(secret),false);assert.equal(path.dirname(result.observed.cwd),path.dirname(result.observed.home));assert.equal(fs.existsSync(path.dirname(result.observed.home)),false);assert.deepEqual(fs.readdirSync(fixture.temp),[]);
 }));
 
 test('Windows rejects an unvalidated official runtime before starting the server and still restores the shell',{skip:!ps},()=>withFixture(root=>{
-  const fixture=windowsFixture(root,{version:'1.0.99'}),result=runWindows(root,fixture,Setup.command(input));assert.equal(result.observed,null);assert.match(result.parent.launchError,/supports official Grok 1\.0\.60/);assert.equal(result.parent.grok,'prior');assert.equal(result.parent.cwd,root);assert.deepEqual(fs.readdirSync(fixture.temp),[]);
+  const fixture=windowsFixture(root,{version:'1.0.99'}),result=runWindows(root,fixture,Setup.command(input));assert.equal(result.observed,null);assert.match(result.parent.launchError,/supports official Grok 1\.0\.60/);assert.equal(result.parent.grok,'prior');assert.equal(fs.realpathSync.native(result.parent.cwd),fs.realpathSync.native(root));assert.deepEqual(fs.readdirSync(fixture.temp),[]);
 }));
 
 test('Windows runtime failures retain cleanup and do not repeat a server launch',{skip:!ps},()=>withFixture(root=>{
