@@ -658,6 +658,14 @@ test('queued-only cancellation received during credential lookup prevents a late
   assert.equal(bg.apiCalls.length,0);assert.equal(port.messages.some(m=>m.requestId==='not-created'&&m.type==='START'),false);
 });
 
+test('preserving started work still withdraws a request that has never entered the provider queue slot',async()=>{
+  const gate=deferred(),bg=createBackground({settings:{apiConcurrency:1},apiRun:()=>gate.promise});await bg.ready();const port=bg.connect();
+  port.send({type:'ANALYZE',requestId:'owns-slot',post:post(100)});await until(()=>bg.apiCalls.length===1);
+  port.send({type:'ANALYZE',requestId:'not-started',post:post(101)});await until(()=>port.messages.some(message=>message.type==='QUEUED'&&message.requestId==='not-started'));
+  port.send({type:'CANCEL_IF_QUEUED',requestId:'not-started',preserveStarted:true});await until(()=>port.messages.some(message=>message.requestId==='not-started'&&message.code==='CANCELLED'));
+  assert.equal(bg.apiCalls.length,1);assert.equal(bg.apiCalls[0].signal.aborted,false);gate.resolve({text:'Existing answer.',provider:'api'});await until(()=>port.messages.some(message=>message.requestId==='owns-slot'&&message.type==='RESULT'));await tick();assert.equal(bg.apiCalls.length,1);
+});
+
 test('API secrets remain in trusted storage and only extension UI can change them', async () => {
   const bg = createBackground({ settings: { apiKey: 'must-not-leak' } });
   await bg.ready();
@@ -3103,6 +3111,34 @@ test('automatic retries wait a full three seconds and keep the same logical requ
   const wait=port.messages.find(m=>m.type==='RETRY_WAIT');assert.equal(wait.retryAttempt,1);assert.equal(wait.maxRetries,5);assert.equal(wait.retryDelayMs,3000);assert.equal(wait.requestId,'same-logical-request');assert.doesNotMatch(JSON.stringify(wait),/PRIVATE_CAPACITY_BODY/);
   bg.advanceRetryTimers(2999);await tick();assert.equal(bg.apiCalls.length,1);bg.advanceRetryTimers(1);await until(()=>port.messages.some(m=>m.type==='RESULT'));
   assert.deepEqual(started,[started[0],started[0]+3000]);assert.deepEqual(port.messages.filter(m=>m.type==='START').map(m=>m.retryAttempt),[0,1]);assert.equal(port.messages.find(m=>m.type==='RESULT').retryAttempts,1);assert.equal(port.messages.some(m=>m.type==='ERROR'),false);
+});
+
+test('preserveStarted keeps the same analysis and comment jobs through retry waits and shared-queue reentry',async()=>{
+  for(const task of ['analysis','comments']){
+    const blocker=deferred();let attempts=0,active=0,maximum=0;
+    const tracked=async(call,isComment=false)=>{active++;maximum=Math.max(maximum,active);try{
+      if(call.post.id==='101')return await blocker.promise;
+      if(++attempts===1)throw capacityError({usage:{total_tokens:2}});
+      return isComment?{comments:['One checked angle.','Another perspective.','Third useful reply.'],provider:'api',usage:{total_tokens:3}}:{text:'The original check completed.',provider:'api',verificationStatus:'completed',usage:{total_tokens:3}};
+    }finally{active--;}};
+    const bg=createBackground({manualRetryTimers:true,settings:{apiConcurrency:1},apiRun:call=>tracked(call),commentRun:call=>tracked(call,true)});await bg.ready();const port=bg.connect();
+    const requestId='retained-'+task,waitType=task==='comments'?'COMMENT_RETRY_WAIT':'RETRY_WAIT',queuedType=task==='comments'?'COMMENT_QUEUED':'QUEUED',resultType=task==='comments'?'COMMENT_RESULT':'RESULT';
+    port.send({type:task==='comments'?'GENERATE_COMMENTS':'ANALYZE',requestId,post:post(100)});await until(()=>port.messages.some(message=>message.type===waitType&&message.requestId===requestId));
+    port.send({type:'CANCEL_IF_QUEUED',requestId,preserveStarted:true});await tick();assert.equal(port.messages.some(message=>message.requestId===requestId&&message.code==='CANCELLED'),false);
+    port.send({type:'ANALYZE',requestId:'occupies-shared-slot',post:post(101)});await until(()=>bg.apiCalls.some(call=>call.post.id==='101'));assert.equal(active,1);
+    bg.advanceRetryTimers(2999);await tick();assert.equal(attempts,1);bg.advanceRetryTimers(1);await until(()=>port.messages.some(message=>message.type===queuedType&&message.requestId===requestId&&message.retryAttempt===1));assert.equal(attempts,1);
+    port.send({type:'CANCEL_IF_QUEUED',requestId,preserveStarted:true});await tick();assert.equal(port.messages.some(message=>message.requestId===requestId&&message.code==='CANCELLED'),false);assert.equal(attempts,1);assert.equal(active,1);
+    blocker.resolve({text:'Other post completed.',provider:'api'});await until(()=>port.messages.some(message=>message.type===resultType&&message.requestId===requestId));
+    assert.equal(attempts,2);assert.equal(maximum,1);assert.equal(active,0);const completed=port.messages.find(message=>message.type===resultType&&message.requestId===requestId);assert.equal(completed.retryAttempts,1);assert.equal((completed.result||completed).usage.total_tokens,5);assert.equal(port.messages.filter(message=>message.type===(task==='comments'?'COMMENT_START':'START')&&message.requestId===requestId).length,2);
+  }
+});
+
+test('queued-only cancellation without preserveStarted still withdraws a previously started retry before redispatch',async()=>{
+  const blocker=deferred();let attempts=0;const bg=createBackground({manualRetryTimers:true,settings:{apiConcurrency:1},apiRun:call=>{if(call.post.id==='101')return blocker.promise;attempts++;throw capacityError();}});await bg.ready();const port=bg.connect();
+  port.send({type:'ANALYZE',requestId:'old-policy-retry',post:post(100)});await until(()=>port.messages.some(message=>message.type==='RETRY_WAIT'));
+  port.send({type:'ANALYZE',requestId:'blocker',post:post(101)});await until(()=>bg.apiCalls.length===2);bg.advanceRetryTimers(3000);await until(()=>port.messages.some(message=>message.type==='QUEUED'&&message.requestId==='old-policy-retry'&&message.retryAttempt===1));
+  port.send({type:'CANCEL_IF_QUEUED',requestId:'old-policy-retry'});await until(()=>port.messages.some(message=>message.requestId==='old-policy-retry'&&message.code==='CANCELLED'));
+  blocker.resolve({text:'Other job finished.',provider:'api'});await until(()=>port.messages.some(message=>message.requestId==='blocker'&&message.type==='RESULT'));bg.advanceRetryTimers(9000);await tick();assert.equal(attempts,1);assert.equal(bg.apiCalls.length,2);
 });
 
 test('five additional attempts are the hard limit and cumulative billing counts each terminal snapshot once',async()=>{

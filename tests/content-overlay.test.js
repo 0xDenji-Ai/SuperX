@@ -1314,6 +1314,70 @@ test('background visibility hides the overlay and prevents a new analysis until 
   assert.deepEqual(page.writes, []);
 });
 
+test('switching tabs retains started answers before or after the first token across all three sources',()=>{
+  for(const provider of ['api','oauth','build'])for(const partial of [false,true])for(const completeHidden of [false,true]){
+    const page=fixture({postCount:1});page.configure({provider});const request=page.port.sent.find(message=>message.type==='ANALYZE'),card=page.cards()[0];
+    page.port.onMessage.emit({type:'START',requestId:request.requestId});
+    if(partial)page.port.onMessage.emit({type:'UPDATE',requestId:request.requestId,phase:'verify',text:'The first checked detail.',usage:{total_tokens:12}});
+    page.flush();const port=page.port,before=port.sent.length;
+    page.document.hidden=true;page.document.emit('visibilitychange');page.flush();page.tick(15000);
+    assert.equal(page.displayedCards().length,0);assert.equal(port.closed,false);
+    assert.equal(port.sent.slice(before).some(message=>['CANCEL','CANCEL_ALL','CANCEL_IF_QUEUED','ANALYZE'].includes(message.type)),false,provider);
+    page.port.onMessage.emit({type:'UPDATE',requestId:request.requestId,phase:'verify',text:'A finding received while hidden.',usage:{total_tokens:20}});page.flush();
+    assert.equal(card.testShadow.querySelector('.answer').textContent,'A finding received while hidden.');assertTokenCount(card,20);
+    const finish=()=>{page.port.onMessage.emit({type:'RESULT',requestId:request.requestId,result:{provider,text:'Completed original fact check.',verificationStatus:'completed',sources:[{url:'https://example.com/evidence',title:'Primary evidence'}],usage:{total_tokens:30}}});page.flush();};
+    if(completeHidden)finish();
+    page.document.hidden=false;page.document.emit('visibilitychange');page.flush();page.tick(10000);
+    if(!completeHidden)finish();
+    assert.equal(page.port,port);assert.equal(page.connectionAttempts(),1);assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,1);
+    assert.equal(card.testShadow.querySelector('.answer').textContent,'Completed original fact check.');assertTokenCount(card,30);assert.equal(page.displayedCards().length,1);assert.deepEqual(page.writes,[]);
+  }
+});
+
+test('tab hiding withdraws only an initial queue and a crossed START stays attached to the original request',()=>{
+  for(const crossedStart of [false,true]){
+    const page=fixture({postCount:1});page.configure({dwellMs:1000});page.elapse(1000);const request=page.port.sent.find(message=>message.type==='ANALYZE'),card=page.cards()[0];
+    const before=page.port.sent.length;page.document.hidden=true;page.document.emit('visibilitychange');page.flush();
+    const probe=page.port.sent.slice(before).find(message=>message.type==='CANCEL_IF_QUEUED');assert.equal(probe.requestId,request.requestId);assert.equal(probe.preserveStarted,true);
+    assert.equal(page.port.sent.slice(before).some(message=>['CANCEL','CANCEL_ALL'].includes(message.type)),false);
+    if(crossedStart){page.port.onMessage.emit({type:'START',requestId:request.requestId});page.port.onMessage.emit({type:'RESULT',requestId:request.requestId,result:{provider:'api',text:'The paid request won the race.',sources:[],verificationStatus:'completed'}});}
+    else {page.port.onMessage.emit({type:'ERROR',requestId:request.requestId,code:'CANCELLED'});page.port.onMessage.emit({type:'RESULT',requestId:request.requestId,result:{provider:'api',text:'Obsolete unstarted result.',sources:[]}});}
+    page.flush();page.tick(60000);assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,1);
+    page.document.hidden=false;page.document.emit('visibilitychange');page.flush();page.elapse(999);assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,1);
+    page.elapse(1);assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,crossedStart?1:2);assert.doesNotMatch(card.testShadow.querySelector('.answer').textContent,/Obsolete/);
+    if(crossedStart)assert.equal(card.testShadow.querySelector('.answer').textContent,'The paid request won the race.');
+  }
+});
+
+test('started comment generation finishes while hidden without a second draft request on return',()=>{
+  for(const provider of ['api','oauth','build']){
+    const page=fixture({postCount:1});page.configure({provider});const {card,generate}=completeFirst(page,'Existing checked answer.');generate.emit('click');const draft=page.port.sent.find(message=>message.type==='GENERATE_COMMENTS');
+    page.port.onMessage.emit({type:'COMMENT_START',requestId:draft.requestId});page.flush();const before=page.port.sent.length;
+    page.document.hidden=true;page.document.emit('visibilitychange');page.flush();
+    assert.equal(page.port.sent.slice(before).some(message=>['CANCEL','CANCEL_ALL','CANCEL_IF_QUEUED'].includes(message.type)),false);
+    page.port.onMessage.emit({type:'COMMENT_RESULT',requestId:draft.requestId,comments:suggestions,usage:{total_tokens:9}});page.flush();
+    page.document.hidden=false;page.document.emit('visibilitychange');page.tick(10000);
+    assert.equal(card.testShadow.querySelectorAll('.comment-copy').length,3);assert.equal(card.testShadow.querySelector('.answer').textContent,'Existing checked answer.');assert.equal(page.port.sent.filter(message=>message.type==='GENERATE_COMMENTS').length,1);assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,1);
+  }
+});
+
+test('tab switching preserves retries including their queued phase for started answers and comments',()=>{
+  for(const requeued of [false,true]){
+    const page=fixture({postCount:1});page.configure();const analysis=page.port.sent.find(message=>message.type==='ANALYZE'),card=page.cards()[0];
+    retryWait(page,analysis,{partialResult:{provider:'api',text:'A retained finding.',sources:[]},usage:{total_tokens:10}});
+    card.testShadow.querySelector('.generate-comments').emit('click');const draft=page.port.sent.find(message=>message.type==='GENERATE_COMMENTS');retryWait(page,draft,{usage:{total_tokens:3}},true);
+    if(requeued){page.port.onMessage.emit({type:'QUEUED',requestId:analysis.requestId,retryAttempt:1,maxRetries:5});page.port.onMessage.emit({type:'COMMENT_QUEUED',requestId:draft.requestId,retryAttempt:1,maxRetries:5});page.flush();}
+    const before=page.port.sent.length;page.document.hidden=true;page.document.emit('visibilitychange');page.flush();page.tick(5000);
+    assert.equal(page.port.sent.slice(before).some(message=>['CANCEL','CANCEL_ALL','CANCEL_IF_QUEUED','ANALYZE','GENERATE_COMMENTS'].includes(message.type)),false);
+    assert.equal(retryLabel(card).hidden,false);assert.equal(retryLabel(card,true).hidden,false);assert.equal(card.testShadow.querySelector('.answer').textContent,'A retained finding.');assertTokenCount(card,13);
+    page.port.onMessage.emit({type:'START',requestId:analysis.requestId,retryAttempt:1,maxRetries:5});page.port.onMessage.emit({type:'COMMENT_START',requestId:draft.requestId,retryAttempt:1,maxRetries:5});
+    page.port.onMessage.emit({type:'RESULT',requestId:analysis.requestId,result:{provider:'api',text:'Retried original finding.',sources:[],verificationStatus:'completed',usage:{total_tokens:25}}});page.port.onMessage.emit({type:'COMMENT_RESULT',requestId:draft.requestId,comments:suggestions,usage:{total_tokens:6}});page.flush();
+    page.document.hidden=false;page.document.emit('visibilitychange');page.tick(10000);
+    assert.equal(card.testShadow.querySelector('.answer').textContent,'Retried original finding.');assertTokenCount(card,31);assert.equal(card.testShadow.querySelectorAll('.comment-copy').length,3);assert.equal(retryLabel(card).hidden,true);assert.equal(retryLabel(card,true).hidden,true);
+    assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,1);assert.equal(page.port.sent.filter(message=>message.type==='GENERATE_COMMENTS').length,1);
+  }
+});
+
 test('API-only analysis can read promoted posts after legacy native settings migrate', () => {
   const page=fixture();page.articles[0].postData.isPromoted=true;page.articles[1].remove();page.clearWrites();page.mutate();
   page.configure({provider:'native'});page.intersect();page.tick();page.tick(400);
@@ -3196,10 +3260,10 @@ test('transient CLI disconnection retries one post without disabling other visib
   page.articles[1].rect={...page.articles[1].rect,top:400,bottom:680};page.intersect();page.tick();assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,2);assert.equal(page.cards()[1].testShadow.querySelector('.generate-comments').hidden,false);
 });
 
-test('collapsing, hiding, disabling or navigating cancels scheduled retries and late results cannot revive their labels',()=>{
-  for(const action of ['collapse','hidden','disable','navigate']){
+test('collapsing, disabling or navigating cancels scheduled retries and late results cannot revive their labels',()=>{
+  for(const action of ['collapse','disable','navigate']){
     const page=fixture({postCount:1});page.configure();const analysis=page.port.sent.find(message=>message.type==='ANALYZE'),card=page.cards()[0];retryWait(page,analysis,{partialResult:{provider:'api',text:'Retained until canceled.',sources:[]}});card.testShadow.querySelector('.generate-comments').emit('click');const draft=page.port.sent.find(message=>message.type==='GENERATE_COMMENTS');retryWait(page,draft,{},true);const before=page.port.sent.length;
-    if(action==='collapse')page.nodes.find(node=>node.className==='rail-collapse').emit('click');else if(action==='hidden'){page.document.hidden=true;page.document.emit('visibilitychange');}else if(action==='disable')page.configure({enabled:false});else{page.location.pathname='/settings/account';page.tick();}page.flush();
+    if(action==='collapse')page.nodes.find(node=>node.className==='rail-collapse').emit('click');else if(action==='disable')page.configure({enabled:false});else{page.location.pathname='/settings/account';page.tick();}page.flush();
     const cancellations=page.port.sent.slice(before).filter(message=>['CANCEL','CANCEL_ALL'].includes(message.type));assert.ok(cancellations.some(message=>message.type==='CANCEL_ALL')||[analysis,draft].every(request=>cancellations.some(message=>message.requestId===request.requestId)),action);
     assert.equal(retryLabel(card).hidden,true,action);assert.equal(retryLabel(card,true).hidden,true,action);page.port.onMessage.emit({type:'RESULT',requestId:analysis.requestId,result:{provider:'api',text:'Obsolete retry result.',sources:[]}});page.port.onMessage.emit({type:'COMMENT_RESULT',requestId:draft.requestId,comments:suggestions});page.flush();assert.doesNotMatch(card.testShadow.querySelector('.answer').textContent,/Obsolete/);assert.equal(card.testShadow.querySelectorAll('.comment-copy').length,0);
   }

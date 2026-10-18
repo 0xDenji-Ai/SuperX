@@ -3,7 +3,10 @@ import { lstat, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { dirname, extname, isAbsolute, posix, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+// Chrome's store uses regional Portuguese catalogs; both cover the UI's pt.
+export const MANIFEST_LOCALES = Object.freeze(['en', 'zh_CN', 'zh_TW', 'ja', 'ko', 'es', 'fr', 'de', 'pt_BR', 'pt_PT', 'ar', 'ru', 'hi']);
 export const PRODUCTION_FILES = Object.freeze([
+  ...MANIFEST_LOCALES.map(locale => `_locales/${locale}/messages.json`),
   'api-provider.js',
   'assets/icon-128.png', 'assets/icon-16.png', 'assets/icon-32.png', 'assets/icon-48.png',
   'assets/superx-logo.svg', 'assets/superx-symbol.svg',
@@ -40,6 +43,36 @@ function validateVersion(version, owner) {
     || version.split('.').some(part => Number(part) > 65535) || version === '0.0.0') {
     throw new Error(`${owner}: expected a Chrome-compatible major.minor.patch version`);
   }
+}
+
+function validateManifestLocales(manifest, byName) {
+  if (manifest.default_locale !== 'en') throw new Error('manifest.json: expected default_locale en');
+  if (manifest.description !== '__MSG_extensionDescription__') {
+    throw new Error('manifest.json: description must reference __MSG_extensionDescription__');
+  }
+  const descriptions = {};
+  for (const locale of MANIFEST_LOCALES) {
+    const owner = `_locales/${locale}/messages.json`;
+    const messages = parseJSON(byName.get(owner), owner);
+    const entry = messages?.extensionDescription;
+    if (!messages || typeof messages !== 'object' || Array.isArray(messages)
+      || Object.keys(messages).length !== 1 || !Object.hasOwn(messages, 'extensionDescription')
+      || !entry || typeof entry !== 'object' || Array.isArray(entry)
+      || Object.keys(entry).length !== 1 || !Object.hasOwn(entry, 'message')
+      || typeof entry.message !== 'string') {
+      throw new Error(`${owner}: expected only extensionDescription with a message string`);
+    }
+    const message = entry.message;
+    // A conservative UTF-16 bound also fits Chrome's 132-character summary.
+    if (!message.trim() || message.length > 132 || /[\u0000-\u001f\u007f]/.test(message)) {
+      throw new Error(`${owner}: description must be a nonempty single line of at most 132 characters`);
+    }
+    if (/__MSG_[A-Za-z0-9_]+__|\$[A-Za-z0-9_]+\$/i.test(message)) {
+      throw new Error(`${owner}: unresolved description placeholder`);
+    }
+    descriptions[locale] = message;
+  }
+  return { defaultLocale: manifest.default_locale, descriptions };
 }
 
 function iconPaths(icons) {
@@ -86,6 +119,7 @@ export async function inspectPackage(root = projectRoot, expectedVersion) {
   }
   if (!manifest || typeof manifest !== 'object' || Array.isArray(manifest)
     || manifest.manifest_version !== 3 || manifest.name !== 'SuperX') throw new Error('manifest.json: expected SuperX Manifest V3');
+  const localization = validateManifestLocales(manifest, byName);
   validateVersion(manifest.version, 'manifest.json');
   validateVersion(pkg.version, 'package.json');
   if (pkg.version !== manifest.version) throw new Error('Version mismatch between package.json and manifest.json');
@@ -120,7 +154,7 @@ export async function inspectPackage(root = projectRoot, expectedVersion) {
   }
   // Match the Git/source-export LF form across Windows and Linux checkouts.
   // Keep binary icon bytes intact; text validation above uses the original files.
-  return { version: manifest.version, files: files.map(file => ({
+  return { version: manifest.version, localization, files: files.map(file => ({
     name: file.name,
     data: extname(file.name) === '.png' ? file.data : Buffer.from(file.data.toString('utf8').replace(/\r\n/g, '\n')),
   })) };

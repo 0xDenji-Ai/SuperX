@@ -14,6 +14,7 @@ function fail(message) { errors.push(message); }
 try {
   const release = await inspectPackage(root);
   console.log(`✓ Release package: SuperX ${release.version}, ${release.files.length} allowlisted files`);
+  console.log(`✓ Manifest descriptions: English default, ${Object.keys(release.localization.descriptions).join(', ')} (≤132 characters each)`);
 } catch (error) {
   fail(`Release package validation failed: ${error.message}`);
 }

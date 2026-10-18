@@ -114,11 +114,9 @@
   document.addEventListener('visibilitychange',()=>{
     if(document.hidden) {
       wakeActions.clear();
-      cancelDwellTimer();
-      queue.clear();post({type:'CANCEL_ALL'});requests.clear();
-      // Sent work may already have consumed tokens even before the first
-      // chunk arrives. Retain it for an explicit retry, never an automatic replay.
-      for(const entry of allEntries()){clearRetries(entry);entry.since=0;entry.pending=false;if(['queued','running','retry-wait'].includes(entry.status)){entry.status='error';status(entry,'status.cancelled');refreshCard(entry);}if(['queued','running','retry-wait'].includes(entry.commentStatus)){entry.commentStatus='error';entry.commentError='status.cancelled';refreshComments(entry);}}
+      // Switching tabs only pauses new work. Keep the port and subscriptions
+      // so accepted answers, comments and their retries can finish in place.
+      pauseUnseenRailQueue({preserveStarted:true});
     }
     else {if(!connected&&!needsPageRefresh)connect();scheduleScan();tick();}
     scheduleLayout();
@@ -157,14 +155,15 @@
     resetDwellWaits();
     clearTimeout(handshakeTimer);handshakeTimer=undefined;
     if(!idle)providerReady=false;
+    const interruptionKey=needsPageRefresh?'status.refreshRequired':pageSuspended?'status.cancelled':'status.connectionLost';
     const previousPort=port;port=undefined;
     try {previousPort?.disconnect();}catch{/* The old context may already be gone. */}
     railLanguage.disabled=!idle;
     for(const entry of allEntries()) {
       clearRetries(entry);
       const interrupted=['queued','running','retry-wait'].includes(entry.status)||wakeActions.has(wakeKey(entry,'analysis'));
-      if(interrupted){entry.status='error';entry.ui.retry.hidden=false;status(entry,needsPageRefresh?'status.refreshRequired':'status.connectionLost');}
-      if(['queued','running','retry-wait'].includes(entry.commentStatus)||wakeActions.has(wakeKey(entry,'comments'))){entry.commentStatus='error';entry.commentError=needsPageRefresh?'status.refreshRequired':'status.connectionLost';}
+      if(interrupted){entry.status='error';entry.ui.retry.hidden=false;status(entry,interruptionKey);}
+      if(['queued','running','retry-wait'].includes(entry.commentStatus)||wakeActions.has(wakeKey(entry,'comments'))){entry.commentStatus='error';entry.commentError=interruptionKey;}
       if(needsPageRefresh){
         if(entry.status==='done'&&!entry.connectionStatus)entry.connectionStatus={key:entry.statusKey,vars:entry.statusVars};
         status(entry,'status.refreshRequired');
@@ -517,6 +516,9 @@
       else {entry.status='new';entry.pending=false;entry.analysisUsage=null;refreshCard(entry);}
       scheduleLayout();tick();return;
     }
+    // Monotonic across retry waits and re-queuing: this logical task has begun,
+    // even if a later QUEUED snapshot no longer looks like running work.
+    if(['START','UPDATE','RETRY_WAIT','COMMENT_START','COMMENT_RETRY_WAIT'].includes(message.type))request.started=true;
     if(request.task==='comments') {
       if(message.type==='COMMENT_QUEUED'){entry.commentStatus='queued';retryPhase(entry,'comments','queued',message);}
       if(message.type==='COMMENT_START'){request.railCancellation=false;entry.commentStatus='running';retryPhase(entry,'comments','running',message);}
@@ -823,17 +825,17 @@
     const primary=document.querySelector('[data-testid="primaryColumn"]'),sidebar=document.querySelector('[data-testid="sidebarColumn"]');
     return Layout.railBounds(primary?.getBoundingClientRect(),sidebar?.getBoundingClientRect(),viewport);
   }
-  function pauseUnseenRailQueue() {
+  function pauseUnseenRailQueue({preserveStarted=false}={}) {
     // No room for the result means no new paid work. Preserve requests whose
     // START has arrived, and only cancel work that is still waiting to begin.
     cancelDwellTimer();queue.clear();
     for(const entry of allEntries()){entry.pending=false;entry.since=0;}
     for(const [id,request] of requests)if(request.task==='comments'?['queued','retry-wait'].includes(request.entry.commentStatus):['queued','retry-wait'].includes(request.entry.status)) {
-      if(request.railCancellation)continue;
+      if(request.railCancellation||preserveStarted&&request.started)continue;
       request.railCancellation=true;
       // Leave the request attached until cancellation is acknowledged. It may
       // already be running while the START message is still crossing the port.
-      post({type:'CANCEL_IF_QUEUED',requestId:id});
+      post({type:'CANCEL_IF_QUEUED',requestId:id,...(preserveStarted?{preserveStarted:true}:{})});
     }
   }
   function positionCards() {

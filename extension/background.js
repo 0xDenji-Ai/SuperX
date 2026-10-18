@@ -483,7 +483,9 @@ chrome.runtime.onConnect.addListener(port => {
       if(message.type==='CANCEL') { const job=jobs.get(`${client.tabId}:${message.requestId}`); if(job?.client===client) abortJob(job); return; }
       if(message.type==='CANCEL_IF_QUEUED') {
         const job=jobs.get(`${client.tabId}:${messageRequestId}`);
-        if(job?.client===client && runningJobs.has(job))return;
+        // Hiding a tab may race START or a retry's transition back to waiting.
+        // Keep the logical job once any attempt has owned a provider slot.
+        if(job?.client===client && (runningJobs.has(job)||message.preserveStarted===true&&job.started===true))return;
         if(job?.client===client)abortJob(job);
         send(port,{type:'ERROR',requestId:messageRequestId,error:'未开始的分析已暂停。',code:'CANCELLED'});return;
       }
@@ -518,7 +520,7 @@ chrome.runtime.onConnect.addListener(port => {
       }
       const key=`${client.tabId}:${requestId}`;
       if(jobs.has(key)) return;
-      const job={key,requestId,post,inputFingerprint,analysis,client,clientEpoch:receivedEpoch,settings:snapshot,revision:receivedRevision,fingerprint,historyTicket:ticket,historyLanguage,retryAttempts:0,completedBilling:[],controller:new AbortController()};
+      const job={key,requestId,post,inputFingerprint,analysis,client,clientEpoch:receivedEpoch,settings:snapshot,revision:receivedRevision,fingerprint,historyTicket:ticket,historyLanguage,started:false,retryAttempts:0,completedBilling:[],controller:new AbortController()};
       jobs.set(key,job);
       const before=comments?queue.findIndex(waiting=>!commentsJob(waiting)):-1;
       if(before>=0)queue.splice(before,0,job);else queue.push(job);
@@ -636,7 +638,7 @@ function pump() {
     while(queue.length) {
       const job=queue[0];
       if(apiSlots.size>=apiLimit(job.settings))break;
-      queue.shift();runningJobs.add(job);
+      queue.shift();runningJobs.add(job);job.started=true;
       if(job.nextRetryAttempt){job.retryAttempts=job.nextRetryAttempt;job.nextRetryAttempt=undefined;}
       // Every post now owns one Fact Check request; all configured slots can
       // serve visible posts instead of reserving capacity for a second stage.

@@ -2,6 +2,31 @@
 
 This checklist separates reproducible checks from manual browser and service checks. A passing mock test suite is not evidence that a particular X account, browser installation, or paid API request works.
 
+## 0.9.11 Preview — 2026-10-18
+
+[Preview release](https://github.com/bwjoke/SuperX/releases/tag/v0.9.11) · [Installable ZIP](https://github.com/bwjoke/SuperX/releases/download/v0.9.11/SuperX.zip). This is a GitHub **Pre-release**, excluded from Latest. Chrome Web Store and GitHub Stable/Latest remain **0.7.26**; no 0.9.11 store approval or publication is claimed.
+
+- [x] Run the current automated validation: **1,057 tests passed**. These use controlled browser/provider fixtures and do not establish live account eligibility or billing.
+- [x] Complete **16 isolated Edge Manifest V3 locale-selection checks**, covering packaged metadata language selection. This is isolated browser coverage, not acceptance of the installed extension on a real Edge account.
+- [x] Verify the current four-scope request omits profile/email; keep existing connected grants and reject unfinished authorizations from the retired scope set. Do not claim existing grants were retroactively reduced.
+- [x] Record fresh user-approved four-scope sign-in in installed Windows Chrome and the earlier live Grok 4.3 Fact Check with four clickable sources (23,754 reported Tokens).
+- [x] After the latest extension reload and X refresh, retain the four-scope login and complete a new live **Grok 4.3 Fact Check: 30,226 Tokens (29,693 input / 533 output), six distinct citation sources**.
+- [x] Generate exactly **three comment drafts: 1,373 Tokens (1,305 input / 68 output)** in the current four-scope run.
+- [x] User-confirmed live tab switch: leave while generation is running, return and see the same task continue without another request.
+- [x] Click a comment copy button and observe **Copied** feedback after the clipboard write resolved. Independent system-clipboard readback was not verified.
+- [ ] Complete four-scope **full Chrome exit/reopen** restoration and a new uncached check; extension reload/refresh is a different scenario.
+- [ ] Observe real natural access-token expiry and safe refresh/reauthorization behavior. Simulated expiry is not a live-expiry pass.
+- [ ] Complete installed Edge and macOS acceptance; repeat official CLI / ACP installation and inference with real accounts on Windows/macOS. New live API Key inference has not been established by this run.
+- [x] Prepare separate Preview downloads, three-source installation notes, updated privacy guidance, bounded-retry behavior and [PR #1 community credit](https://github.com/bwjoke/SuperX/pull/1), accurately identifying the independent implementation.
+- [ ] Record the final reviewed commit, ZIP/source inventories and SHA-256; verify the downloaded release assets and GitHub workflow outcomes after publication. Preserve the existing 0.7.26 Stable attachments.
+- [ ] Submit the accepted exact ZIP separately for store review; keep 0.9.11 Preview until the same version is actually published and verified from the store.
+
+The earlier six-scope authorization used `openid profile email offline_access grok-cli:access api:access` and separately passed live checks, three comments/copying, cross-tab cache reuse and new uncached checks after fully restarting Chrome. The current flow requests only `openid offline_access grok-cli:access api:access`. Those six-scope results do **not** prove current four-scope restart restoration or expiry. Current observations also do not establish all-plan eligibility, Included billing treatment or captured raw native-annotation protocol behavior. Exact evidence and remaining limits are in [CONNECTIONS.md](CONNECTIONS.md#acceptance-scope).
+
+## Historical development snapshots
+
+The following 0.8.x/0.9.1 entries record earlier local candidates, not separately published releases or the current acceptance checklist. The combined 0.9.11 Preview supersedes their current-status wording; keep historical passes and pending evidence scoped to their original builds.
+
 ## 0.9.1 local candidate — official connection, Windows and macOS
 
 - [x] Implement independent API Key and direct official Grok CLI / ACP modes; preserve API defaults and avoid automatic provider fallback or paid retry.
@@ -80,9 +105,9 @@ Edge's actual installed-extension checks remain pending. Successful Key restorat
 
 The user separately confirmed the store-installed 0.7.26 on 2026-10-08: installation, explanation, Fact Check, Key saving and restart restoration passed. This confirmation does not extend the earlier language, clipboard or history checks to a new store-installation test.
 
-## Detailed installed-browser checks
+## Historical 0.7.26 installed-browser checklist
 
-Complete each scenario in a fresh browser profile, separately from an upgrade of an existing installation. A Pending entry has not been established by the core check above, even if an automated fixture covers it. Enter API credentials yourself in the extension settings; never include them in an issue, screenshot, recording, or test fixture.
+The pass labels below belong to the 0.7.26 acceptance recorded above; they are not new 0.9.11 checks. For each new release, repeat applicable scenarios in a fresh browser profile and separately as an upgrade, using that release's connections and Fact Check behavior. A Pending entry was not established by the historical core check even if a fixture covers it. Enter credentials yourself in extension Settings; never include them in an issue, screenshot, recording or test fixture.
 
 | Check | Chrome | Edge |
 | --- | --- | --- |
@@ -119,11 +144,13 @@ Complete each scenario in a fresh browser profile, separately from an upgrade of
 | History search, individual deletion, clear and recording toggle work independently of the Key and result cache | Pending | Pending |
 | Start a request, pause or navigate away; late output does not attach to another post | Pending | Pending |
 
-Use a small, controlled live session to verify the user's configured model and API access. All visible posts can trigger paid requests; background fact-checking can add another request per post. Disable analysis when the check ends. Live API access and charges are controlled by the user's xAI account, not by mock tests.
+For current live acceptance, use a small, controlled session to verify the selected connection, model and tools. Automatic Fact Check makes one generation request per attempt, without a preceding explanation or second background check. Comment drafts use a separate request; tool calls and retries can add usage. All visible posts can trigger requests, including started work that continues after switching tabs. Disable new analysis when the check ends and account for already-started work. Entitlement, allowance and charges follow the provider account, not mock-test results.
 
 ## Failure and privacy checks
 
-Use isolated fixtures to reproduce a rate limit, interrupted stream, fact-check failure, and invalid Key; do not deliberately exhaust a real account's quota. Confirm explanation preservation, safe diagnostic messages, no automatic paid retry, and cancellation handling. Verify startup pruning removes expired cache entries from session storage, while valid answers remain reusable. Check credential changes cannot restore a Key or cached result from an older asynchronous operation. Confirm obsolete consent fields do not block an upgrade or return through saved settings. Use fabricated credentials to confirm that local extension storage contains no plaintext API Key after a successful remembered save, random AES-GCM encryption uses a separate non-extractable IndexedDB key, and failed encryption or migration does not report success or remove an unmigrated plaintext credential. Verify the privacy notice does not claim full-profile protection, hardware binding or guaranteed forensic erasure.
+Use isolated fixtures for rate limits, interrupted streams, incomplete Fact Checks, invalid credentials and cancellation; do not deliberately exhaust a real account. Preserve partial findings, citations and reported usage, show safe diagnostics and keep one failure from freezing other posts. API Key/local CLI transient failures wait 3 seconds and retry up to 5 additional times; waiting retries release their slots and rejoin the queue after actual transport cleanup. Invalid credentials, account restrictions, unsupported settings, output limits and unconfirmed local cancellation are terminal. OAuth does not automatically replay generation after an accepted HTTP 200, stream failure, incomplete output or timeout; an initial HTTP 401 rejection may refresh once and make one recovery request. Verify bounded attempts, usage aggregation and no duplicate request when returning to a tab or remounting a post. Page navigation/closure/BFCache still safely stop interrupted work and leave manual retry available.
+
+Verify startup pruning removes expired session-cache entries while valid answers remain reusable. Credential/source changes must not restore an older Key, OAuth grant or cached result from a late operation; OAuth generated results stay separated by authorization identity. Confirm retired consent fields do not block an upgrade. With fabricated credentials, check automatic remembered-credential encryption, a separate non-extractable IndexedDB key and failure-safe migration/persistence. Remember-off and sign-out must remove the appropriate persistent login without clearing unrelated sources or pretending to erase existing provider-side work. History text remains local and unencrypted; do not claim full-profile protection, hardware binding or guaranteed forensic erasure.
 
 ## Release procedure
 
@@ -139,7 +166,7 @@ Use the shared [release channels](RELEASE_CHANNELS.md) procedure. GitHub hosts p
 
 - [x] Record the public store item ID, version 0.7.26 and actual listing URL; the page is published, not merely approved.
 - [x] Confirm the stable `SuperX.zip` alias has the same bytes as the versioned ZIP, is included in its checksums and is available through `/releases/latest/download/SuperX.zip`.
-- [x] Keep the Preview entry on the Releases list separately from Stable/Latest. No newer Preview is available at this promotion.
+- [x] Keep Preview separate from Stable/Latest. The October 8 promotion had no newer Preview; the October 18 update adds direct 0.9.11 Preview release/ZIP links without changing Stable 0.7.26 or `/latest`.
 - [ ] Check that store support points to the repository's public Issues and privacy links use the verified public policy URL.
 - [ ] Keep manual update and channel-switch instructions accurate; do not promise automatic Key/settings migration across installation IDs.
 

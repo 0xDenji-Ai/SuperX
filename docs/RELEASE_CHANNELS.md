@@ -19,7 +19,7 @@ Keep `package.json`, `extension/manifest.json` and the Git tag in agreement: `0.
 Each release provides:
 
 - `SuperX-<version>.zip`: the installation/upload package, with `manifest.json` at its root.
-- `SuperX.zip`: an identical-byte convenience alias for a stable download link.
+- `SuperX.zip`: an identical-byte convenience alias within that release. `/releases/latest/download/SuperX.zip` selects the latest Stable release, while a versioned Preview URL selects that Preview.
 - `SuperX-<version>-files.json` and `SuperX-<version>-SHA256SUMS.txt`: installation inventory and checksums, including the alias.
 - `SuperX-<version>-source.zip`, source inventory and source checksums: the curated public source, including project documentation.
 
@@ -32,14 +32,15 @@ Use these destinations on the README, website and store support entry:
 | Install stable | `https://chromewebstore.google.com/detail/superx/clcflilaihhnnglfamdblhopokpnlioo` |
 | Website | `https://superx.vip/` |
 | Source | `https://github.com/bwjoke/SuperX` |
-| Get the latest preview | `https://github.com/bwjoke/SuperX/releases`, with explicitly labelled previews and direct installation links in their notes |
+| Latest Preview 0.9.11 | `https://github.com/bwjoke/SuperX/releases/tag/v0.9.11` |
+| Download Preview 0.9.11 ZIP | `https://github.com/bwjoke/SuperX/releases/download/v0.9.11/SuperX.zip` |
 | Download the latest stable ZIP | `https://github.com/bwjoke/SuperX/releases/latest/download/SuperX.zip` |
 | Browse releases and changelogs | `https://github.com/bwjoke/SuperX/releases` and `CHANGELOG.md` |
 | Report a bug, request a feature or ask a usage question | `https://github.com/bwjoke/SuperX/issues` |
 | Discuss usage | `https://github.com/bwjoke/SuperX/discussions`, after the maintainer enables Discussions; otherwise Issues |
 | Privacy | `https://superx.vip/privacy/`, after verifying its published policy content |
 
-GitHub's `/releases/latest` excludes previews and drafts. Until the first stable release exists, mark the stable download as unavailable rather than pointing it at a preview. Initially the Releases list is the preview entry; a future automatic preview index must select published preview releases rather than reuse `/latest`. Preparing these URLs does not publish the repository, its releases or a store listing.
+GitHub's `/releases/latest` excludes previews and drafts. Until the first stable release exists, mark the stable download as unavailable rather than pointing it at a preview. The current Preview has the direct release and ZIP links above; the Releases list remains the version index. Any automatic preview index must select published preview releases rather than reuse `/latest`. Preparing these URLs does not publish the repository, its releases or a store listing.
 
 ## Prepare a preview
 
@@ -77,7 +78,7 @@ For each promotion, record this information in its release notes or release repo
 
 An unpacked GitHub installation does not become a store installation automatically. Its development ID can differ from the published store ID, `clcflilaihhnnglfamdblhopokpnlioo`. Settings and remembered Keys belong to the extension's storage and are not automatically migrated between different IDs or browser profiles. Removing an extension clears its local storage.
 
-When switching channels, keep any custom prompt text you need, disable the old installation to avoid duplicate paid analysis, install the desired channel and configure its Key. Do not promise a seamless migration until it has been tested with the real store item. A future explicit settings export should exclude credentials; it is not currently implemented.
+When switching channels, keep any custom prompt text you need, disable the old installation to avoid duplicate paid analysis, install the desired channel and configure its supported connection. Stable 0.7.26 uses an API Key; Preview 0.9.11 also offers direct subscription sign-in and local Grok Build / CLI / ACP. Do not promise a seamless migration until it has been tested with the real store item. A future explicit settings export should exclude credentials; it is not currently implemented.
 
 ## Shared project home and support
 
@@ -87,11 +88,17 @@ Until Discussions is enabled, the **Usage question** issue form provides a suppo
 
 [superx.vip](https://superx.vip/) provides the product website, with **Install stable**, **Try preview**, **Source**, **Support** and **Privacy** entries as each destination becomes available. Downloads come from GitHub and the Chrome Web Store. Keep [privacy/](https://superx.vip/privacy/) as a permanent public policy path. The website is deployed and maintained separately; its source and deployment configuration are excluded from the extension repository and source release. Do not deploy the extension repository over the existing website.
 
-## Current release status
+## Current release status — 2026-10-18
+
+The latest GitHub Preview is [0.9.11](https://github.com/bwjoke/SuperX/releases/tag/v0.9.11), with a direct [installation ZIP](https://github.com/bwjoke/SuperX/releases/download/v0.9.11/SuperX.zip). It adds browser-only subscription sign-in, optional API Key and local CLI / ACP connections, and Fact Check without the preceding explanation. The [Chrome Web Store](https://chromewebstore.google.com/detail/superx/clcflilaihhnnglfamdblhopokpnlioo) and [GitHub Stable/Latest](https://github.com/bwjoke/SuperX/releases/tag/v0.7.26) remain **0.7.26**. Version 0.9.11 is a **Pre-release**, excluded from Latest; store submission, review and publication are separate steps. Its publication does not replace the accepted 0.7.26 attachments or imply store approval.
+
+The October 18 acceptance record distinguishes current four-scope Windows Chrome checks from earlier six-scope results. Current checks include restoration after reloading the extension, a live Grok 4.3 Fact Check with six sources, three generated comment drafts and Copied feedback, and user-confirmed continuation across a browser-tab switch without another request. Independent system-clipboard readback was not verified. Four-scope full-browser restart restoration and natural token expiry, installed Edge/macOS operation, and new real-account API Key/local CLI acceptance remain unestablished. See [the checklist](RELEASE_CHECKLIST.md#0911-preview--2026-10-18) and [connection acceptance scope](CONNECTIONS.md#acceptance-scope) for exact evidence and outstanding checks.
+
+## Publication history
 
 On October 7, 2026, [bwjoke/SuperX](https://github.com/bwjoke/SuperX) and [0.7.26 Preview](https://github.com/bwjoke/SuperX/releases/tag/v0.7.26) were published. The release uses reviewed commit `254cade96e210e3faef4ca7e08fb67f6bc8c8e90`; its 76-file public source excludes the independently maintained website. Local and exported-source validation passed 642 tests, and both [CI](https://github.com/bwjoke/SuperX/actions/runs/37581481369) and [release packaging](https://github.com/bwjoke/SuperX/actions/runs/37581507805) succeeded on GitHub. The anonymous installation download matches the accepted ZIP byte for byte. Private vulnerability reporting is enabled. The website's GitHub, Preview download and Issues entries are live, and [privacy/](https://superx.vip/privacy/) serves its own bilingual policy without signing in.
 
-On October 8, 2026, the [Chrome Web Store listing](https://chromewebstore.google.com/detail/superx/clcflilaihhnnglfamdblhopokpnlioo) was verified as publicly available at version 0.7.26, item ID `clcflilaihhnnglfamdblhopokpnlioo`. The Google-delivered CRX contains 30 files versus 29 in the accepted GitHub ZIP. All non-manifest files are byte-identical; the store adds `_metadata/verified_contents.json` and only `update_url` to the manifest. CRX and ZIP are different package formats, so whole-package hashes are not compared as equal. The user confirmed store installation, explanations, Fact Check, Key saving and restoration after restart. The existing [0.7.26 release](https://github.com/bwjoke/SuperX/releases/tag/v0.7.26) is now Stable/Latest; its tag and original attachments remain unchanged. The [latest stable ZIP](https://github.com/bwjoke/SuperX/releases/latest/download/SuperX.zip) provides the accepted installation package. There is no newer Preview currently; future previews use the Releases list.
+On October 8, 2026, the [Chrome Web Store listing](https://chromewebstore.google.com/detail/superx/clcflilaihhnnglfamdblhopokpnlioo) was verified as publicly available at version 0.7.26, item ID `clcflilaihhnnglfamdblhopokpnlioo`. The Google-delivered CRX contains 30 files versus 29 in the accepted GitHub ZIP. All non-manifest files are byte-identical; the store adds `_metadata/verified_contents.json` and only `update_url` to the manifest. CRX and ZIP are different package formats, so whole-package hashes are not compared as equal. The user confirmed store installation, explanations, Fact Check, Key saving and restoration after restart. The existing [0.7.26 release](https://github.com/bwjoke/SuperX/releases/tag/v0.7.26) is now Stable/Latest; its tag and original attachments remain unchanged. The [latest stable ZIP](https://github.com/bwjoke/SuperX/releases/latest/download/SuperX.zip) provides the accepted installation package. At that October 8 promotion, no newer Preview was available. This historical status is superseded by the 0.9.11 Preview recorded above.
 
 The user confirmed core functionality on Windows 11 Chrome: upgrade operation, Key restoration after restarting Windows, fresh-profile Enable/Remember Key/Auto defaults, no-Key history, first own-Key save, explanations and Fact Check, independent language switches, Auto original/translation following, and three comment drafts with copying into Notepad.
 
@@ -101,15 +108,17 @@ Edge installed-extension acceptance and advanced manual credential, storage, del
 
 一套源码，两条渠道：GitHub 是代码、文档、预览下载与 Issues 支持的项目主页；Chrome 商店提供稳定安装与自动更新。GitHub 同时保留稳定版的原始安装包与源码存档，验收结果及待测范围单独记录。
 
-所有安装候选都使用递增的数字版本及匹配 tag，预览身份用 GitHub 的 Pre-release 标记表示。新 tag 只生成预览草稿，审核附件后再主动公开；通过验收的同一份 ZIP 原样上传商店，商店实际发布后再将对应 GitHub Release 晋升为 Stable/Latest，保留附件和 SHA-256。GitHub `latest` 不含预览版，最新预览入口必须单独指向 Releases 列表。
+所有安装候选都使用递增的数字版本及匹配 tag，预览身份用 GitHub 的 Pre-release 标记表示。新 tag 只生成预览草稿，审核附件后再主动公开；通过验收的同一份 ZIP 原样上传商店，商店实际发布后再将对应 GitHub Release 晋升为 Stable/Latest，保留附件和 SHA-256。GitHub `latest` 不含预览版；最新预览版使用独立发布页与安装 ZIP 直链，Releases 列表保留所有版本。
 
 相关修正先合并成一批再验收、递增版本号，不为每次开发提交或本地检查单独加号。一般修复只递增末位；较大的功能阶段才调整次版本号。已交付验收或公开发布的包不覆盖，后续改动使用新版本，以便追溯。
 
 GitHub 解压版需要手动更新，商店版由 Chrome 更新。当前不同安装 ID 之间不自动迁移 Key 和设置，切换渠道时先停用旧版，避免重复分析。官网 [superx.vip](https://superx.vip/) 独立维护，源码不纳入扩展开源；隐私路径保持为 `/privacy/`。仓库、下载、Issues 及商店入口以实际公开状态为准，最终安装验收需单独完成。
 
-2026-10-08 已核验 Chrome 商店公开版本为 0.7.26，商品 ID 为 `clcflilaihhnnglfamdblhopokpnlioo`。Google CRX 与 GitHub ZIP 的非 manifest 文件逐字节相同，仅多出商店验证元数据，manifest 仅增加 `update_url`。用户已确认商店安装后的解释、Fact Check、Key 保存及重启恢复正常；GitHub 同一版本已晋升 Stable/Latest，标签及附件保持不变。目前没有更新的预览版，后续仍通过 Releases 列表提供。
+2026-10-08 已核验 Chrome 商店公开版本为 0.7.26，商品 ID 为 `clcflilaihhnnglfamdblhopokpnlioo`。Google CRX 与 GitHub ZIP 的非 manifest 文件逐字节相同，仅多出商店验证元数据，manifest 仅增加 `update_url`。用户已确认商店安装后的解释、Fact Check、Key 保存及重启恢复正常；GitHub 同一版本已晋升 Stable/Latest，标签及附件保持不变。这是 10 月 8 日晋升时的历史状态，当时没有更新的预览版；当前状态见下方 0.9.11。
 
-此前用户已在 Windows 11 Chrome 中确认升级、新配置默认值、无 Key 浏览历史、语言独立切换、Auto 跟随原文／翻译及评论生成复制。Edge 实际安装及更深入的手工存储／迁移等检查仍待完成，商店上架不能代替这些检查，也不保证模型回答准确。
+**2026-10-18：最新 GitHub 预览版为 [0.9.11](https://github.com/bwjoke/SuperX/releases/tag/v0.9.11)，可直接[下载安装 ZIP](https://github.com/bwjoke/SuperX/releases/download/v0.9.11/SuperX.zip)。** 新版提供浏览器内订阅登录、API Key 和本机 CLI／ACP 三种连接，直接 Fact Check，不再前置解释；Chrome 商店及 GitHub Stable/Latest 仍为 **0.7.26**。0.9.11 使用 Pre-release 标记，不进入 Latest，也不代表商店已审核或发布。
+
+四项权限的 Windows Chrome 实测已确认重载扩展后的登录恢复、真实 Grok 4.3 六源核查、三条评论生成及 Copied 提示，以及生成中切走标签页再返回后继续原任务、没有重新请求。独立系统剪贴板读回未核验。完整重启浏览器后的四项权限恢复、自然到期、macOS／Edge 实装及新的 API Key／CLI 真实账号验收仍未建立。此前 0.7.26 的 Windows 11 重启、语言、历史和复制等结果，以及六项权限的整浏览器重启结果，均只是各自版本／授权范围的历史证据。具体见[验收清单](RELEASE_CHECKLIST.md)和[连接验收范围](CONNECTIONS.md#acceptance-scope)，不保证模型回答准确。
 
 ## Official references
 

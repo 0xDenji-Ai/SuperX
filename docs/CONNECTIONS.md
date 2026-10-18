@@ -1,6 +1,6 @@
 # Connect SuperX
 
-The unreleased **0.9.11** candidate offers three independent connections. **Sign in · The X Subscription** is first and the default for new installations; **Grok API Key** uses a Key you create; **Grok Build · Local CLI / ACP** connects to the official service on your computer. All three initially select **Grok 4.3 / reasoning None** and retain their own choices. Existing selections and settings are preserved. Nonempty older settings without a source keep API; missing/empty settings with legacy credentials also keep that conservative API path. Switching sources never substitutes another credential, changes account budgets or bypasses quotas. Published Stable remains **0.7.26** and supports API Key mode.
+The **0.9.11 GitHub Preview** offers three independent connections: [release notes](https://github.com/bwjoke/SuperX/releases/tag/v0.9.11) and [installable ZIP](https://github.com/bwjoke/SuperX/releases/download/v0.9.11/SuperX.zip). **Sign in · The X Subscription** is first and the default for new installations; **Grok API Key** uses a Key you create; **Grok Build · Local CLI / ACP** connects to the official service on your computer. All three initially select **Grok 4.3 / reasoning None** and retain their own choices. Existing selections and settings are preserved. Nonempty older settings without a source keep API; missing/empty settings with legacy credentials also keep that conservative API path. Switching sources never substitutes another credential, changes account budgets or bypasses quotas. Published Stable remains **0.7.26** and supports API Key mode.
 
 | Connection | What you need | Where you sign in / manage usage |
 | --- | --- | --- |
@@ -10,7 +10,7 @@ The unreleased **0.9.11** candidate offers three independent connections. **Sign
 
 ## Grok subscription (OAuth) — browser only
 
-This candidate connects directly from Chrome / Edge on Windows or macOS. **No Grok CLI, terminal, additional SuperX program or API Key is required.**
+This Preview connects directly from Chrome / Edge on Windows or macOS. **No Grok CLI, terminal, additional SuperX program or API Key is required.**
 
 1. Open **Settings → Connection**. New installations already select **Sign in · The X Subscription**; choose **Sign in to Grok**.
 2. SuperX displays a short authorization code and opens the official `accounts.x.ai` / `auth.x.ai` device page. Check that the code matches and confirm the requested access yourself. Enter your account password only on the official site, never in SuperX.
@@ -27,7 +27,7 @@ The extension requests the additional fixed host `https://auth.x.ai/*` for devic
 
 New authorizations request four scopes: `openid offline_access grok-cli:access api:access`. They omit `profile` and `email`, the optional profile/email claim scopes described in [OpenID Connect §5.4](https://openid.net/specs/openid-connect-core-1_0.html#ScopeClaims). `offline_access` requests refresh access under [OpenID Connect §11](https://openid.net/specs/openid-connect-core-1_0.html#OfflineAccess); the two Grok access scopes are provider-defined, with the granted scope controlled by the authorization server ([OAuth 2.0 §3.3](https://www.rfc-editor.org/rfc/rfc6749.html#section-3.3)). SuperX does not fetch or use account-profile information.
 
-Existing connected logins are preserved: a narrower new request does not retroactively reduce an old grant. An unfinished device login saved with an older scope set is discarded; start sign-in again for the current request. Following the separate HTTP-200 device-code negotiation check, fresh four-scope authorization and a live Grok 4.3 Fact Check have now passed in installed Windows Chrome. The user confirmed that the official page no longer listed name/avatar or email. Four-scope restart and natural-expiry checks remain outstanding. See [acceptance scope](#acceptance-scope) and [Privacy](../PRIVACY.md).
+Existing connected logins are preserved: a narrower new request does not retroactively reduce an old grant. An unfinished device login saved with an older scope set is discarded; start sign-in again for the current request. Fresh four-scope authorization, login restoration after reloading the extension, live Grok 4.3 Fact Checks and three generated comments have passed in installed Windows Chrome. The user confirmed that the official authorization page no longer listed name/avatar or email. Full-browser restart restoration and natural-expiry checks remain outstanding for this four-scope grant. See [acceptance scope](#acceptance-scope) and [Privacy](../PRIVACY.md).
 
 OAuth generation is not automatically replayed after an accepted HTTP 200 response, an in-stream failure, incomplete output or timeout. An initial HTTP 401 rejection can refresh authorization once and make one recovery request; a second rejection requires sign-in again. Retained partial output and reported usage stay visible, while other posts continue through the shared queue. Check the error before choosing **Reanalyze** yourself.
 
@@ -48,7 +48,7 @@ Eligible API use from The X Subscription shares the plan's weekly allowance. For
 
 Use the official Grok installation and account login. **No separate SuperX installer, Node installation, browser host registration or downloaded profile file is required.** The browser communicates with the official CLI's ACP WebSocket service; it cannot start terminal programs by itself.
 
-The guide covers **Windows PowerShell** and **macOS Terminal**, including Apple silicon and Intel Macs supported by the official Grok distribution. Use desktop Chrome or Chromium-based Edge 120+. This candidate checks compatibility with **Grok Build 1.0.60** before sending a task; another version is rejected until its protocol and restrictions are reviewed.
+The guide covers **Windows PowerShell** and **macOS Terminal**, including Apple silicon and Intel Macs supported by the official Grok distribution. Use desktop Chrome or Chromium-based Edge 120+. This Preview checks compatibility with **Grok Build 1.0.60** before sending a task; another version is rejected until its protocol and restrictions are reviewed.
 
 1. Follow the [official Grok installation instructions](https://github.com/xai-org/grok-build). Open PowerShell on Windows or Terminal on macOS. Run `grok --version` to check the installation, then `grok login` and finish signing in on the official page. SuperX does not ask for your account password or receive the login token.
 2. Open **SuperX Settings → Grok Build · Local CLI / ACP → Step-by-step guide**. Select Windows or macOS, then **Generate launch command**. SuperX creates a random local connection code automatically; you do not need to invent a password or edit configuration files.
@@ -68,7 +68,7 @@ Closing a browser connection alone does not guarantee that an official-service t
 
 In all three connection modes, automatic analysis waits until feed/page scrolling stops and a post remains visible for the configured time: 1 second by default, adjustable from 0 to 30 seconds in Settings. Further scrolling resets pending work's timer; scrolling inside SuperX's answers does not. Zero starts immediately, and manual reanalysis/comments bypass the wait. API Key and OAuth share the configured request limit, default 3 (configurable from 1 to 8); local Grok tasks run serially with a fresh session per post. Neither ACP nor the selected reasoning effort guarantees lower latency or lower quota consumption. Reported Token counts are not a measurement of subscription cash charges.
 
-Started answers and comments continue when their posts scroll out of view, including when X temporarily unmounts their articles. Returning restores the same task and partial output. Unstarted work can be withdrawn. API Key and CLI / ACP tasks retry transient failures after 3 seconds, up to 5 additional attempts, without pausing other posts. Waiting retries release their request slots and rejoin the shared queue only after local transport cleanup finishes. Reported usage accumulates across attempts; retries may consume additional provider allowance or paid API usage. Invalid credentials, account restrictions, output limits, unsupported settings and unconfirmed local cancellation do not automatically retry. OAuth uses the more conservative no-replay policy above. No retry changes the selected connection, model or reasoning level.
+Started answers, comments and their existing retries continue when posts scroll out of view, when X temporarily unmounts their articles and when switching browser tabs. Returning restores the same task and partial output without starting another request. While the feed is hidden, new automatic triggers pause and only work confirmed never to have started is withdrawn. Actual page navigation, tab closure and BFCache suspension still stop interrupted work safely, retain available partial output and require manual retry. Unstarted work can also be withdrawn when it leaves view. API Key and CLI / ACP tasks retry transient failures after 3 seconds, up to 5 additional attempts, without pausing other posts. Waiting retries release their request slots and rejoin the shared queue only after local transport cleanup finishes. Reported usage accumulates across attempts; retries may consume additional provider allowance or paid API usage. Invalid credentials, account restrictions, output limits, unsupported settings and unconfirmed local cancellation do not automatically retry. OAuth uses the more conservative no-replay policy above. No retry changes the selected connection, model or reasoning level.
 
 Generated cache entries and saved-history answers/comments are scoped to the selected connection source and, for OAuth, the individual authorization identity. Switching sources or OAuth accounts does not show another source/account's generated results. The local record of which posts you visited remains available; switching or signing out does not delete those visits.
 
@@ -83,7 +83,7 @@ Generated cache entries and saved-history answers/comments are scoped to the sel
 | OAuth connected but model directory unavailable | Reload the model directory; this is separate from the login state. Keep the selected model until the account confirms availability. |
 | Cannot connect | Keep the service terminal open. Check that its port and code match SuperX; stop any older service before starting a replacement. |
 | Local permission denied | Allow SuperX's optional local-address access from the connection check. API mode does not need it. |
-| Unsupported version | Compare `grok --version` with this candidate's tested version. Use API mode while a newer official runtime is awaiting compatibility review. |
+| Unsupported version | Compare `grok --version` with this Preview's tested version. Use API mode while a newer official runtime is awaiting compatibility review. |
 | Model / effort unavailable | Select the choices reported by the connected account. API and CLI catalogs may differ; no model is silently substituted. |
 | Restricted session could not be confirmed | Use the generated command. Managed-device policy may prevent this setup; do not disable company protections. API mode remains available. |
 | Stop could not be confirmed | Press Ctrl+C in the official service terminal. SuperX does not replay the request automatically. |
@@ -92,18 +92,33 @@ Generated cache entries and saved-history answers/comments are scoped to the sel
 
 ## Acceptance scope
 
-On October 18, 2026, the installed 0.9.11 candidate was exercised in Windows Chrome with a fresh user-approved OAuth authorization using the earlier six scopes (`openid profile email offline_access grok-cli:access api:access`):
+### Current four-scope Windows Chrome record — 2026-10-18
 
-- Live Grok 4.3 Fact Checks completed, with rendered evidence citations and clickable source links.
-- A live result generated exactly three one-line comment drafts; clicking a draft displayed **Copied**.
-- A separate tab reused a completed result and its tooltip identified the cache hit without new Token usage for that part.
-- The user fully exited and reopened Chrome, confirmed that Settings remained connected without signing in again, and subsequent new, uncached Grok 4.3 checks completed. Cached answers alone were not used to establish restored generation.
+This record applies to `openid offline_access grok-cli:access api:access`, not to an earlier grant containing profile/email. The user approved a fresh authorization on the official page and confirmed that name/avatar and email were no longer listed. An initial live Grok 4.3 check returned 23,754 Tokens (23,417 input / 337 output), four clickable sources and no cache marker or authentication error.
 
-The user confirmed that signing out returned the selected OAuth source to its sign-in guidance, did not silently use another source, and retained the saved API Key/Build configuration. The four-scope device-code negotiation first received HTTP 200 without user credentials or inference. In a subsequent installed Windows Chrome run, the user reloaded the updated candidate, signed out and signed in again, confirmed that the official page no longer listed name/avatar or email, and personally approved authorization; SuperX then showed Connected. A new Grok 4.3 Fact Check completed with 23,754 reported Tokens (23,417 input and 337 output), four clickable sources, no cache marker and no authentication error. The model was verified in the live tooltip; this run did not capture the raw request body, token returned-scope field or native annotation payload. Four-scope comments, restart restoration and natural expiry were not newly verified; the six-scope results above remain separate.
+The latest installed 0.9.11 checks then recorded:
 
-This run did not add live API Key inference or a new CLI installation/inference acceptance. macOS installed-browser operation and actual natural token expiry were not tested. UI citation rendering was observed; raw native annotation protocol handling has automated coverage, not a captured live-protocol assertion. These results do not establish every subscription's eligibility, Included billing treatment or service availability.
+| Scenario | Observed result |
+| --- | --- |
+| Reload the extension and refresh X with the four-scope login already saved | Login restored without a new authorization |
+| New live Grok 4.3 Fact Check | 30,226 reported Tokens: 29,693 input / 533 output; six distinct citation sources |
+| Generate comment suggestions | Exactly three drafts; 1,373 reported Tokens: 1,305 input / 68 output |
+| Copy a comment from this run | The copy button showed **Copied** after its clipboard write resolved; independent system-clipboard readback was not verified |
+| Switch to another browser tab while generation is running, then return | User-confirmed continuation of the same generation without another request |
+| Fully exit/reopen Chrome with this four-scope grant and perform a new uncached check | Not yet established; extension reload is a separate result |
+| Reach natural token expiry and refresh safely | Not yet observed live |
 
-Windows/macOS command generation, OAuth lifecycle and provider behavior also have automated coverage. Official CLI / ACP real-account installation and device acceptance remain separate checks. Isolated protocol probes and simulated paths are not a full-product live-device pass.
+The visible model tooltip and citations were checked, but the run did not capture the raw request body, token returned-scope field or native annotation payload. UI citations and reported Tokens do not establish billing treatment or a captured native-annotation protocol assertion.
+
+### Earlier six-scope evidence — separate historical result
+
+An earlier October 18 Windows Chrome installation used `openid profile email offline_access grok-cli:access api:access`. It passed live Grok 4.3 Fact Checks with clickable sources, three one-line comments and **Copied** feedback, cross-tab cache reuse, and new uncached generation after the user fully exited/reopened Chrome without signing in again. The user also confirmed sign-out returned to the selected source's login guidance, did not silently fall back, and preserved saved API Key/Build configuration. These results belong to that six-scope grant; they do not prove full-browser restart restoration or expiry for the current four-scope flow.
+
+### Automated coverage and remaining limits
+
+The recorded local validation passed **1,057 automated tests**, and **16 isolated Edge Manifest V3 locale-selection checks** verified packaged metadata selection. Windows/macOS command generation, OAuth lifecycle, provider behavior and hidden-tab continuation have controlled coverage. These are not real-account Edge/macOS or official CLI installation/inference passes.
+
+This run did not establish new live API Key inference, official CLI / ACP real-account installation/inference, installed Edge/macOS operation or actual natural token expiry. It does not guarantee every subscription's eligibility, Included billing treatment, factual accuracy or service availability. See [the release checklist](RELEASE_CHECKLIST.md#0911-preview--2026-10-18). Stable remains 0.7.26; the 0.9.11 Preview is not store approval.
 
 For API failures, open **Local diagnostic log** at the bottom of Settings. It keeps up to 30 failures from the last 24 hours of the current browser session, with redacted provider details and supported trace IDs. Transport HTTP status and an error event's status are separate: an HTTP 200 stream can still fail later, and a `spending_limit` event alone does not establish HTTP 402 or an exhausted subscription. Review the matching account's usage and the recorded cause before deciding what to change. Existing failures whose details were not retained cannot be reconstructed. Copying or clearing this local log does not call the provider or clear browsing history.
 
@@ -115,7 +130,11 @@ For API failures, open **Local diagnostic log** at the bottom of Settings. It ke
 
 默认在本机记住登录：刷新 Token 由独立 AES-GCM 密钥加密，密钥在扩展 IndexedDB，访问 Token 只保留于受限会话和内存。无需密码、不使用同步；关闭记住后，浏览器新会话需重新登录。升级新增固定 `auth.x.ai` 主机权限，Chrome 可能要求批准。轮换结果无法确认或保存失败时重新登录，不能反复消费旧刷新 Token。退出 OAuth 不清除 API Key／本机配置或本机帖子访问记录。更换来源／账号后，生成回答、评论与历史中的生成内容按来源及授权身份隔离。
 
-OAuth 已收到 HTTP 200 后的流错误、未完成或超时不自动重放；首次 HTTP 401 拒绝可刷新授权并恢复一次。其他帖子继续处理，手动重新核查前请先查看错误和部分输出。此前 Windows Chrome 使用六项权限实测了新授权、真实 4.3 核查与可点出处、三条评论／复制、跨标签缓存、完全退出重开后的新核查，以及退出不回退且原 API Key／Build 配置保留。四项权限先通过无用户凭据／无推理的设备码协商（HTTP 200），随后用户在已安装 Windows Chrome 候选版中重载、退出重登，确认官方页不再显示姓名／头像和邮箱，亲自授权后显示已连接。之后一条新 Grok 4.3 核查完成：23,754 Tokens（输入 23,417、输出 337），四个可点击出处，无缓存标记或认证错误。模型由实时提示框确认，本次未捕获原始请求体、Token 返回的 scope 字段或原生 annotation 协议。四项权限的评论、重启恢复和自然到期尚未新增验收，不能沿用六项权限结果宣称这些项目通过。macOS 实装、真实自然到期、新 API Key 推理和 CLI 安装／推理仍未新增验收；不保证所有套餐资格或 Included 计费，界面引用渲染也不等于已捕获原生 annotation 协议。
+OAuth 已收到 HTTP 200 后的流错误、未完成或超时不自动重放；首次 HTTP 401 拒绝可刷新授权并恢复一次。其他帖子继续处理，手动重新核查前请先查看错误和部分输出。生成中的核查、评论及既有重试在滚出视野、帖子临时卸载或切换浏览器标签页后继续，返回显示原任务，不重复请求；信息流隐藏时暂停新的自动触发，只撤出确认从未开始的排队工作。真正导航、关闭标签页和 BFCache 挂起仍会安全停止受影响任务，保留已有部分结果供手动重试。
+
+**2026-10-18 四项权限实测：**用户在官方授权页确认不再列出姓名／头像和邮箱后亲自授权，初次真实 Grok 4.3 核查返回 23,754 Tokens 和四个可点出处。最新重载扩展并刷新 X 后，已有四项权限登录恢复；新 Grok 4.3 核查返回 **30,226 Tokens（输入 29,693／输出 533），六个不同引用源**；随后生成恰好三条评论，**1,373 Tokens（输入 1,305／输出 68）**。复制按钮在剪贴板写入返回成功后显示 **Copied**，但未独立核验系统剪贴板读回。用户确认生成中切走其他标签页，再回来仍继续同一任务，没有重新请求。完整退出重开 Chrome 后的四项权限恢复和自然到期仍未建立。不能把重载扩展当作完整浏览器重启，也不能沿用早先六项权限的评论复制、跨标签缓存和完整重启结果宣称这些项目通过。
+
+当前记录另有 **1,057 项自动测试**和 **16 项隔离 Edge Manifest V3 语言选择检查**通过，不能代替 Edge／macOS 实装、新 API Key 推理或本机 CLI 真实账号安装／推理验收。本次未捕获原始请求体、Token 返回的 scope 字段或原生 annotation 协议；不保证所有套餐资格、Included 计费或服务可用性。完整范围见上方[验收记录](#acceptance-scope)。0.9.11 是 GitHub 预览版；商店及 Stable/Latest 仍为 0.7.26。
 
 **Grok API Key 模式**在 Windows 和 Mac 上都只需浏览器：打开「设置 → 连接 → Grok API Key」，按需展开获取帮助。使用订阅 API 额度时，去 [Grok Dashboard → API Keys](https://grok.com/dashboard/api-keys) 创建 **Grok Inference** 类型而非 Cursor 类型的 Key，按账号要求授权 Chat／模型；使用按量付费 API 时，去 [xAI 控制台](https://console.x.ai/) 创建 Key、购买额度。两种来源均粘贴到同一个 API Key 输入框并保存，不另选来源。默认在本机自动加密记住，无需 SuperX 密码；保存不代表已验证 API 权限或剩余额度。用量和费用请到创建 Key 的账户查看。
 
@@ -125,6 +144,6 @@ OAuth 已收到 HTTP 200 后的流错误、未完成或超时不自动重放；�
 
 启动命令只监听本机地址，自动生成连接码并隔离工作／配置目录。连接码只用于本机官方服务，不是账号密码或 API Key；请勿公开连接码、完整命令或相关截图。SuperX 本机加密保存连接码，不读取或复制官方登录文件。重启电脑后需要重新运行启动命令；按 Ctrl+C 停止服务。浏览器断线不等于官方任务已经停止，若提示停止未确认，请在终端按 Ctrl+C 手动停止。停止后若提示仍在，请从设置重新加载 SuperX，再启动服务并重新检查连接；停止未确认时不会自动重试，也不会转为 API 计费。
 
-CLI／ACP 支持 Windows 和 macOS 引导；此候选按官方 Grok 1.0.60 检查兼容性。工具限制不等同于系统沙箱，本机 CLI 的 Mac 及真实账号实机验收仍需另行完成。完整数据说明见 [隐私说明](../PRIVACY.md)。
+CLI／ACP 支持 Windows 和 macOS 引导；此预览版按官方 Grok 1.0.60 检查兼容性。工具限制不等同于系统沙箱，本机 CLI 的 Mac 及真实账号实机验收仍需另行完成。完整数据说明见 [隐私说明](../PRIVACY.md)。
 
 Sources: [official Grok Build installation](https://github.com/xai-org/grok-build), [official agent / WebSocket mode](https://github.com/xai-org/grok-build/blob/main/crates/codegen/xai-grok-pager/docs/user-guide/15-agent-mode.md), [headless CLI and ACP](https://docs.x.ai/build/cli/headless-scripting).

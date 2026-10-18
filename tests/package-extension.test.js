@@ -70,7 +70,7 @@ function entriesFromZip(bytes) {
 
 test('production ZIP has manifest at root, exact allowlist, licenses and verified per-file SHA256', async t => {
   const root = await fixture(t);
-  const { packageExtension, PRODUCTION_FILES } = await packager;
+  const { packageExtension, PRODUCTION_FILES, MANIFEST_LOCALES } = await packager;
   await writeFile(join(root, '.env'), 'PRIVATE_FIXTURE_DO_NOT_SHIP');
   await mkdir(join(root, 'artifacts'), { recursive: true });
   await writeFile(join(root, 'artifacts', 'old-release.txt'), 'OLD_RELEASE_DO_NOT_SHIP');
@@ -79,6 +79,13 @@ test('production ZIP has manifest at root, exact allowlist, licenses and verifie
   const entries = entriesFromZip(bytes);
   assert.deepEqual(entries.map(entry => entry.name), PRODUCTION_FILES);
   assert.equal(JSON.parse(entries.find(entry => entry.name === 'manifest.json').data).version, '1.2.3');
+  const manifest=JSON.parse(entries.find(entry=>entry.name==='manifest.json').data);
+  assert.equal(manifest.default_locale,'en');assert.equal(manifest.description,'__MSG_extensionDescription__');
+  assert.deepEqual(entries.filter(entry=>entry.name.startsWith('_locales/')).map(entry=>entry.name),MANIFEST_LOCALES.map(locale=>`_locales/${locale}/messages.json`).sort());
+  for(const locale of MANIFEST_LOCALES){
+    const messages=JSON.parse(entries.find(entry=>entry.name===`_locales/${locale}/messages.json`).data);
+    assert.deepEqual(Object.keys(messages),['extensionDescription']);assert.deepEqual(Object.keys(messages.extensionDescription),['message']);assert.ok(messages.extensionDescription.message.trim());assert.ok(messages.extensionDescription.message.length<=132);
+  }
   assert.ok(entries.some(entry => entry.name === 'LICENSE.txt'));
   assert.ok(entries.some(entry => entry.name === 'marked-LICENSE.txt'));
   assert.equal(bytes.includes(Buffer.from('PRIVATE_FIXTURE_DO_NOT_SHIP')), false);
@@ -132,6 +139,52 @@ test('malformed manifest stops packaging before any output is created', async t 
   await writeFile(join(root, 'extension', 'manifest.json'), '{ invalid JSON');
   await assert.rejects(packageExtension({ root }), /manifest\.json: invalid JSON/);
   await assert.rejects(readFile(join(root, 'artifacts', 'SuperX-1.2.3.zip')), { code: 'ENOENT' });
+});
+
+test('store metadata covers all interface languages including both supported Portuguese regions',async()=>{
+  const {MANIFEST_LOCALES}=await packager;
+  const {SUPPORTED_LANGUAGES}=require('../extension/ui-i18n.js');
+  const language=locale=>locale.startsWith('pt_')?'pt':locale.replace('_','-');
+  assert.deepEqual([...new Set(MANIFEST_LOCALES.map(language))].sort(),[...SUPPORTED_LANGUAGES].sort());
+  assert.ok(MANIFEST_LOCALES.includes('pt_BR'));assert.ok(MANIFEST_LOCALES.includes('pt_PT'));
+  assert.equal(new Set(MANIFEST_LOCALES).size,MANIFEST_LOCALES.length);
+});
+
+test('manifest descriptions resolve through every reviewed locale with English as the required fallback',async t=>{
+  const root=await fixture(t),{inspectPackage,MANIFEST_LOCALES}=await packager,manifestPath=join(root,'extension','manifest.json');
+  const manifest=JSON.parse(await readFile(manifestPath,'utf8')),inspected=await inspectPackage(root);
+  assert.equal(inspected.localization.defaultLocale,'en');assert.deepEqual(Object.keys(inspected.localization.descriptions),MANIFEST_LOCALES);
+  for(const locale of MANIFEST_LOCALES)assert.equal(inspected.localization.descriptions[locale],JSON.parse(await readFile(join(root,'extension','_locales',locale,'messages.json'),'utf8')).extensionDescription.message);
+  for(const default_locale of [undefined,'zh_CN','en-US']){
+    await writeFile(manifestPath,JSON.stringify({...manifest,default_locale}));await assert.rejects(inspectPackage(root),/expected default_locale en/);
+  }
+  for(const description of ['Hardcoded summary','__MSG_missingDescription__','__MSG_extensionDescription__ extra']){
+    await writeFile(manifestPath,JSON.stringify({...manifest,description}));await assert.rejects(inspectPackage(root),/description must reference/);
+  }
+});
+
+test('invalid locale JSON, message shape, unresolved substitutions and oversized summaries fail closed',async t=>{
+  const root=await fixture(t),{inspectPackage}=await packager,localePath=join(root,'extension','_locales','zh_CN','messages.json');
+  await writeFile(localePath,'{invalid JSON');await assert.rejects(inspectPackage(root),/_locales\/zh_CN\/messages\.json: invalid JSON/);
+  for(const messages of [[],null,{}, {wrongKey:{message:'A short description.'}},{extensionDescription:{message:'Short.'},privateKey:{message:'Extra field.'}},{extensionDescription:[]},{extensionDescription:{message:3}},{extensionDescription:{description:'No message'}},{extensionDescription:{message:'Short.',placeholders:{account:{content:'$1'}}}}]){
+    await writeFile(localePath,JSON.stringify(messages));await assert.rejects(inspectPackage(root),/expected only extensionDescription with a message string/);
+  }
+  for(const message of ['','   ','x'.repeat(133),'First line\nSecond line']){
+    await writeFile(localePath,JSON.stringify({extensionDescription:{message}}));await assert.rejects(inspectPackage(root),/nonempty single line of at most 132/);
+  }
+  for(const message of ['Read $account$ on X.','__MSG_unresolved__']){
+    await writeFile(localePath,JSON.stringify({extensionDescription:{message}}));await assert.rejects(inspectPackage(root),/unresolved description placeholder/);
+  }
+  await writeFile(localePath,JSON.stringify({extensionDescription:{message:'x'.repeat(132)}}));assert.equal((await inspectPackage(root)).localization.descriptions.zh_CN.length,132);
+});
+
+test('locale additions remain exactly allowlisted and localized text receives the same credential checks',async t=>{
+  const root=await fixture(t),{inspectPackage}=await packager,extra=join(root,'extension','_locales','it','messages.json');
+  await mkdir(dirname(extra),{recursive:true});await writeFile(extra,JSON.stringify({extensionDescription:{message:'Not reviewed.'}}));
+  await assert.rejects(inspectPackage(root),/Unexpected extension files.*_locales\/it\/messages\.json/);await rm(extra);
+  const localePath=join(root,'extension','_locales','en','messages.json'),secret=`xai-${'A'.repeat(40)}`;
+  await writeFile(localePath,JSON.stringify({extensionDescription:{message:secret}}));await assert.rejects(inspectPackage(root),error=>{assert.match(error.message,/possible embedded credential/);assert.equal(error.message.includes(secret),false);return true;});
+  await rm(localePath);await assert.rejects(inspectPackage(root),/Missing production files.*_locales\/en\/messages\.json/);
 });
 
 test('package/manifest mismatch and unexpected release version fail closed', async t => {

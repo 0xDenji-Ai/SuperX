@@ -106,6 +106,9 @@ test('public source keeps both README PNGs unchanged and excludes private output
   assert.ok(names.includes('SuperX-1.2.3/docs/RELEASE_CHANNELS.md'));
   assert.ok(names.includes('SuperX-1.2.3/tools/package-release.mjs'));
   assert.ok(names.includes('SuperX-1.2.3/tests/build-ws-fixture.js'));
+  const {MANIFEST_LOCALES}=await installationPackager;
+  assert.deepEqual(names.filter(name=>name.includes('/extension/_locales/')),MANIFEST_LOCALES.map(locale=>`SuperX-1.2.3/extension/_locales/${locale}/messages.json`).sort());
+  for(const locale of MANIFEST_LOCALES)assert.equal(entries.find(entry=>entry.name===`SuperX-1.2.3/extension/_locales/${locale}/messages.json`).data.toString('utf8'),(await readFile(join(root,'extension','_locales',locale,'messages.json'),'utf8')).replace(/\r\n/g,'\n'));
   assert.equal(names.includes('SuperX-1.2.3/tests/private-helper.js'),false);
   assert.equal(names.some(name=>name.startsWith('SuperX-1.2.3/connector/')),false);
   assert.equal(archive.includes(Buffer.from('PRIVATE_CONNECTOR_DO_NOT_EXPORT')),false);
