@@ -19,8 +19,7 @@
           <a href="#source-heading" data-i18n="options.source">Connection</a>
           <a href="#language-heading" data-i18n="options.languageTitle">Language</a>
           <a href="#prompts-heading" data-i18n="options.promptsTitle">Prompts</a>
-          <a href="#cache-heading" data-i18n="common.clearCache">Clear cache</a>
-          <a href="#reload-heading" data-i18n="common.reload">Reload extension</a>
+          <a id="maintenance-link" href="#maintenance-heading" data-i18n="options.maintenance">Maintenance &amp; troubleshooting</a>
           <a href="history.html" class="sidebar-page-link" data-i18n="common.history">Browsing history</a>
         </nav>
       </aside>
@@ -32,7 +31,7 @@
           </div>
           <p id="status" role="status" aria-live="polite"></p>
         </header>
-      <form id="settings-form" autocomplete="off">
+      <form id="settings-form" autocomplete="off" novalidate>
         <div class="settings-overview">
           <label class="switch-label"><span data-i18n="options.enable">Enable SuperX</span><input id="enabled" type="checkbox" role="switch"><span class="switch-track" aria-hidden="true"></span></label>
         </div>
@@ -82,11 +81,12 @@
             <div class="credential-actions"><button id="clear-key" class="text-button" type="button" data-i18n="common.clearKey">Clear saved Key</button></div>
             <div class="field model-field">
               <label for="api-model" data-i18n="options.model">Model</label>
-              <select id="api-model" required dir="ltr" aria-describedby="model-help"></select>
+              <select id="api-model" required dir="ltr" aria-describedby="model-help api-model-status"></select>
               <p id="model-help" class="help" data-i18n="options.modelHelp">Grok 4.3 is a fast, lower-cost starting point. Check pricing and model access for your account.</p>
+              <p id="api-model-status" class="help field-error" role="status" aria-live="polite" hidden></p>
               <div class="field reasoning-field">
                 <label for="api-reasoning-effort" data-i18n="options.reasoning">Reasoning effort</label>
-                <select id="api-reasoning-effort" required aria-describedby="reasoning-help"></select>
+                <select id="api-reasoning-effort" required aria-describedby="reasoning-help api-model-status"></select>
                 <p id="reasoning-help" class="help" data-i18n="options.reasoningHelp">Only supported levels are shown. Higher effort may take longer and use more Tokens.</p>
               </div>
               <div class="model-actions">
@@ -125,12 +125,12 @@
               <label for="oauth-model" data-i18n="options.model">Model</label>
               <select id="oauth-model" required dir="ltr" aria-describedby="oauth-model-help oauth-model-status"></select>
               <p id="oauth-model-help" class="help" data-i18n="oauth.modelHelp">Use the models available to your account.</p>
-              <p id="oauth-model-status" class="help" role="status" aria-live="polite"></p>
+              <p id="oauth-model-status" class="help field-error" role="status" aria-live="polite"></p>
               <button id="oauth-refresh-models" class="text-button" type="button" data-i18n="oauth.refreshModels">Refresh available models</button>
             </div>
             <div class="field">
               <label for="oauth-reasoning-effort" data-i18n="options.reasoning">Reasoning effort</label>
-              <select id="oauth-reasoning-effort" required></select>
+              <select id="oauth-reasoning-effort" required aria-describedby="oauth-model-status"></select>
             </div>
           </div>
           <div id="api-concurrency-field" class="field concurrency-field">
@@ -166,14 +166,14 @@
             <div class="connection-actions"><button id="clear-build-connection" class="text-button" type="button" data-i18n="build.clear">Forget local connection</button></div>
             <div class="field">
               <label for="build-model" data-i18n="options.model">Model</label>
-              <select id="build-model" required aria-describedby="build-model-help build-fast-help"></select>
+              <select id="build-model" required aria-describedby="build-model-help build-fast-help build-model-status"></select>
               <p id="build-model-help" class="help" data-i18n="options.buildModelHelp">Model settings are saved separately from API mode. Available models and reasoning levels are checked when connecting.</p>
               <p id="build-fast-help" class="help" hidden></p>
-              <p id="build-model-status" class="help" role="status" aria-live="polite"></p>
+              <p id="build-model-status" class="help field-error" role="status" aria-live="polite"></p>
             </div>
             <div class="field">
               <label for="build-reasoning-effort" data-i18n="options.reasoning">Reasoning effort</label>
-              <select id="build-reasoning-effort" required></select>
+              <select id="build-reasoning-effort" required aria-describedby="build-model-status"></select>
             </div>
             <div class="connection-check">
               <button id="check-build" class="secondary-button" type="button" data-i18n="options.checkBuild">Check connection</button>
@@ -186,12 +186,13 @@
             <input id="analysis-dwell" type="number" min="0" max="30" step="any" value="1" required aria-describedby="analysis-dwell-help">
             <p id="analysis-dwell-help" class="help" data-i18n="options.dwellHelp">After scrolling stops, posts must stay visible for this long before automatic analysis. Default: 1 second; 0 starts immediately. Manual actions do not wait.</p>
           </div>
-          <div class="shared-search">
+          <div id="search-options" class="shared-search" role="group" aria-describedby="verification-help search-status">
             <p id="verification-help" class="help" data-i18n="options.verificationHelp">Fact checks read the full linked post. Search tool calls may add cost.</p>
             <div class="checkbox-row">
-              <label class="checkbox-label"><input id="web-search" type="checkbox"><span data-i18n="options.webSearch">Search web sources</span></label>
-              <label class="checkbox-label"><input id="x-search" type="checkbox"><span data-i18n="options.xSearch">Search X posts</span></label>
+              <label class="checkbox-label"><input id="web-search" type="checkbox" aria-describedby="verification-help search-status"><span data-i18n="options.webSearch">Search web sources</span></label>
+              <label class="checkbox-label"><input id="x-search" type="checkbox" aria-describedby="verification-help search-status"><span data-i18n="options.xSearch">Search X posts</span></label>
             </div>
+            <p id="search-status" class="help field-error" role="status" aria-live="polite" hidden></p>
           </div>
         </section>
 
@@ -222,8 +223,10 @@
             </select>
             <p id="explanation-mode-help" class="help"></p>
           </div>
-          <p class="prompt-description" data-i18n="options.promptsHelp" data-i18n-vars='{"limit":12000}'>Edit the task instructions for fact checks and comments. Save applies to new requests; use Reanalyze to update an existing result. Each field allows up to 12000 characters; leave it blank to use the default.</p>
-          <p id="prompt-rules-help" class="help" data-i18n="options.promptFixedRules">Answer language, search availability, untrusted post data and the three-comment output format are applied automatically.</p>
+          <div id="prompt-editing-help" hidden>
+            <p class="prompt-description" data-i18n="options.promptsHelp" data-i18n-vars='{"limit":12000}'>Save applies to new requests. Leave a field blank to use the default.</p>
+            <p id="prompt-rules-help" class="help" data-i18n="options.promptFixedRules">Answer language and enabled search tools are applied automatically.</p>
+          </div>
           <div id="analysis-prompts">
             <div class="field prompt-field">
               <div class="prompt-label">
@@ -233,34 +236,41 @@
               <textarea id="verify-prompt" rows="4" maxlength="12000" spellcheck="false" dir="auto" aria-describedby="prompt-rules-help"></textarea>
             </div>
           </div>
+          <details id="comments-customization" class="prompt-customization">
+            <summary data-i18n="options.commentsCustomize">Customize comment prompt</summary>
+            <p id="comments-prompt-help" class="help" data-i18n="options.promptEditingHelp">Leave blank to use the default. Save applies to new comment suggestions.</p>
           <div class="field prompt-field">
             <div class="prompt-label">
               <label for="comments-prompt" data-i18n="options.commentsPrompt">One-line comments</label>
               <button id="reset-comments-prompt" class="text-button" type="button" data-i18n="options.restorePrompt">Restore default</button>
             </div>
-            <textarea id="comments-prompt" rows="4" maxlength="12000" spellcheck="false" dir="auto" aria-describedby="prompt-rules-help"></textarea>
+            <textarea id="comments-prompt" rows="4" maxlength="12000" spellcheck="false" dir="auto" aria-describedby="comments-prompt-help"></textarea>
           </div>
+          </details>
         </section>
 
-        <section class="settings-section compact-section" aria-labelledby="cache-heading">
+        <section class="settings-section maintenance-section" aria-labelledby="maintenance-heading">
+          <details id="maintenance">
+            <summary id="maintenance-heading" data-i18n="options.maintenance">Maintenance &amp; troubleshooting</summary>
+            <div class="maintenance-content">
+        <div class="maintenance-action compact-section" aria-labelledby="cache-heading">
           <div>
-            <h2 id="cache-heading" data-i18n="common.clearCache">Clear cache</h2>
-            <p class="section-description" data-i18n="options.cacheHelp">Completed answers are cached. After clearing, refresh X or retry a post.</p>
+            <h3 id="cache-heading" data-i18n="options.answerCache">Clear answer cache</h3>
+            <p class="section-description" data-i18n="options.cacheHelp">Clears cached answers without deleting browsing history. Refresh X or retry a post afterward.</p>
           </div>
-          <button id="clear-cache" class="secondary-button" type="button" data-i18n="common.clearCache">Clear cache</button>
-        </section>
+          <button id="clear-cache" class="secondary-button" type="button" data-i18n="options.answerCache">Clear answer cache</button>
+        </div>
 
-        <section class="settings-section compact-section" aria-labelledby="reload-heading">
+        <div class="maintenance-action compact-section" aria-labelledby="reload-heading">
           <div>
-            <h2 id="reload-heading" data-i18n="common.reload">Reload extension</h2>
+            <h3 id="reload-heading" data-i18n="common.reload">Reload extension</h3>
             <p class="section-description" data-i18n="options.reloadHelp">After updating files, reload the extension and refresh X.</p>
             <p class="help" id="extension-version"></p>
           </div>
           <button id="reload-extension" class="secondary-button" type="button" data-i18n="common.reload">Reload extension</button>
-        </section>
+        </div>
 
-        <section class="settings-section diagnostics-section">
-          <details id="api-diagnostics">
+          <details id="api-diagnostics" class="diagnostics-section">
             <summary id="diagnostics-summary" data-i18n="options.diagnosticsTitle">Troubleshooting logs</summary>
             <p id="diagnostics-help" class="help" data-i18n="options.diagnosticsHelp" data-i18n-vars='{"hours":24,"maxEntries":30}'>Local session diagnostics are retained for 24 hours, up to 30 entries.</p>
             <div class="diagnostics-actions">
@@ -270,6 +280,8 @@
             </div>
             <p id="diagnostics-status" class="help" role="status" aria-live="polite"></p>
             <pre id="diagnostics-output" dir="ltr" tabindex="0" aria-labelledby="diagnostics-summary" hidden></pre>
+          </details>
+            </div>
           </details>
         </section>
 

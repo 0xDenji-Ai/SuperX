@@ -14,6 +14,8 @@
   let uiLanguage = observedUILanguage;
   let localeRevision = 0;
   let statusMessage = null;
+  const fieldErrors=new Map();
+  let displayedExplanationMode;
   let keyChanged = false;
   let rememberChanged = false;
   let originalKey = "";
@@ -71,6 +73,10 @@
     $("oauth-status").textContent=ui.t(statusKey,uiLanguage);$("oauth-status").dataset.state=oauthActionError?"error":oauthStatus.state;$("oauth-status").hidden=oauthStatus.state==="idle"&&!oauthActionError;
     const device=oauthStatus.device;$("oauth-device").hidden=!device;$("oauth-user-code").textContent=device?.userCode||"";if(device)$("oauth-official-link").setAttribute("href",device.url);else $("oauth-official-link").removeAttribute("href");
     const model=$("oauth-model").value,available=!Array.isArray(oauthStatus.catalogModels)||oauthStatus.catalogModels.some(entry=>entry.id===model&&entry.available!==false),effort=oauthEfforts(model).includes($("oauth-reasoning-effort").value);
+    clearResolvedError("oauth-model",connected,["oauth.needsLogin","oauth.unavailable","oauth.denied","oauth.expired","oauth.storageError","oauth.networkError","oauth.reauthRequired","oauth.canceled"]);
+    clearResolvedError("oauth-model",connected&&!oauthStatus.catalogError&&available,["oauth.catalogUnavailable","oauth.modelUnavailable"]);
+    clearResolvedError("oauth-model",!core.isNonTextGenerationModel(model),["error.modelUnsupported"]);
+    clearResolvedError("oauth-reasoning-effort",effort,["options.reasoningInvalid"]);
     $("oauth-model-status").textContent=core.isNonTextGenerationModel(model)?ui.t("error.modelUnsupported",uiLanguage):oauthStatus.catalogError?ui.t("oauth.catalogUnavailable",uiLanguage):!available?ui.t("oauth.modelUnavailable",uiLanguage,{model}):!effort?ui.t("options.reasoningInvalid",uiLanguage):"";
   }
   function scheduleOAuthPoll(){
@@ -118,6 +124,10 @@
     const unavailable = Array.isArray(catalog) && !catalog.some(item => (typeof item === "string" ? item : item.id) === selected && item.available !== false);
     const efforts=catalog?.find(item=>item&&typeof item==='object'&&item.id===selected)?.efforts;
     const effortUnavailable=Array.isArray(efforts)&&!efforts.includes($("build-reasoning-effort").value);
+    if(buildStatus?.ready===true&&fieldErrors.get("build-secret")?.key.startsWith("build."))clearFieldError("build-secret");
+    clearResolvedError("build-model",!unavailable,["options.buildModelUnavailable"]);
+    clearResolvedError("build-model",!core.isNonTextGenerationModel(selected),["error.modelUnsupported"]);
+    clearResolvedError("build-reasoning-effort",Boolean($("build-reasoning-effort").value)&&!effortUnavailable,["options.reasoningInvalid"]);
     $("build-model-status").textContent = core.isNonTextGenerationModel(selected) ? ui.t("error.modelUnsupported",uiLanguage) : unavailable ? ui.t("options.buildModelUnavailable",uiLanguage,{model:selected}) : effortUnavailable ? ui.t("options.reasoningInvalid",uiLanguage) : "";
     $("build-fast-help").textContent = ui.t("options.buildFastHelp",uiLanguage);
     $("build-fast-help").hidden = !/fast/i.test(selected);
@@ -130,7 +140,7 @@
     $("api-concurrency-field").hidden=build;$("api-concurrency").disabled=busy||build;
     $("source-description").textContent = build ? ui.t("options.buildDescription",uiLanguage) : "";
     $("source-description").hidden = !build;
-    $("save").disabled = busy || (isAPI() && !securityLoaded);
+    $("save").disabled = busy;
     $("verification-help").textContent=ui.t(oauth?"oauth.verificationHelp":"options.verificationHelp",uiLanguage);
     renderBuildStatus();renderOAuth();
   }
@@ -180,6 +190,21 @@
     $("status").textContent = ui.t(key,uiLanguage,vars);
     $("status").dataset.state = state;
   }
+  function fieldError(id,key,vars={}) {
+    const errorId=id==="api-key"?"key-security-state":id.startsWith("api-")?"api-model-status":id.startsWith("oauth-")?"oauth-model-status":id.startsWith("build-model")||id==="build-reasoning-effort"?"build-model-status":id.startsWith("build-")?"build-status":id==="x-search"||id==="web-search"?"search-status":null;
+    fieldErrors.set(id,{key,vars,errorId});setStatus("options.checkFields","error");
+    const input=$(id),output=errorId&&$(errorId);input.setAttribute("aria-invalid","true");
+    if(output){output.textContent=ui.t(key,uiLanguage,vars);output.hidden=false;input.setAttribute("aria-errormessage",errorId);const described=(input.getAttribute("aria-describedby")||"").split(/\s+/).filter(Boolean);if(!described.includes(errorId))input.setAttribute("aria-describedby",[...described,errorId].join(" "));}
+    for(let detail=input.closest?.("details");detail;detail=detail.parentElement?.closest?.("details"))detail.open=true;
+    input.focus();input.scrollIntoView?.({block:"nearest"});
+  }
+  function clearFieldError(id){const previous=fieldErrors.get(id);fieldErrors.delete(id);$(id).removeAttribute("aria-invalid");$(id).removeAttribute("aria-errormessage");const output=previous?.errorId&&$(previous.errorId);if(output&&previous.errorId.endsWith("-model-status")&&output.textContent===ui.t(previous.key,uiLanguage,previous.vars))output.textContent="";}
+  function clearResolvedError(id,resolved,keys){if(resolved&&keys.includes(fieldErrors.get(id)?.key))clearFieldError(id);}
+  function renderSearchFeedback(){
+    const missing=!$("web-search").checked&&!$("x-search").checked,output=$("search-status");
+    if(output){output.hidden=!missing;output.textContent=missing?ui.t("options.urlSearchRequired",uiLanguage):"";}
+    for(const id of ["web-search","x-search"]){if(missing)$(id).setAttribute("aria-invalid","true");else clearFieldError(id);}
+  }
   function setBusy(value) {
     busy = value;
     for (const control of $("settings-form").elements) control.disabled = value;
@@ -193,11 +218,12 @@
   }
   function keyNeedsSave() { return keyChanged || rememberChanged; }
   function renderSecurity() {
+    clearResolvedError("api-key",securityLoaded&&security.keyState==="ready",["options.keyRequired","errors.noResponse"]);
     const stateKeys = {ready:security.hasSavedKey ? "options.keyReadySaved" : "options.keyReady",migration:"options.keyMigration",missing:"options.keyMissing"};
     $("key-security-state").textContent = ui.t(stateKeys[security.keyState] || stateKeys.missing,uiLanguage);
     $("key-security-state").dataset.state = security.keyState;
     $("clear-key").hidden = !securityLoaded || security.keyState !== "ready" && !security.hasSavedKey;
-    $("save").disabled = busy || (isAPI() && !securityLoaded);
+    $("save").disabled = busy;
   }
   async function refreshSecurity(fillKey = false, preserveDraft = false) {
     const result = await send({type:"GET_SECURITY_STATUS"});
@@ -220,7 +246,7 @@
     renderSecurity();return result;
   }
   function markDraft() {
-    if (busy || (isAPI() && !securityLoaded)) return;
+    if (busy) return;
     const changed = keyChanged || rememberChanged
       || $("provider").value !== currentSettings.provider
       || buildSecretChanged || Number($("build-port").value) !== currentSettings.buildPort
@@ -274,6 +300,10 @@
   function showExplanationMode() {
     const mode = $("explanation-mode").value || currentSettings.explanationMode || "preset";
     $("analysis-prompts").hidden = mode !== "custom";
+    if($("prompt-editing-help"))$("prompt-editing-help").hidden=mode!=="custom";
+    $("reset-prompts").hidden=mode!=="custom";
+    if(mode==="custom"&&displayedExplanationMode!==mode&&$("comments-customization"))$("comments-customization").open=true;
+    displayedExplanationMode=mode;
     const key = mode === "custom" ? "options.customModeHelp" : "options.presetModeHelp";
     $("explanation-mode-help").textContent = ui.t(key,uiLanguage);
   }
@@ -329,6 +359,7 @@
       select.append(option);
     }
     select.value = core.reasoningEffort(model,effort);
+    clearResolvedError("api-reasoning-effort",Boolean(select.value),["options.reasoningInvalid"]);
   }
   function buildModelChoices() {
     return modelChoices(currentSettings.buildModel);
@@ -387,6 +418,8 @@
     renderSecurity();
     renderProvider();
     renderDiagnostics();
+    renderSearchFeedback();
+    for(const [id,error]of fieldErrors){if(error.errorId&&$(error.errorId))$(error.errorId).textContent=ui.t(error.key,uiLanguage,error.vars);}
     if (statusMessage) setStatus(statusMessage.key,statusMessage.state,statusMessage.vars);
   }
   function populate(settings) {
@@ -407,6 +440,7 @@
     populateInterfaceLanguages(settings.interfaceLanguage);
     showExplanationMode();
     renderProvider();
+    renderSearchFeedback();
   }
   async function send(message) {
     const result = await chrome.runtime.sendMessage(message);
@@ -504,6 +538,8 @@
     $(id).addEventListener("input",markDraft);
     $(id).addEventListener("change",markDraft);
   }
+  for(const id of ["api-key","api-model","api-reasoning-effort","oauth-model","oauth-reasoning-effort","build-model","build-reasoning-effort","build-port","build-secret"]){for(const event of ["input","change"])$(id).addEventListener(event,()=>clearFieldError(id));}
+  for(const id of ["web-search","x-search"]){for(const event of ["input","change"])$(id).addEventListener(event,renderSearchFeedback);}
   function restorePrompt(field) {
     $(field.name + "-prompt").value = core.DEFAULT_PROMPTS[field.name];
   }
@@ -528,6 +564,12 @@
   $("reload-extension").addEventListener("click",() => {
     if (busy) return;setStatus("options.reloading");chrome.runtime.reload();
   });
+  function revealMaintenance(){
+    const hash=globalThis.location?.hash||"";
+    if(["#maintenance-heading","#cache-heading","#reload-heading","#api-diagnostics"].includes(hash)&&$("maintenance"))$("maintenance").open=true;
+  }
+  $("maintenance-link")?.addEventListener("click",()=>{if($("maintenance"))$("maintenance").open=true;});
+  globalThis.addEventListener?.("hashchange",revealMaintenance);revealMaintenance();
   $("api-key").addEventListener("input",() => { keyChanged = $("api-key").value.trim() !== originalKey.trim();renderSecurity();markDraft(); });
   $("remember-key").addEventListener("change",() => { rememberChanged = $("remember-key").checked !== security.remember;renderSecurity();markDraft(); });
   async function syncAfterSecurityAction(preserveDraft = false) {
@@ -536,14 +578,25 @@
       if (!preserveDraft) $("remember-key").checked = security.remember;
       rememberChanged = $("remember-key").checked !== security.remember;
     } catch {
-      // Do not permit saving if the current Key state cannot be read after a
-      // partially failed mutation.
+      // Runnable credential changes need a fresh Key state. Pausing and
+      // unrelated preferences remain available after a failed mutation.
       securityLoaded = false;
     }
   }
   $("settings-form").addEventListener("submit",async event => {
     event.preventDefault();
-    if (busy || (isAPI() && !securityLoaded) || !event.currentTarget.reportValidity()) return;
+    if (busy) return;
+    const enabled=$("enabled").checked,provider=$("provider").value;
+    const modelId=isOAuth()?"oauth-model":isBuild()?"build-model":"api-model",effortId=isOAuth()?"oauth-reasoning-effort":isBuild()?"build-reasoning-effort":"api-reasoning-effort";
+    const modelField=isOAuth()?"oauthModel":isBuild()?"buildModel":"apiModel",effortField=isOAuth()?"oauthReasoningEffort":isBuild()?"buildReasoningEffort":"apiReasoningEffort";
+    const connectionChanged=isAPI()?keyNeedsSave():isBuild()&&(buildSecretChanged||Number($("build-port").value)!==buildConnection.port);
+    const strict=enabled&&(!currentSettings.enabled||provider!==currentSettings.provider||$(modelId).value!==currentSettings[modelField]||$(effortId).value!==currentSettings[effortField]||$("web-search").checked!==currentSettings.webSearch||$("x-search").checked!==currentSettings.xSearch||connectionChanged);
+    // A stale catalog or unfinished connection must not prevent pausing or
+    // saving unrelated preferences. Native required checks still apply to
+    // ordinary settings, while unchanged connection fields are not submitted.
+    const ignored=!strict?[modelId,effortId,...(isBuild()?["build-port"]:[])]:[],disabled=ignored.map(id=>[$(id),$(id).disabled]);
+    let valid;try{for(const [input]of disabled)input.disabled=true;valid=event.currentTarget.reportValidity();}finally{for(const [input,value]of disabled)input.disabled=value;}
+    if(!valid)return;
     const oversized = promptFields.find(field => $(field.name + "-prompt").value.length > promptLimit);
     if (oversized) {
       setStatus("options.promptTooLong","error",{limit:promptLimit});
@@ -555,15 +608,15 @@
       enabled:$("enabled").checked,
       provider:$("provider").value,
       buildTransport:"acp",
-      buildPort:Number($("build-port").value),
-      buildModel:$("build-model").value,
-      buildReasoningEffort:$("build-reasoning-effort").value,
-      oauthModel:$("oauth-model").value,
-      oauthReasoningEffort:$("oauth-reasoning-effort").value,
+      buildPort:enabled&&isBuild()&&connectionChanged?Number($("build-port").value):currentSettings.buildPort,
+      buildModel:enabled?$("build-model").value||currentSettings.buildModel:currentSettings.buildModel,
+      buildReasoningEffort:enabled?$("build-reasoning-effort").value||currentSettings.buildReasoningEffort:currentSettings.buildReasoningEffort,
+      oauthModel:enabled?$("oauth-model").value||currentSettings.oauthModel:currentSettings.oauthModel,
+      oauthReasoningEffort:enabled?$("oauth-reasoning-effort").value||currentSettings.oauthReasoningEffort:currentSettings.oauthReasoningEffort,
       oauthRemember:$("oauth-remember").checked,
       explanationMode:$("explanation-mode").value,
-      apiModel:$("api-model").value.trim(),
-      apiReasoningEffort:$("api-reasoning-effort").value,
+      apiModel:enabled?$("api-model").value.trim()||currentSettings.apiModel:currentSettings.apiModel,
+      apiReasoningEffort:enabled?$("api-reasoning-effort").value||currentSettings.apiReasoningEffort:currentSettings.apiReasoningEffort,
       apiConcurrency:Number($("api-concurrency").value),
       dwellMs:Math.round(Number($("analysis-dwell").value) * 1000),
       apiVerification:"only",
@@ -575,44 +628,49 @@
       commentsPrompt:$("comments-prompt").value,
     });
     const apiKey = $("api-key").value.trim();
-    const saveKey = isAPI() && keyNeedsSave();
+    const saveKey = enabled && isAPI() && connectionChanged;
+    const saveBuildConnection=enabled&&isBuild()&&connectionChanged;
+    const connectionDrafts=!enabled&&(keyNeedsSave()||buildSecretChanged||Number($("build-port").value)!==currentSettings.buildPort||["api","build","oauth"].some(source=>$(source+"-model").value!==currentSettings[source+"Model"]||$(source+"-reasoning-effort").value!==currentSettings[source+"ReasoningEffort"]));
     const remember = $("remember-key").checked;
     const selectedModelId=isOAuth()?"oauth-model":isBuild()?"build-model":"api-model";
-    if(core.isNonTextGenerationModel($(selectedModelId).value)){
-      setStatus("error.modelUnsupported","error");$(selectedModelId).focus();return;
+    if(strict&&core.isNonTextGenerationModel($(selectedModelId).value)){
+      fieldError(selectedModelId,"error.modelUnsupported");return;
     }
-    if(isBuild()&&!buildConnection.configured&&!$("build-secret").value.trim()){
-      setStatus("build.codeRequired","error");$("generate-build-command").focus();return;
+    if(strict&&isBuild()&&!buildConnection.configured&&!$("build-secret").value.trim()){
+      fieldError("build-secret","build.codeRequired");return;
     }
+    if(strict&&isAPI()&&(!securityLoaded||!saveKey&&security.keyState!=="ready")){fieldError("api-key",securityLoaded?"options.keyRequired":"errors.noResponse");return;}
+    if(strict&&isOAuth()&&!oauthStatus.connected){fieldError("oauth-model",oauthStatus.errorKey||"oauth.needsLogin");return;}
+    if(strict&&isBuild()&&buildStatus&&buildStatus.ready!==true){fieldError("build-secret",buildStateKey());return;}
     if (saveKey && !apiKey) {
-      setStatus("options.keyRequired","error");$("api-key").focus();return;
+      fieldError("api-key","options.keyRequired");return;
     }
     if (saveKey && (apiKey.length > 500 || /[\r\n]/.test(apiKey))) {
-      setStatus("errors.keyInvalid","error");$("api-key").focus();return;
+      fieldError("api-key","errors.keyInvalid");return;
     }
-    if (isAPI() && !core.API_MODELS.some(item => item.value === $("api-model").value)
+    if (strict&&isAPI() && !core.API_MODELS.some(item => item.value === $("api-model").value)
       && $("api-model").value !== currentSettings.apiModel) {
-      setStatus("options.modelInvalid","error");$("api-model").focus();return;
+      fieldError("api-model","options.modelInvalid");return;
     }
-    if (isAPI() && (!$("api-reasoning-effort").value || $("api-reasoning-effort").value !== settings.apiReasoningEffort)) {
-      setStatus("options.reasoningInvalid","error");$("api-reasoning-effort").focus();return;
+    if (strict&&isAPI() && (!$("api-reasoning-effort").value || $("api-reasoning-effort").value !== settings.apiReasoningEffort)) {
+      fieldError("api-reasoning-effort","options.reasoningInvalid");return;
     }
-    if (isBuild() && (!buildModelChoices().some(item => item.value === $("build-model").value)
+    if (strict&&isBuild() && (!buildModelChoices().some(item => item.value === $("build-model").value)
       || Array.isArray(buildStatus?.modelCatalog) && !buildStatus.modelCatalog.some(item => (typeof item === "string" ? item : item.id) === settings.buildModel && item.available !== false))) {
-      setStatus("options.buildModelUnavailable","error",{model:settings.buildModel});$("build-model").focus();return;
+      fieldError("build-model","options.buildModelUnavailable",{model:settings.buildModel});return;
     }
     const buildEfforts=buildStatus?.modelCatalog?.find(item=>item&&typeof item==='object'&&item.id===settings.buildModel)?.efforts;
-    if (isBuild() && (!$("build-reasoning-effort").value || $("build-reasoning-effort").value !== settings.buildReasoningEffort
+    if (strict&&isBuild() && (!$("build-reasoning-effort").value || $("build-reasoning-effort").value !== settings.buildReasoningEffort
       || Array.isArray(buildEfforts)&&!buildEfforts.includes(settings.buildReasoningEffort))) {
-      setStatus("options.reasoningInvalid","error");$("build-reasoning-effort").focus();return;
+      fieldError("build-reasoning-effort","options.reasoningInvalid");return;
     }
-    if(isOAuth()&&Array.isArray(oauthStatus.catalogModels)&&!oauthStatus.catalogModels.some(entry=>entry.id===settings.oauthModel&&entry.available!==false)){setStatus("oauth.modelUnavailable","error",{model:settings.oauthModel});$("oauth-model").focus();return;}
-    if(isOAuth()&&(!$("oauth-reasoning-effort").value||!oauthEfforts(settings.oauthModel).includes($("oauth-reasoning-effort").value)||settings.oauthReasoningEffort!==$("oauth-reasoning-effort").value)){setStatus("options.reasoningInvalid","error");$("oauth-reasoning-effort").focus();return;}
-    if (!settings.webSearch && !settings.xSearch) {
-      setStatus("options.urlSearchRequired","error");$("x-search").focus();return;
+    if(strict&&isOAuth()&&Array.isArray(oauthStatus.catalogModels)&&!oauthStatus.catalogModels.some(entry=>entry.id===settings.oauthModel&&entry.available!==false)){fieldError("oauth-model",oauthStatus.catalogError?"oauth.catalogUnavailable":"oauth.modelUnavailable",{model:settings.oauthModel});return;}
+    if(strict&&isOAuth()&&(!$("oauth-reasoning-effort").value||!oauthEfforts(settings.oauthModel).includes($("oauth-reasoning-effort").value)||settings.oauthReasoningEffort!==$("oauth-reasoning-effort").value)){fieldError("oauth-reasoning-effort","options.reasoningInvalid");return;}
+    if (strict&&!settings.webSearch && !settings.xSearch) {
+      renderSearchFeedback();fieldError("x-search","options.urlSearchRequired");return;
     }
     setBusy(true);setStatus("options.saving");
-    const localPermission=isBuild()?requestLocalAccess():null;
+    const localPermission=saveBuildConnection?requestLocalAccess():null;
     try {
       if(localPermission&&await localPermission!==true){setStatus("build.permission","error");return;}
       // Apply a replacement Key and its settings in one worker transaction.
@@ -621,14 +679,16 @@
         await send({type:"SAVE_KEY",apiKey,remember,settings});
         keyChanged = false;rememberChanged = false;
         originalKey = apiKey;
-      } else if(isBuild()) {
+      } else if(saveBuildConnection) {
         await send({type:"SAVE_BUILD_CONNECTION",port:settings.buildPort,settings,...(buildSecretChanged?{secret:$("build-secret").value.trim()}: {})});
         buildConnection={configured:true,port:settings.buildPort};buildSecretChanged=false;$("build-secret").value="";$("build-launch").hidden=true;$("build-command").textContent="";
       } else await send({type:"SAVE_SETTINGS",settings});
       currentSettings = settings;
-      if (isAPI()) await refreshSecurity();
-      populate(currentSettings);renderLanguage();
-      setStatus("options.saved");
+      if (saveKey) await refreshSecurity();
+      if(strict)for(const id of [...fieldErrors.keys()])clearFieldError(id);
+      if(enabled){populate(currentSettings);renderLanguage();}
+      else {renderProvider();renderSearchFeedback();}
+      setStatus(connectionDrafts?"options.pausedWithDrafts":"options.saved");
     } catch (error) {
       setStatus("errors.operation","error",{error:error.message});
       // Re-read the actual state, retaining a replacement draft for retry.

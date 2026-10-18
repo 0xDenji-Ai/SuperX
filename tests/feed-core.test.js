@@ -625,7 +625,7 @@ class UIElement {
   querySelectorAll() { return this.children.filter(child=>child.matches()); }
   replaceChildren(...children) { this.children=[...children]; }
   append(...children) { this.children.push(...children); }
-  addEventListener(name,handler) { this.listeners[name]=handler; }
+  addEventListener(name,handler) { const previous=this.listeners[name];this.listeners[name]=previous?(...args)=>{previous(...args);return handler(...args);}:handler; }
   focus() { this.focused=true; }
   scrollIntoView(options) { this.scrollOptions=options; }
   reportValidity() { return true; }
@@ -772,9 +772,10 @@ function uiPageFixture(file, settings=API_UI_SETTINGS, storage={}, environment={
       session:{get:async keys=>pick(session,keys),remove:async keys=>{for(const key of Array.isArray(keys)?keys:[keys])delete session[key];}},onChanged:{addListener:listener=>storageListeners.push(listener)}}
   };
   if(Object.hasOwn(environment,'browserLanguage'))chrome.i18n={getUILanguage:()=>environment.browserLanguage};
-  const context=vm.createContext({document,chrome,URL,XGrokCore:core,GrokFirstUI:ui,navigator:{language:environment.navigatorLanguage || 'en-US',clipboard:{async writeText(value){if(environment.copyFailure)throw new Error('Clipboard unavailable');environment.onCopy?.(value);}}}});
+  const location={hash:environment.hash||''},pageListeners={};
+  const context=vm.createContext({document,chrome,URL,location,addEventListener(type,listener){pageListeners[type]=listener;},XGrokCore:core,GrokFirstUI:ui,navigator:{language:environment.navigatorLanguage || 'en-US',clipboard:{async writeText(value){if(environment.copyFailure)throw new Error('Clipboard unavailable');environment.onCopy?.(value);}}}});
   vm.runInContext(fs.readFileSync(path.join(__dirname,'../extension',`${file}.js`),'utf8'),context);
-  return {document,ids,messages,reads,runtimeListeners,storageListeners,local,session,openedOptions,openedHistory,permissionRequests};
+  return {document,ids,messages,reads,runtimeListeners,storageListeners,local,session,openedOptions,openedHistory,permissionRequests,location,pageListeners};
 }
 const settleUI=()=>new Promise(resolve=>setImmediate(resolve));
 const uiMessageTypes=fixture=>fixture.messages.map(message=>message.type).filter(type=>!['GET_SECURITY_STATUS','GET_CONFIG','GET_HISTORY_STATUS','GET_BUILD_CONNECTION','GET_OAUTH_STATUS'].includes(type));
@@ -871,7 +872,8 @@ test('injected unknown models and unsupported reasoning values are rejected befo
     fixture.ids.get('api-reasoning-effort').value=invalid.effort;
     fixture.ids.get('api-key').value='replacement-fixture';fixture.ids.get('api-key').listeners.input();
     const form=fixture.ids.get('settings-form');await form.listeners.submit({preventDefault(){},currentTarget:form});
-    assert.equal(fixture.ids.get('status').textContent,ui.t(invalid.error,'en'));
+    assert.equal(fixture.ids.get('status').textContent,ui.t('options.checkFields','en'));
+    assert.equal(fixture.ids.get('api-model-status').textContent,ui.t(invalid.error,'en'));
     assert.equal(fixture.ids.get(invalid.focus).focused,true);assert.equal(fixture.session.apiKey,'session-secret');
     assert.equal(fixture.local.settings,API_UI_SETTINGS);assert.deepEqual(uiMessageTypes(fixture),['GET_UI_LANGUAGE']);
   }
@@ -1228,7 +1230,7 @@ test('options expose only Fact Check and comments editors with accessible labels
   for(const name of ['verify','comments']){
     const editor=fixture.ids.get(`${name}-prompt`);
     assert.equal(editor.value,core.DEFAULT_PROMPTS[name]);assert.equal(editor.getAttribute('maxlength'),String(core.MAX_PROMPT_LENGTH));
-    assert.equal(editor.getAttribute('spellcheck'),'false');assert.equal(editor.getAttribute('dir'),'auto');assert.equal(editor.getAttribute('aria-describedby'),'prompt-rules-help');
+    assert.equal(editor.getAttribute('spellcheck'),'false');assert.equal(editor.getAttribute('dir'),'auto');assert.equal(editor.getAttribute('aria-describedby'),name==='comments'?'comments-prompt-help':'prompt-rules-help');
   }
   for(const id of ['explain-prompt','reset-explain-prompt','api-verification'])assert.equal(fixture.ids.has(id),false,id);
   assert.equal(fixture.ids.get('provider').value,'api');
@@ -1297,7 +1299,8 @@ test('every API mode requires a full-post retrieval tool before saving and accep
     const fixture=uiPageFixture('options',core.normalizeSettings({explanationMode:mode}));await settleUI();await settleUI();
     fixture.ids.get('web-search').checked=false;fixture.ids.get('x-search').checked=false;
     const form=fixture.ids.get('settings-form');await form.listeners.submit({preventDefault(){},currentTarget:form});
-    assert.equal(fixture.ids.get('status').textContent,ui.t('options.urlSearchRequired','en'));
+    assert.equal(fixture.ids.get('status').textContent,ui.t('options.checkFields','en'));
+    assert.equal(fixture.ids.get('search-status').textContent,ui.t('options.urlSearchRequired','en'));
     assert.equal(fixture.ids.get('status').dataset.state,'error');
     assert.equal(fixture.ids.get('x-search').focused,true);
     assert.deepEqual(uiMessageTypes(fixture),['GET_UI_LANGUAGE']);
@@ -1616,7 +1619,8 @@ test('invalid or emptied Key edits are rejected before credential or settings mu
     fixture.ids.get('api-key').value=draft;fixture.ids.get('api-key').listeners.input();
     fixture.ids.get('api-model').value='grok-4.7';fixture.ids.get('api-model').listeners.change();
     const form=fixture.ids.get('settings-form');await form.listeners.submit({preventDefault(){},currentTarget:form});
-    assert.equal(fixture.ids.get('status').textContent,ui.t(draft?'errors.keyInvalid':'options.keyRequired','en'));
+    assert.equal(fixture.ids.get('status').textContent,ui.t('options.checkFields','en'));
+    assert.equal(fixture.ids.get('key-security-state').textContent,ui.t(draft?'errors.keyInvalid':'options.keyRequired','en'));
     assert.equal(fixture.ids.get('api-key').focused,true);
     assertUIRememberedKey(fixture,'existing-fixture');assert.equal(fixture.session.apiKey,'existing-fixture');
     assert.equal(fixture.local.settings.apiModel,API_UI_SETTINGS.apiModel);
@@ -1708,10 +1712,10 @@ test('a Settings focus request received during Save waits until completion and f
       }
     }});
   await settleUI();await settleUI();
-  fixture.ids.get('api-model').value='grok-4.7';fixture.ids.get('api-model').listeners.change();
+  fixture.ids.get('language').value='ja';fixture.ids.get('language').listeners.change();
   const form=fixture.ids.get('settings-form');await form.listeners.submit({preventDefault(){},currentTarget:form});await settleUI();await settleUI();
   assert.equal(fixture.ids.get('api-key').focused,true);assert.equal(fixture.ids.has('unlock-passphrase'),false);
-  assert.equal(fixture.ids.get('api-key').value,'');assert.equal(fixture.ids.get('api-model').value,'grok-4.7');
+  assert.equal(fixture.ids.get('api-key').value,'');assert.equal(fixture.ids.get('language').value,'ja');
   assert.equal(fixture.session.apiKey,undefined);assert.ok(fixture.local.apiKeyVault);
   assert.equal(Object.hasOwn(fixture.session,'superxOptionsFocus'),false);
   assert.deepEqual(uiMessageTypes(fixture),['GET_UI_LANGUAGE','SAVE_SETTINGS']);
@@ -1792,13 +1796,95 @@ test('the ready popup Open settings entry requests API Key focus without togglin
   assert.ok(fixture.reads.flat().every(key=>!['apiKey','apiKeyVault','apiKeyEncrypted'].includes(key)));
 });
 
-test('security-status failure disables Settings save rather than assuming Key access', async()=>{
+test('security-status failure still permits pause but rejects enabling an unreadable connection', async()=>{
   const fixture=uiPageFixture('options',API_UI_SETTINGS,{}, {securityFailure:true});
   await settleUI();await settleUI();
-  assert.equal(fixture.ids.get('save').disabled,true);
+  assert.equal(fixture.ids.get('save').disabled,false);
+  fixture.ids.get('enabled').checked=false;
   const form=fixture.ids.get('settings-form');await form.listeners.submit({preventDefault(){},currentTarget:form});
-  assert.deepEqual(uiMessageTypes(fixture),['GET_UI_LANGUAGE']);
+  assert.deepEqual(uiMessageTypes(fixture),['GET_UI_LANGUAGE','SAVE_SETTINGS']);
+  assert.equal(fixture.local.settings.enabled,false);
+  fixture.ids.get('enabled').checked=true;
+  await form.listeners.submit({preventDefault(){},currentTarget:form});
+  assert.deepEqual(uiMessageTypes(fixture),['GET_UI_LANGUAGE','SAVE_SETTINGS']);
   assert.equal(fixture.ids.get('status').dataset.state,'error');
+  assert.equal(fixture.ids.get('api-key').getAttribute('aria-invalid'),'true');
+  assert.equal(fixture.session.apiKey,'session-secret');
+});
+
+test('saving unrelated API preferences does not reread credentials or fail after a successful settings write',async()=>{
+  let reads=0,unavailable=false;
+  const fixture=uiPageFixture('options',API_UI_SETTINGS,{}, {onMessage(message){if(message.type==='GET_SECURITY_STATUS'){reads++;if(unavailable)return {ok:false,errorKey:'errors.noResponse'};}}});
+  await settleUI();await settleUI();const initialReads=reads;unavailable=true;
+  fixture.ids.get('language').value='ja';const form=fixture.ids.get('settings-form');
+  await form.listeners.submit({preventDefault(){},currentTarget:form});
+  assert.equal(fixture.local.settings.language,'ja');assert.equal(reads,initialReads);
+  assert.equal(fixture.ids.get('status').textContent,ui.t('options.saved','en'));
+  assert.equal(fixture.messages.some(message=>['SAVE_KEY','SAVE_BUILD_CONNECTION'].includes(message.type)),false);
+  assert.equal(fixture.session.apiKey,'session-secret');
+});
+
+test('a failed Build connection permits unrelated preferences and pause without committing connection drafts',async()=>{
+  const initial=core.normalizeSettings({provider:'build',buildModel:'grok-4.3',buildReasoningEffort:'none'});
+  const fixture=uiPageFixture('options',initial,{}, {buildStatus:{ready:false,errorCode:'BUILD_DISCONNECTED'}});await settleUI();await settleUI();
+  const {ids}=fixture,form=ids.get('settings-form');await ids.get('check-build').listeners.click();const permissions=fixture.permissionRequests.length;
+  ids.get('language').value='ja';ids.get('analysis-dwell').value='5';await form.listeners.submit({preventDefault(){},currentTarget:form});
+  assert.equal(fixture.local.settings.language,'ja');assert.equal(fixture.local.settings.dwellMs,5000);
+  assert.equal(fixture.permissionRequests.length,permissions);assert.equal(fixture.messages.some(message=>message.type==='SAVE_BUILD_CONNECTION'),false);
+  ids.get('enabled').checked=false;ids.get('build-port').value='1';ids.get('build-secret').value='private-uncommitted-draft';ids.get('build-secret').listeners.input();ids.get('build-model').value='';ids.get('build-reasoning-effort').value='';
+  let validations=0;form.reportValidity=()=>{validations++;for(const id of ['build-model','build-reasoning-effort','build-port'])assert.equal(ids.get(id).disabled,true,id);assert.equal(ids.get('analysis-dwell').disabled,false);assert.equal(ids.get('api-concurrency').disabled,true);return true;};
+  await form.listeners.submit({preventDefault(){},currentTarget:form});
+  assert.equal(validations,1);assert.equal(fixture.local.settings.enabled,false);assert.equal(fixture.local.settings.buildModel,initial.buildModel);assert.equal(fixture.local.settings.buildReasoningEffort,initial.buildReasoningEffort);assert.equal(fixture.local.settings.buildPort,initial.buildPort);
+  assert.equal(ids.get('build-model').value,'');assert.equal(ids.get('build-reasoning-effort').value,'');assert.equal(ids.get('build-port').value,'1');assert.equal(ids.get('build-secret').value,'private-uncommitted-draft');
+  assert.equal(ids.get('status').textContent,ui.t('options.pausedWithDrafts','en'));assert.equal(fixture.permissionRequests.length,permissions);
+  assert.equal(fixture.messages.filter(message=>message.type==='SAVE_SETTINGS').length,2);assert.equal(fixture.messages.some(message=>['SAVE_KEY','SAVE_BUILD_CONNECTION'].includes(message.type)),false);
+});
+
+test('pause retains invalid API credential and model drafts and still validates ordinary numeric preferences',async()=>{
+  const fixture=uiPageFixture('options',API_UI_SETTINGS);await settleUI();await settleUI();const {ids}=fixture,form=ids.get('settings-form');
+  ids.get('enabled').checked=false;ids.get('api-key').value='bad\nkey';ids.get('api-key').listeners.input();ids.get('api-model').value='';ids.get('api-reasoning-effort').value='';ids.get('analysis-dwell').value='-1';
+  form.reportValidity=()=>{assert.equal(ids.get('api-model').disabled,true);assert.equal(ids.get('api-reasoning-effort').disabled,true);assert.equal(ids.get('analysis-dwell').disabled,false);return false;};
+  await form.listeners.submit({preventDefault(){},currentTarget:form});assert.equal(fixture.messages.some(message=>message.type==='SAVE_SETTINGS'),false);
+  ids.get('analysis-dwell').value='2';form.reportValidity=()=>true;await form.listeners.submit({preventDefault(){},currentTarget:form});
+  assert.equal(fixture.local.settings.enabled,false);assert.equal(fixture.local.settings.apiModel,API_UI_SETTINGS.apiModel);assert.equal(fixture.local.settings.apiReasoningEffort,API_UI_SETTINGS.apiReasoningEffort);assert.equal(fixture.local.settings.dwellMs,2000);
+  assert.equal(ids.get('api-key').value,'bad\nkey');assert.equal(ids.get('api-model').value,'');assert.equal(ids.get('api-reasoning-effort').value,'');assert.equal(fixture.session.apiKey,'session-secret');assert.equal(fixture.messages.some(message=>message.type==='SAVE_KEY'),false);
+  assert.equal(ids.get('status').textContent,ui.t('options.pausedWithDrafts','en'));
+});
+
+test('missing Build connection errors reveal nested details and a later successful check clears the resolved field error',async()=>{
+  let ready=false;const fixture=uiPageFixture('options',API_UI_SETTINGS,{}, {buildConfigured:false,onMessage(message){if(message.type==='GET_BUILD_STATUS')return {ok:true,ready,modelCatalog:[{id:'grok-4.3',efforts:['none']}]};}});await settleUI();await settleUI();
+  const {ids}=fixture,inner={open:false,parentElement:{closest:()=>outer}},outer={open:false,parentElement:null};ids.get('build-secret').closest=()=>inner;
+  ids.get('provider').value='build';ids.get('provider').listeners.change();const form=ids.get('settings-form');await form.listeners.submit({preventDefault(){},currentTarget:form});
+  assert.equal(inner.open,true);assert.equal(outer.open,true);assert.equal(ids.get('build-secret').focused,true);assert.equal(ids.get('build-secret').getAttribute('aria-invalid'),'true');assert.equal(ids.get('build-secret').getAttribute('aria-errormessage'),'build-status');assert.equal(fixture.permissionRequests.length,0);
+  await ids.get('generate-build-command').listeners.click();ready=true;await ids.get('check-build').listeners.click();
+  assert.equal(ids.get('build-secret').getAttribute('aria-invalid'),null);assert.equal(ids.get('build-status').textContent,ui.t('build.ready','en'));
+  ids.get('interface-language').value='zh-CN';ids.get('interface-language').listeners.change();assert.equal(ids.get('build-status').textContent,ui.t('build.ready','zh-CN'));
+});
+
+test('both disabled search tools show immediate local accessible feedback and recover when either is selected',async()=>{
+  const fixture=uiPageFixture('options');await settleUI();await settleUI();const {ids}=fixture;
+  ids.get('web-search').checked=false;ids.get('web-search').listeners.change();assert.equal(ids.get('search-status').hidden,true);
+  ids.get('x-search').checked=false;ids.get('x-search').listeners.change();assert.equal(ids.get('search-status').hidden,false);assert.equal(ids.get('search-status').textContent,ui.t('options.urlSearchRequired','en'));
+  for(const id of ['web-search','x-search']){assert.equal(ids.get(id).getAttribute('aria-invalid'),'true');assert.match(ids.get(id).getAttribute('aria-describedby'),/search-status/);}
+  const form=ids.get('settings-form');await form.listeners.submit({preventDefault(){},currentTarget:form});assert.equal(ids.get('x-search').focused,true);assert.equal(fixture.messages.some(message=>message.type==='SAVE_SETTINGS'),false);
+  ids.get('web-search').checked=true;ids.get('web-search').listeners.change();for(const id of ['web-search','x-search'])assert.equal(ids.get(id).getAttribute('aria-invalid'),null);assert.equal(ids.get('search-status').hidden,true);
+  ids.get('interface-language').value='zh-CN';ids.get('interface-language').listeners.change();assert.equal(ids.get('search-status').textContent,'');await form.listeners.submit({preventDefault(){},currentTarget:form});assert.equal(fixture.local.settings.webSearch,true);assert.equal(fixture.local.settings.xSearch,false);
+});
+
+test('Custom mode reveals prompt controls once and preserves a manually collapsed comments editor during redraws',async()=>{
+  const fixture=uiPageFixture('options');await settleUI();await settleUI();const {ids}=fixture;
+  assert.equal(ids.get('prompt-editing-help').hidden,true);assert.equal(ids.get('reset-prompts').hidden,true);assert.notEqual(ids.get('comments-customization').open,true);
+  ids.get('explanation-mode').value='custom';ids.get('explanation-mode').listeners.change();assert.equal(ids.get('prompt-editing-help').hidden,false);assert.equal(ids.get('reset-prompts').hidden,false);assert.equal(ids.get('comments-customization').open,true);
+  ids.get('comments-customization').open=false;ids.get('interface-language').value='ja';ids.get('interface-language').listeners.change();fixture.runtimeListeners.forEach(listener=>listener({type:'OAUTH_STATUS_CHANGED',oauthStatus:{state:'connected',connected:true,catalogModels:[{id:'grok-4.3'}]}}));assert.equal(ids.get('comments-customization').open,false);
+  ids.get('explanation-mode').value='preset';ids.get('explanation-mode').listeners.change();ids.get('explanation-mode').value='custom';ids.get('explanation-mode').listeners.change();assert.equal(ids.get('comments-customization').open,true);assert.equal(fixture.messages.some(message=>['SAVE_SETTINGS','ANALYZE','GENERATE_COMMENTS'].includes(message.type)),false);
+});
+
+test('Maintenance opens for native navigation and retained deep links without fetching diagnostics automatically',async()=>{
+  for(const hash of ['#maintenance-heading','#cache-heading','#reload-heading','#api-diagnostics']){
+    const fixture=uiPageFixture('options',API_UI_SETTINGS,{}, {hash});await settleUI();await settleUI();assert.equal(fixture.ids.get('maintenance').open,true,hash);assert.equal(fixture.messages.some(message=>message.type==='GET_API_DIAGNOSTICS'),false);
+  }
+  const fixture=uiPageFixture('options');await settleUI();await settleUI();let prevented=false;fixture.ids.get('maintenance-link').listeners.click({preventDefault(){prevented=true;}});assert.equal(prevented,false);assert.equal(fixture.ids.get('maintenance').open,true);
+  fixture.ids.get('maintenance').open=false;fixture.location.hash='#reload-heading';fixture.pageListeners.hashchange();assert.equal(fixture.ids.get('maintenance').open,true);assert.equal(fixture.messages.some(message=>message.type==='GET_API_DIAGNOSTICS'),false);
 });
 
 test('direct-client and security labels are supplied distinctly in twelve languages without a consent screen', ()=>{
@@ -1817,7 +1903,7 @@ test('direct-client and security labels are supplied distinctly in twelve langua
     assert.ok(Object.keys(ui.catalog[locale]).every(key=>!key.toLowerCase().includes('consent')),locale);
     assert.ok(Object.values(ui.catalog[locale]).every(value=>!value.includes('ZDR')),locale);
   }
-  assert.match(ui.t('options.cacheHelp','en'),/only for this browser session/);
+  assert.match(ui.t('options.cacheHelp','en'),/keeping browsing history/);
 });
 
 test('provider switching preserves credential drafts and Build saves without sending a Key',async()=>{
@@ -1985,7 +2071,7 @@ test('Build uses the common model list and catalog availability without advertis
 
 test('official launch commands are generated explicitly for both systems and the local code is not stored in settings',async()=>{
   for(const platform of ['windows','macos']){
-    const fixture=uiPageFixture('options',core.normalizeSettings({provider:'build'}),{}, {buildConfigured:false});await settleUI();await settleUI();
+    const fixture=uiPageFixture('options',core.normalizeSettings({provider:'build'}),{}, {buildConfigured:false,buildStatus:{ready:true}});await settleUI();await settleUI();
     const {ids}=fixture;assert.equal(fixture.messages.some(message=>message.type==='GET_BUILD_LAUNCH'),false);
     ids.get('build-platform').value=platform;await ids.get('generate-build-command').listeners.click();
     assert.equal(ids.get('build-secret').attrs.type,'password');assert.equal(ids.get('build-secret').value,'local-connection-fixture-code');
@@ -2003,11 +2089,12 @@ test('a saved local code is reused without exposing it to the form and forgettin
   const fixture=uiPageFixture('options',core.normalizeSettings({provider:'build'}));await settleUI();await settleUI();const {ids}=fixture;
   assert.equal(ids.get('build-secret').value,'');assert.match(ids.get('build-secret').placeholder,/Saved/);
   const form=ids.get('settings-form');await form.listeners.submit({preventDefault(){},currentTarget:form});
-  const save=fixture.messages.find(message=>message.type==='SAVE_BUILD_CONNECTION');assert.equal(Object.hasOwn(save,'secret'),false);
+  const save=fixture.messages.find(message=>message.type==='SAVE_SETTINGS');assert.ok(save);assert.equal(Object.hasOwn(save,'secret'),false);assert.equal(fixture.permissionRequests.length,0);
   await ids.get('clear-build-connection').listeners.click();assert.equal(fixture.session.apiKey,'session-secret');
   assert.equal(fixture.messages.filter(message=>message.type==='CLEAR_BUILD_CONNECTION').length,1);
   assert.equal(fixture.messages.some(message=>message.type==='SAVE_KEY'),false);assert.equal(ids.get('clear-build-connection').hidden,true);
-  await form.listeners.submit({preventDefault(){},currentTarget:form});assert.equal(ids.get('status').textContent,ui.t('build.codeRequired','en'));assert.equal(ids.get('generate-build-command').focused,true);
+  ids.get('build-port').value='2420';ids.get('build-port').listeners.input();
+  await form.listeners.submit({preventDefault(){},currentTarget:form});assert.equal(ids.get('status').textContent,ui.t('options.checkFields','en'));assert.equal(ids.get('build-status').textContent,ui.t('build.codeRequired','en'));assert.equal(ids.get('build-secret').focused,true);
 });
 
 test('both modes and all twelve locales offer official setup without an extra SuperX installer or native permission prompt',()=>{
@@ -2026,7 +2113,7 @@ test('erasing a replacement local code keeps the saved code and setup cannot sav
   const fixture=uiPageFixture('options',core.normalizeSettings({provider:'build'}));await settleUI();await settleUI();const {ids}=fixture;
   ids.get('build-secret').value='replacement-local-code';ids.get('build-secret').listeners.input();ids.get('build-secret').value='';ids.get('build-secret').listeners.input();
   await ids.get('check-build').listeners.click();assert.equal(Object.hasOwn(fixture.messages.find(message=>message.type==='GET_BUILD_STATUS'),'secret'),false);
-  const form=ids.get('settings-form');await form.listeners.submit({preventDefault(){},currentTarget:form});assert.equal(Object.hasOwn(fixture.messages.find(message=>message.type==='SAVE_BUILD_CONNECTION'),'secret'),false);
+  const form=ids.get('settings-form');await form.listeners.submit({preventDefault(){},currentTarget:form});assert.equal(Object.hasOwn(fixture.messages.find(message=>message.type==='SAVE_SETTINGS'),'secret'),false);assert.equal(fixture.messages.some(message=>message.type==='SAVE_BUILD_CONNECTION'),false);
   const guide=uiPageFixture('setup',API_UI_SETTINGS,{}, {buildConfigured:false,buildStatus:{ready:true}});await settleUI();await settleUI();
   assert.equal(guide.ids.get('save').disabled,true);await guide.ids.get('save').listeners.click();assert.equal(guide.messages.some(message=>message.type==='SAVE_BUILD_CONNECTION'),false);
   await guide.ids.get('generate').listeners.click();await guide.ids.get('check').listeners.click();assert.equal(guide.ids.get('save').disabled,false);
@@ -2083,7 +2170,7 @@ test('fresh Settings and guided setup retain Grok 4.3 without reasoning through 
     await fixture.ids.get(checkId).listeners.click();
     assert.equal(fixture.ids.get(modelId).value,'grok-4.3');assert.equal(fixture.ids.get(effortId).value,'none');assert.notEqual(fixture.ids.get(effortId).children.find(option=>option.value==='none').disabled,true);
     if(file==='options'){const form=fixture.ids.get('settings-form');await form.listeners.submit({preventDefault(){},currentTarget:form});}else await fixture.ids.get('save').listeners.click();
-    const saved=fixture.messages.find(message=>message.type==='SAVE_BUILD_CONNECTION');assert.ok(saved,file);assert.equal(saved.settings.buildModel,'grok-4.3');assert.equal(saved.settings.buildReasoningEffort,'none');assert.equal(saved.settings.buildDefaultsVersion,1);assert.equal(saved.settings.apiModel,'grok-4.3');assert.equal(saved.settings.apiReasoningEffort,'none');assert.equal(fixture.session.apiKey,undefined);assert.equal(fixture.messages.some(message=>message.type==='SAVE_KEY'),false);
+    const saved=fixture.messages.find(message=>message.type===(file==='options'?'SAVE_SETTINGS':'SAVE_BUILD_CONNECTION'));assert.ok(saved,file);assert.equal(saved.settings.buildModel,'grok-4.3');assert.equal(saved.settings.buildReasoningEffort,'none');assert.equal(saved.settings.buildDefaultsVersion,1);assert.equal(saved.settings.apiModel,'grok-4.3');assert.equal(saved.settings.apiReasoningEffort,'none');assert.equal(fixture.session.apiKey,undefined);assert.equal(fixture.messages.some(message=>message.type==='SAVE_KEY'),false);
     const reopened=uiPageFixture(file,fixture.local.settings,{session:{apiKey:undefined}},environment);await settleUI();await settleUI();await reopened.ids.get(checkId).listeners.click();
     assert.equal(reopened.ids.get(modelId).value,'grok-4.3');assert.equal(reopened.ids.get(effortId).value,'none');assert.equal(reopened.local.settings.buildDefaultsVersion,1);assert.equal(reopened.messages.some(message=>['SAVE_KEY','SAVE_SETTINGS','SAVE_BUILD_CONNECTION'].includes(message.type)),false);
   }
@@ -2092,16 +2179,17 @@ test('fresh Settings and guided setup retain Grok 4.3 without reasoning through 
 test('Settings never substitutes a missing Grok 4.3 or unsupported no-reasoning choice without a user model change',async()=>{
   for(const missing of ['model','effort']){
     const modelCatalog=[...(missing==='effort'?[{id:'grok-4.3',efforts:['minimal','low','high']}]:[]),{id:'grok-4.7',efforts:['low','high']}];
-    const fixture=uiPageFixture('options',core.normalizeSettings({provider:'build',apiModel:'grok-4.6',apiReasoningEffort:'xhigh'}),{}, {buildStatus:{ready:true,modelCatalog}});await settleUI();await settleUI();
+    const fixture=uiPageFixture('options',core.normalizeSettings({provider:'build',enabled:false,apiModel:'grok-4.6',apiReasoningEffort:'xhigh'}),{}, {buildStatus:{ready:true,modelCatalog}});await settleUI();await settleUI();
     const {ids}=fixture,form=ids.get('settings-form');ids.get('api-key').value='unsupported-model-key-draft';ids.get('api-key').listeners.input();await ids.get('check-build').listeners.click();
     assert.equal(ids.get('build-model').value,'grok-4.3');assert.equal(ids.get('build-reasoning-effort').value,'none');
     const blocked=missing==='model'?ids.get('build-model').children.find(option=>option.value==='grok-4.3'):ids.get('build-reasoning-effort').children.find(option=>option.value==='none');assert.equal(blocked.disabled,true,missing);
     assert.equal(ids.get('build-model-status').textContent,ui.t(missing==='model'?'options.buildModelUnavailable':'options.reasoningInvalid','en',{model:'grok-4.3'}));
-    await form.listeners.submit({preventDefault(){},currentTarget:form});assert.equal(fixture.messages.some(message=>message.type==='SAVE_BUILD_CONNECTION'),false);assert.equal(ids.get(missing==='model'?'build-model':'build-reasoning-effort').focused,true);
+    ids.get('enabled').checked=true;
+    await form.listeners.submit({preventDefault(){},currentTarget:form});assert.equal(fixture.messages.some(message=>['SAVE_SETTINGS','SAVE_BUILD_CONNECTION'].includes(message.type)),false);assert.equal(ids.get(missing==='model'?'build-model':'build-reasoning-effort').focused,true);
     fixture.runtimeListeners.forEach(listener=>listener({type:'UI_LANGUAGE_CHANGED',language:'zh-CN'}));ids.get('provider').value='api';ids.get('provider').listeners.change();ids.get('provider').value='build';ids.get('provider').listeners.change();
     assert.equal(ids.get('build-model').value,'grok-4.3');assert.equal(ids.get('build-reasoning-effort').value,'none');assert.equal(ids.get('api-key').value,'unsupported-model-key-draft');
     ids.get('build-model').value='grok-4.7';ids.get('build-model').listeners.change();assert.equal(ids.get('build-reasoning-effort').value,'low');
-    await form.listeners.submit({preventDefault(){},currentTarget:form});const saved=fixture.messages.find(message=>message.type==='SAVE_BUILD_CONNECTION');assert.ok(saved);assert.equal(saved.settings.buildModel,'grok-4.7');assert.equal(saved.settings.buildReasoningEffort,'low');assert.equal(saved.settings.buildDefaultsVersion,1);assert.equal(saved.settings.apiModel,'grok-4.6');assert.equal(saved.settings.apiReasoningEffort,'xhigh');assert.equal(ids.get('api-key').value,'unsupported-model-key-draft');assert.equal(fixture.messages.some(message=>message.type==='SAVE_KEY'),false);
+    await form.listeners.submit({preventDefault(){},currentTarget:form});const saved=fixture.messages.find(message=>message.type==='SAVE_SETTINGS');assert.ok(saved);assert.equal(saved.settings.buildModel,'grok-4.7');assert.equal(saved.settings.buildReasoningEffort,'low');assert.equal(saved.settings.buildDefaultsVersion,1);assert.equal(saved.settings.apiModel,'grok-4.6');assert.equal(saved.settings.apiReasoningEffort,'xhigh');assert.equal(ids.get('api-key').value,'unsupported-model-key-draft');assert.equal(fixture.messages.some(message=>message.type==='SAVE_KEY'),false);
   }
 });
 
@@ -2135,7 +2223,7 @@ test('local API diagnostics load only on explicit expansion and render a safe JS
   assert.deepEqual(shown[0].verificationFailure,{stage:'verify',code:'ACCESS',errorCode:'API_ERROR',httpStatus:402,providerCode:'spending_limit'});
   assert.equal(fixture.ids.get('diagnostics-output').children.length,0);assert.equal(fixture.ids.get('diagnostics-output').hidden,false);assert.equal(fixture.ids.get('diagnostics-copy').disabled,false);
   assert.equal(fixture.messages.filter(message=>message.type==='GET_API_DIAGNOSTICS').length,1);assert.equal(fixture.messages.some(message=>['SAVE_KEY','SAVE_SETTINGS','SAVE_BUILD_CONNECTION','ANALYZE','GENERATE_COMMENTS'].includes(message.type)),false);
-  const html=fs.readFileSync(path.join(__dirname,'../extension/options.html'),'utf8');assert.match(html,/<details id="api-diagnostics">/);assert.doesNotMatch(html,/<details id="api-diagnostics"[^>]*\bopen\b/);
+  const html=fs.readFileSync(path.join(__dirname,'../extension/options.html'),'utf8');assert.match(html,/<details id="api-diagnostics"[^>]*>/);assert.doesNotMatch(html,/<details id="api-diagnostics"[^>]*\bopen\b/);
 });
 
 test('copying and clearing diagnostics are explicit actions that preserve Key, settings, cache and history',async()=>{

@@ -1620,6 +1620,133 @@
     en:['Pricing'],'zh-CN':['定价'],'zh-TW':['定價'],ja:['料金'],ko:['요금'],es:['Precios'],
     fr:['Tarifs'],de:['Preise'],pt:['Preços'],ar:['الأسعار'],ru:['Цены'],hi:['कीमतें']
   });
+  section(['options.maintenance','options.answerCache','options.commentsCustomize','options.promptEditingHelp',
+    'options.saved','options.cacheHelp','options.urlSearchRequired','error.urlSearchRequired','options.presetModeHelp'], {
+    en:[
+      'Maintenance & troubleshooting','Clear answer cache','Customize comment prompt',
+      'Leave blank to use the default. Save applies to new comment suggestions.',
+      'Settings saved.','Clears cached answers, keeping browsing history. Refresh X or retry a post afterward.',
+      'Keep at least one search enabled to read the full original post.',
+      'Keep at least one search enabled to read the full original post.',
+      'Uses built-in fact-check instructions. Saved custom drafts are not applied.'
+    ],
+    'zh-CN':[
+      '维护与排障','清除回答缓存','自定义评论提示词',
+      '留空使用默认值。保存后用于新生成的评论。',
+      '设置已保存。','清除已缓存的回答，不会删除浏览历史。之后可刷新 X 或重试帖子。',
+      '请至少保留一种搜索，用于读取原帖全文。',
+      '请至少保留一种搜索，用于读取原帖全文。',
+      '使用内置事实核查指令；自定义草稿不会应用。'
+    ],
+    'zh-TW':[
+      '維護與疑難排解','清除回答快取','自訂留言提示詞',
+      '留空使用預設值。儲存後用於新產生的留言。',
+      '設定已儲存。','清除已快取的回答，不會刪除瀏覽紀錄。之後可重新整理 X 或重試貼文。',
+      '請至少保留一種搜尋，用於讀取原文全文。',
+      '請至少保留一種搜尋，用於讀取原文全文。',
+      '使用內建事實查核指令；自訂草稿不會套用。'
+    ],
+    ja:[
+      'メンテナンスと問題解決','回答キャッシュを消去','コメント用プロンプトを編集',
+      '空欄では既定値を使います。保存すると、以後生成するコメント候補に適用されます。',
+      '設定を保存しました。','回答キャッシュを消去します。閲覧履歴は残ります。その後、X を再読み込みするか投稿を再試行してください。',
+      '投稿全文を読むため、少なくとも1つの検索を有効にしてください。',
+      '投稿全文を読むため、少なくとも1つの検索を有効にしてください。',
+      '内蔵の事実確認指示を使います。保存済みのカスタム下書きは適用されません。'
+    ],
+    ko:[
+      '유지 관리 및 문제 해결','답변 캐시 지우기','댓글 프롬프트 편집',
+      '비워 두면 기본값을 사용합니다. 저장한 내용은 새로 생성하는 추천 댓글에 적용됩니다.',
+      '설정을 저장했습니다.','답변 캐시를 지우며 열람 기록은 유지합니다. 이후 X를 새로고침하거나 게시물을 다시 시도하세요.',
+      '원본 게시물 전문을 읽으려면 검색을 하나 이상 켜 두세요.',
+      '원본 게시물 전문을 읽으려면 검색을 하나 이상 켜 두세요.',
+      '기본 사실 확인 지침을 사용합니다. 저장된 사용자 지정 초안은 적용하지 않습니다.'
+    ],
+    es:[
+      'Mantenimiento y ayuda','Borrar caché de respuestas','Personalizar instrucciones de comentarios',
+      'Déjalo en blanco para usar el valor predeterminado. Guardar afecta a las nuevas sugerencias de comentarios.',
+      'Ajustes guardados.','Borra las respuestas en caché y conserva el historial. Después, recarga X o reintenta una publicación.',
+      'Mantén al menos una búsqueda activada para leer la publicación original completa.',
+      'Mantén al menos una búsqueda activada para leer la publicación original completa.',
+      'Usa las instrucciones de verificación integradas. No aplica los borradores personalizados guardados.'
+    ],
+    fr:[
+      'Maintenance et dépannage','Vider le cache des réponses','Personnaliser les instructions des commentaires',
+      'Laissez vide pour utiliser la valeur par défaut. Les changements enregistrés s’appliquent aux nouvelles suggestions de commentaires.',
+      'Paramètres enregistrés.','Efface les réponses en cache et conserve l’historique. Ensuite, rechargez X ou réessayez une publication.',
+      'Gardez au moins une recherche activée pour lire la publication originale complète.',
+      'Gardez au moins une recherche activée pour lire la publication originale complète.',
+      'Utilise les instructions de vérification intégrées. Les brouillons personnalisés enregistrés ne sont pas appliqués.'
+    ],
+    de:[
+      'Wartung und Fehlerbehebung','Antwort-Cache löschen','Kommentar-Prompt anpassen',
+      'Leer lassen, um den Standard zu verwenden. Gespeicherte Änderungen gelten für neue Kommentarvorschläge.',
+      'Einstellungen gespeichert.','Löscht zwischengespeicherte Antworten und behält den Verlauf. Danach X neu laden oder einen Beitrag erneut versuchen.',
+      'Mindestens eine Suche muss aktiviert bleiben, um den vollständigen Originalbeitrag zu lesen.',
+      'Mindestens eine Suche muss aktiviert bleiben, um den vollständigen Originalbeitrag zu lesen.',
+      'Verwendet die integrierten Prüfanweisungen. Gespeicherte eigene Entwürfe werden nicht angewendet.'
+    ],
+    pt:[
+      'Manutenção e solução de problemas','Limpar cache de respostas','Personalizar instruções dos comentários',
+      'Deixe em branco para usar o padrão. As alterações salvas valem para novas sugestões de comentários.',
+      'Configurações salvas.','Limpa as respostas em cache e mantém o histórico. Depois, recarregue o X ou tente a publicação novamente.',
+      'Mantenha ao menos uma busca ativada para ler a publicação original completa.',
+      'Mantenha ao menos uma busca ativada para ler a publicação original completa.',
+      'Usa as instruções de verificação integradas. Não aplica os rascunhos personalizados salvos.'
+    ],
+    ar:[
+      'الصيانة واستكشاف الأخطاء','مسح ذاكرة الإجابات المؤقتة','تخصيص تعليمات التعليقات',
+      'اتركه فارغًا لاستخدام الإعداد الافتراضي. تسري التغييرات المحفوظة على اقتراحات التعليقات الجديدة.',
+      'حُفظت الإعدادات.','يمسح الإجابات المخزّنة مؤقتًا ويحتفظ بسجل التصفح. بعد ذلك، أعد تحميل X أو أعد محاولة المنشور.',
+      'أبقِ بحثًا واحدًا على الأقل مفعّلًا لقراءة المنشور الأصلي كاملًا.',
+      'أبقِ بحثًا واحدًا على الأقل مفعّلًا لقراءة المنشور الأصلي كاملًا.',
+      'يستخدم تعليمات التحقق المدمجة. لا تُطبّق المسودات المخصصة المحفوظة.'
+    ],
+    ru:[
+      'Обслуживание и диагностика','Очистить кэш ответов','Настроить инструкции комментариев',
+      'Оставьте пустым для значения по умолчанию. Сохранённые изменения действуют для новых предложений комментариев.',
+      'Настройки сохранены.','Удаляет ответы из кэша, сохраняя историю просмотра. Затем обновите X или повторите анализ публикации.',
+      'Оставьте включённым хотя бы один поиск, чтобы читать исходную публикацию целиком.',
+      'Оставьте включённым хотя бы один поиск, чтобы читать исходную публикацию целиком.',
+      'Использует встроенные инструкции проверки. Сохранённые свои черновики не применяются.'
+    ],
+    hi:[
+      'रखरखाव और समस्या निवारण','जवाबों का कैश साफ़ करें','टिप्पणी प्रॉम्प्ट बदलें',
+      'डिफ़ॉल्ट के लिए खाली छोड़ें। सहेजे गए बदलाव नए टिप्पणी सुझावों पर लागू होते हैं।',
+      'सेटिंग सहेजी गई।','कैश किए जवाब हटते हैं, ब्राउज़िंग इतिहास बना रहता है। इसके बाद X रीफ़्रेश करें या पोस्ट पर फिर कोशिश करें।',
+      'मूल पोस्ट पूरी पढ़ने के लिए कम से कम एक खोज चालू रखें।',
+      'मूल पोस्ट पूरी पढ़ने के लिए कम से कम एक खोज चालू रखें।',
+      'अंतर्निहित तथ्य जाँच निर्देशों का उपयोग होता है। सहेजे गए कस्टम ड्राफ़्ट लागू नहीं होते।'
+    ]
+  });
+  section(['options.pausedWithDrafts'], {
+    en:['SuperX paused. Connection changes are not saved.'],
+    'zh-CN':['SuperX 已暂停，连接更改尚未保存。'],
+    'zh-TW':['SuperX 已暫停，連線變更尚未儲存。'],
+    ja:['SuperX を一時停止しました。接続の変更は未保存です。'],
+    ko:['SuperX를 일시 정지했습니다. 연결 변경 사항은 저장되지 않았습니다.'],
+    es:['SuperX en pausa. Los cambios de conexión no se han guardado.'],
+    fr:['SuperX en pause. Les changements de connexion ne sont pas enregistrés.'],
+    de:['SuperX pausiert. Verbindungsänderungen sind nicht gespeichert.'],
+    pt:['SuperX pausado. As alterações de conexão não foram salvas.'],
+    ar:['تم إيقاف SuperX مؤقتًا. لم تُحفظ تغييرات الاتصال.'],
+    ru:['SuperX приостановлен. Изменения подключения не сохранены.'],
+    hi:['SuperX रुका है। कनेक्शन के बदलाव सहेजे नहीं गए हैं।']
+  });
+  section(['options.checkFields'], {
+    en:['Check the highlighted settings.'],
+    'zh-CN':['请检查标记的设置。'],
+    'zh-TW':['請檢查標記的設定。'],
+    ja:['強調された設定を確認してください。'],
+    ko:['표시된 설정을 확인하세요.'],
+    es:['Revisa los ajustes marcados.'],
+    fr:['Vérifiez les paramètres signalés.'],
+    de:['Markierte Einstellungen prüfen.'],
+    pt:['Confira as configurações marcadas.'],
+    ar:['تحقّق من الإعدادات المميّزة.'],
+    ru:['Проверьте отмеченные настройки.'],
+    hi:['चिह्नित सेटिंग जाँचें।']
+  });
   const aliases = {'common.auto':'lang.auto','common.failed':'status.failed','tooltip.collapse':'common.collapse','tooltip.expand':'common.expand'};
   for (const language of SUPPORTED_LANGUAGES) {
     for (const [key, source] of Object.entries(aliases)) catalog[language][key] = catalog[language][source];
