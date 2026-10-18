@@ -1613,6 +1613,24 @@ test('a feed disconnect cancels only its running and queued work, and reconnect 
   assert.equal(calls.length,2);
 });
 
+test('a BFCache port close consumes lastError and preserves cache while real provider cleanup retains its concurrency slot',async()=>{
+  const cleanup=deferred(),bg=createBackground({settings:{apiConcurrency:1},apiRun:call=>call.post.id==='101'?cleanup.promise:{text:'Completed evidence '+call.post.id,provider:'api',verificationStatus:'completed',usage:{total_tokens:12}}});
+  await bg.ready();const old=bg.connect();await analyze(bg,old,'bfcache-complete',100);await until(()=>Object.keys(bg.session.data.cache||{}).length===1);
+  const savedKey=bg.session.data.apiKey,savedCache=clone(bg.session.data.cache);
+  old.send({type:'ANALYZE',requestId:'bfcache-running',post:post(101)});await until(()=>bg.apiCalls.length===2);
+  old.send({type:'ANALYZE',requestId:'bfcache-queued',post:post(102)});await until(()=>old.messages.some(message=>message.requestId==='bfcache-queued'&&message.type==='QUEUED'));
+  let reads=0;Object.defineProperty(bg.chrome.runtime,'lastError',{configurable:true,get(){reads++;return {message:'The page keeping the extension port is moved into back/forward cache. PRIVATE_CHANNEL_DETAIL'};}});
+  old.disconnect();assert.equal(reads,1,'The worker acknowledges Chrome lastError inside onDisconnect');await until(()=>bg.apiCalls[1].signal.aborted);
+  assert.equal(bg.session.data.apiKey,savedKey);assert.deepEqual(bg.session.data.cache,savedCache,'Lifecycle cleanup never clears completed cached reading');
+  const restored=bg.connect();await until(()=>restored.messages.some(message=>message.type==='CONFIG'));restored.send({type:'PING'});await until(()=>restored.messages.some(message=>message.type==='PONG'));assert.equal(bg.apiCalls.length,2,'Reconnecting restores control only, without replaying abandoned jobs');
+  restored.send({type:'ANALYZE',requestId:'bfcache-explicit-new',post:post(103)});await until(()=>restored.messages.some(message=>message.type==='QUEUED'&&message.requestId==='bfcache-explicit-new'));await tick();await tick();
+  assert.equal(bg.apiCalls.length,2,'A detached provider still owns its slot until real cancellation settles');
+  bg.apiCalls[1].onUpdate({text:'Obsolete detached stream',phase:'verify'});cleanup.resolve({text:'Obsolete detached final',provider:'api',verificationStatus:'completed'});
+  await until(()=>restored.messages.some(message=>message.type==='RESULT'&&message.requestId==='bfcache-explicit-new'));
+  assert.deepEqual(bg.apiCalls.map(call=>call.post.id),['100','101','103']);assert.equal(old.messages.some(message=>message.requestId==='bfcache-running'&&message.type==='RESULT'),false);assert.equal(restored.messages.some(message=>message.requestId==='bfcache-running'),false);assert.equal(Object.values(bg.session.data.cache||{}).some(value=>String(value.text).includes('Obsolete')),false);assert.doesNotMatch(JSON.stringify(restored.messages),/PRIVATE_CHANNEL_DETAIL|back\/forward cache/);
+  old.onDisconnect.emit();assert.equal(reads,2,'A duplicate obsolete callback remains harmless and consumes its own error');assert.equal((await bg.message({type:'GET_CONFIG'})).ready,true);
+});
+
 test('settings changes and client cancellation stop all old parallel jobs before queued attempts can be reserved', async () => {
   for (const action of ['settings', 'cancel']) {
     const gates = [], bg = createBackground({ apiRun: call => { const gate = deferred(); gates.push(gate); return gate.promise; } });

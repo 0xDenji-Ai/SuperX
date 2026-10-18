@@ -524,7 +524,12 @@ chrome.runtime.onConnect.addListener(port => {
       if(!comments)send(port,{type:'QUEUED',requestId});pump();
     }).catch(()=>send(port,{type:message.type==='GENERATE_COMMENTS'?'COMMENT_ERROR':'ERROR',requestId:message.requestId,error:'处理失败，请重新加载扩展。'}));
   });
-  port.onDisconnect.addListener(()=>{clients.delete(client);cancelClient(client);});
+  port.onDisconnect.addListener(()=>{
+    // BFCache and navigation can close a port normally. Chrome requires the
+    // callback to consume lastError even when cleanup itself cannot fail.
+    void chrome.runtime.lastError;
+    clients.delete(client);cancelClient(client);
+  });
 });
 
 function liveJob(job) {

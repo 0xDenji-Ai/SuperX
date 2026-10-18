@@ -235,7 +235,12 @@ function fixture({postCount=2,connectError=null,historyAck=true}={}) {
   for (const name of ['add', 'remove', 'toggle']) document.body.classList[name] = (...args) => { writes.push(`body: classList.${name}`); return bodyClass === document.body.classList ? undefined : bodyClass[name](...args); };
   const runtimeEvent = () => { const listeners = []; return { addListener(fn) { listeners.push(fn); }, emit(message) { for (const fn of listeners) fn(message); } }; };
   let connectFailure=connectError,sendFailure=null,runtimeFailure=null,connectAttempts=0,reloads=0;
-  const makePort=()=>({ onMessage: runtimeEvent(), onDisconnect: runtimeEvent(), sent: [], postMessage(message) { if(sendFailure)throw sendFailure;this.sent.push(message);if(historyAck&&message.type==='HISTORY_VISIT')this.onMessage.emit({type:'HISTORY_ACK',batchId:message.batchId,ok:true,epoch:message.historyEpoch}); }, disconnect() {} });
+  // Chrome does not notify the initiating end when disconnect() is called.
+  // A BFCache round trip must therefore recover without that local callback.
+  const makePort=()=>({ onMessage: runtimeEvent(), onDisconnect: runtimeEvent(), sent: [], closed:false, disconnectCalls:0,
+    postMessage(message) { if(this.closed)throw new Error('Attempting to use a disconnected port object');if(sendFailure)throw sendFailure;this.sent.push(message);if(historyAck&&message.type==='HISTORY_VISIT')this.onMessage.emit({type:'HISTORY_ACK',batchId:message.batchId,ok:true,epoch:message.historyEpoch}); },
+    disconnect() { this.closed=true;this.disconnectCalls++; }
+  });
   let port=makePort();
   const runtimeMessages=[],nativeHooks={install:0,run:0,messageListeners:0};
   const window = events();
@@ -2350,7 +2355,7 @@ function completeFirst(page,text='Completed original explanation') {
 
 test('profile-page Settings remains reachable through a direct runtime message after the feed port disconnects',async()=>{
   const page=fixture({postCount:1});page.location.pathname='/elonmusk';page.configure();
-  const {card}=completeFirst(page);page.port.onDisconnect.emit();page.flush();
+  const {card}=completeFirst(page);page.port.onDisconnect.emit();page.flush();page.replacePort();
   const sent=page.port.sent.length,gear=page.nodes.find(node=>node.className==='rail-settings');
   gear.emit('click');await new Promise(resolve=>setImmediate(resolve));page.flush();
   assert.deepEqual(JSON.parse(JSON.stringify(page.runtimeMessages)),[{type:'OPEN_SETTINGS',focus:'api-key'}]);
@@ -3297,6 +3302,86 @@ test('returning to a failed feed restarts recovery after its reconnect timer exp
   page.configure();page.tick();assert.equal(page.port.sent.some(message=>message.type==='ANALYZE'),false,'Recovery never replays interrupted analysis');
 });
 
+test('current and stale disconnect callbacks synchronously consume Chrome lastError without exposing its text',()=>{
+  const page=fixture({postCount:1});page.configure();const {card}=completeFirst(page);let reads=0;
+  Object.defineProperty(page.context.chrome.runtime,'lastError',{configurable:true,get(){reads++;return {message:'The page keeping the extension port is moved into back/forward cache. PRIVATE_CHANNEL_DETAIL'};}});
+  const old=page.port;old.onDisconnect.emit();assert.equal(reads,1,'The current callback reads lastError before returning');page.flush();
+  assert.equal(card.testShadow.querySelector('.answer').textContent,'Completed original explanation');
+  page.replacePort();page.nodes.find(node=>node.className==='rail-settings').emit('click');page.flush();
+  page.configure();const attempts=page.connectionAttempts();old.onDisconnect.emit();assert.equal(reads,2,'Even an obsolete-port callback must acknowledge lastError');page.flush();
+  assert.equal(page.connectionAttempts(),attempts);assert.equal(page.port.closed,false);assert.doesNotMatch(card.testShadow.textContent,/PRIVATE_CHANNEL_DETAIL|back\/forward cache/);
+  assert.equal(page.port.sent.some(message=>['ANALYZE','GENERATE_COMMENTS'].includes(message.type)),false);
+});
+
+test('BFCache restores one control connection and preserves completed findings, evidence, tokens and copied drafts',async()=>{
+  const {page,request,card}=tokenFixture();tokenResult(page,request,{text:'A completed fact check before navigation.',verificationStatus:'completed',usage:{total_tokens:30},model:'grok-4.3',sources:[{url:'https://example.com/retained-proof',title:'Retained primary evidence'}]});
+  card.testShadow.querySelector('.generate-comments').emit('click');const draft=page.port.sent.find(message=>message.type==='GENERATE_COMMENTS');
+  page.port.onMessage.emit({type:'COMMENT_RESULT',requestId:draft.requestId,comments:suggestions,usage:{total_tokens:5},model:'grok-4.3'});page.flush();assertTokenCount(card,35);
+  const answer=card.testShadow.querySelector('.answer').textContent,sources=card.testShadow.querySelector('.sources').textContent,old=page.port,before=old.sent.length,connections=page.connectionAttempts();
+  page.document.hidden=true;page.document.emit('visibilitychange');page.window.emit('pagehide',{persisted:true});page.flush();
+  assert.equal(old.closed,true,'Local disconnect closes the actual port without a local onDisconnect event');assert.ok(old.sent.slice(before).some(message=>message.type==='CANCEL_ALL'));
+  page.replacePort();page.elapse(60000);assert.equal(page.connectionAttempts(),connections,'A cached page never wakes the worker');
+  page.document.hidden=false;page.window.emit('pageshow',{persisted:true});page.document.emit('visibilitychange');page.window.emit('pageshow',{persisted:true});page.flush();
+  assert.equal(page.connectionAttempts(),connections+1,'pageshow and visibility restoration share one fresh handshake');assert.equal(page.port.sent.some(message=>['ANALYZE','GENERATE_COMMENTS'].includes(message.type)),false,'A new connection waits for CONFIG');
+  page.configure();page.tick(60000);assert.equal(page.port.sent.some(message=>['ANALYZE','GENERATE_COMMENTS'].includes(message.type)),false,'Restoring prior reading does not bill again');
+  assert.equal(page.cards()[0],card);assert.equal(card.testShadow.querySelector('.answer').textContent,answer);assert.equal(card.testShadow.querySelector('.sources').textContent,sources);assertTokenCount(card,35);assert.deepEqual(card.testShadow.querySelectorAll('.comment-copy').map(button=>button.textContent),suggestions);
+  card.testShadow.querySelectorAll('.comment-copy')[1].emit('click');await new Promise(resolve=>setImmediate(resolve));assert.deepEqual(page.copied,[suggestions[1]]);assert.deepEqual(page.writes,[]);
+});
+
+test('BFCache never automatically replays an accepted request, including before START or the first token',()=>{
+  for(const phase of ['queued','running','partial','retry-wait']){
+    const page=fixture({postCount:1});page.configure();const request=page.port.sent.find(message=>message.type==='ANALYZE'),card=page.cards()[0];
+    if(phase!=='queued')page.port.onMessage.emit({type:'START',requestId:request.requestId});
+    if(phase==='partial')page.port.onMessage.emit({type:'UPDATE',requestId:request.requestId,phase:'verify',text:'Paid partial evidence survives navigation.',usage:{total_tokens:19},model:'grok-4.3'});
+    if(phase==='retry-wait')retryWait(page,request,{partialResult:{provider:'api',text:'Paid partial evidence survives navigation.',sources:[]},usage:{total_tokens:19}});page.flush();
+    const retained=card.testShadow.querySelector('.answer').textContent,old=page.port;
+    page.document.hidden=true;page.document.emit('visibilitychange');page.window.emit('pagehide',{persisted:true});page.flush();
+    assert.equal(card.testShadow.querySelector('.status').textContent,ui.t('status.cancelled','zh-CN'),phase);assert.equal(retryLabel(card).hidden,true,phase);assert.equal(old.closed,true);
+    page.replacePort();page.document.hidden=false;page.window.emit('pageshow',{persisted:true});page.document.emit('visibilitychange');page.flush();
+    old.onMessage.emit({type:'RESULT',requestId:request.requestId,result:{provider:'api',text:'Obsolete paid result must not return.',usage:{total_tokens:999}}});
+    page.configure();page.elapse(60000);assert.equal(page.port.sent.some(message=>['ANALYZE','GENERATE_COMMENTS'].includes(message.type)),false,phase+': reconnect cannot repeat accepted paid work');
+    assert.equal(card.testShadow.querySelector('.answer').textContent,retained,phase);if(retained)assertTokenCount(card,19);
+    card.testShadow.querySelector('.retry').emit('click');page.flush();assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,1,phase+': explicit retry remains available');assert.notEqual(page.port.sent.find(message=>message.type==='ANALYZE').requestId,request.requestId);
+  }
+});
+
+test('BFCache cancellation retains existing facts and comment billing without replaying an unfinished draft',()=>{
+  for(const phase of ['queued','running','retry-wait']){
+    const {page,request,card}=tokenFixture();tokenResult(page,request,{usage:{total_tokens:30},model:'grok-4.3'});card.testShadow.querySelector('.generate-comments').emit('click');const draft=page.port.sent.find(message=>message.type==='GENERATE_COMMENTS');
+    if(phase==='running')page.port.onMessage.emit({type:'COMMENT_START',requestId:draft.requestId});
+    if(phase==='retry-wait')retryWait(page,draft,{usage:{total_tokens:7},model:'grok-4.3'},true);page.flush();
+    const old=page.port;page.document.hidden=true;page.document.emit('visibilitychange');page.window.emit('pagehide',{persisted:true});page.flush();
+    assert.equal(card.testShadow.querySelector('.comment-status').textContent,ui.t('status.cancelled','zh-CN'),phase);assert.equal(retryLabel(card,true).hidden,true);
+    page.replacePort();page.document.hidden=false;page.window.emit('pageshow',{persisted:true});page.document.emit('visibilitychange');page.configure();
+    old.onMessage.emit({type:'COMMENT_RESULT',requestId:draft.requestId,comments:suggestions,usage:{total_tokens:999}});page.elapse(60000);
+    assert.equal(card.testShadow.querySelector('.answer').textContent,'A completed explanation.');assertTokenCount(card,phase==='retry-wait'?37:30);assert.equal(card.testShadow.querySelectorAll('.comment-copy').length,0);assert.equal(page.port.sent.some(message=>['ANALYZE','GENERATE_COMMENTS'].includes(message.type)),false);
+    card.testShadow.querySelector('.generate-comments').emit('click');page.flush();assert.equal(page.port.sent.filter(message=>message.type==='GENERATE_COMMENTS').length,1);
+  }
+});
+
+test('pagehide suspends pending handshakes and a restored unsent post waits a full fresh dwell',()=>{
+  const page=fixture({postCount:1});page.configure({dwellMs:1000});page.elapse(700);assert.equal(page.port.sent.some(message=>message.type==='ANALYZE'),false);
+  const old=page.port;page.window.emit('pagehide',{persisted:true});page.flush();assert.equal(old.closed,true);page.replacePort();page.elapse(60000);page.tick();
+  assert.equal(page.connectionAttempts(),1);assert.deepEqual(page.pendingTimeouts(),[],'Cached pages retain no handshake, reconnect or dwell timer');assert.equal(page.port.sent.length,0);
+  page.window.emit('pageshow',{persisted:false});page.document.emit('visibilitychange');page.flush();assert.equal(page.connectionAttempts(),2,'The local suspended state also restores if persisted is unavailable');
+  page.window.emit('pageshow',{persisted:true});page.document.emit('visibilitychange');page.flush();assert.equal(page.connectionAttempts(),2);page.elapse(7000);assert.equal(page.port.sent.some(message=>message.type==='ANALYZE'),false,'Wait for a new CONFIG rather than reusing readiness');
+  page.configure({dwellMs:1000});page.elapse(999);assert.equal(page.port.sent.some(message=>message.type==='ANALYZE'),false);page.elapse(1);assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,1);
+});
+
+test('pagehide during the first handshake clears its timeout and never wakes or dispatches while suspended',()=>{
+  const page=fixture({postCount:1});page.flush();assert.ok(page.pendingTimeouts().includes(8000));const old=page.port;
+  page.window.emit('pagehide',{persisted:true});page.flush();assert.equal(old.closed,true);page.replacePort();page.runTimeouts(30000);page.tick(60000);assert.equal(page.connectionAttempts(),1);assert.deepEqual(page.pendingTimeouts(),[]);assert.equal(page.port.sent.length,0);
+  old.onMessage.emit({type:'CONFIG',settings:{...core.DEFAULT_SETTINGS,provider:'api',dwellMs:0},ready:true});page.flush();assert.equal(page.connectionAttempts(),1);assert.equal(page.port.sent.length,0,'A stale suspended handshake cannot dispatch or revive readiness');
+  page.window.emit('pageshow',{persisted:true});page.flush();assert.equal(page.connectionAttempts(),2);page.configure({dwellMs:1000});page.elapse(999);assert.equal(page.port.sent.some(message=>message.type==='ANALYZE'),false);page.elapse(1);assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,1);
+});
+
+test('pageshow does not duplicate a healthy initial connection or revive an invalid extension context',()=>{
+  const healthy=fixture({postCount:1});healthy.window.emit('pageshow',{persisted:false});healthy.flush();assert.equal(healthy.connectionAttempts(),1);
+  const {page,request,card}=tokenFixture();tokenResult(page,request,{usage:{total_tokens:14},model:'grok-4.3'});page.context.chrome.runtime.id=undefined;
+  page.window.emit('pagehide',{persisted:true});page.flush();page.replacePort();page.window.emit('pageshow',{persisted:true});page.document.emit('visibilitychange');page.elapse(60000);page.tick(60000);
+  assert.equal(page.connectionAttempts(),1);assert.equal(page.port.sent.length,0);assert.equal(card.testShadow.querySelector('.answer').textContent,'A completed explanation.');assertTokenCount(card,14);assert.equal(card.testShadow.querySelector('.status').textContent,ui.t('status.refreshRequired','zh-CN'));assert.deepEqual(page.pendingTimeouts(),[]);
+});
+
 function oauthFeedConfig(page,{settings={},ready=true,credentialIdentity='oauth:account-a',oauthStatus={state:'connected',connected:true,modelAvailable:true},...extra}={}){
   page.port.onMessage.emit({type:'CONFIG',settings:{...core.DEFAULT_SETTINGS,provider:'oauth',dwellMs:0,...settings},ready,credentialIdentity,oauthStatus,...extra});page.flush();
 }
@@ -3337,6 +3422,51 @@ test('changing the subscription account clears completed and partial findings an
   oauthFeedConfig(page,{credentialIdentity:'oauth:account-b',settings:{dwellMs:1000}});assert.equal(page.port.sent.slice(before).some(message=>message.type==='CANCEL_ALL'),true);for(const card of cards){assert.equal(card.testShadow.querySelector('.answer').textContent,'');assert.equal(card.testShadow.querySelectorAll('.comment-copy').length,0);assert.equal(tokenHeader(card).hidden,true);assert.equal(card.testShadow.querySelector('.sources').textContent,'');}
   for(const request of old){page.port.onMessage.emit({type:'UPDATE',requestId:request.requestId,phase:'verify',text:'Late old-account stream.'});page.port.onMessage.emit({type:'RESULT',requestId:request.requestId,result:{provider:'oauth',text:'Late old-account result.',sources:[],usage:{total_tokens:999}}});}page.port.onMessage.emit({type:'COMMENT_RESULT',requestId:draft.requestId,comments:suggestions,usage:{total_tokens:999}});page.flush();for(const card of cards){assert.equal(card.testShadow.querySelector('.answer').textContent,'');assert.equal(card.testShadow.querySelectorAll('.comment-copy').length,0);assert.equal(tokenHeader(card).hidden,true);}
   page.elapse(999);assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,2);page.elapse(1);const renewed=page.port.sent.filter(message=>message.type==='ANALYZE').slice(2);assert.equal(renewed.length,2);assert.ok(renewed.every(request=>!old.some(previous=>previous.requestId===request.requestId)));page.port.onMessage.emit({type:'RESULT',requestId:renewed[0].requestId,result:{provider:'oauth',text:'Account B checked finding.',verificationStatus:'completed',sources:[],usage:{total_tokens:44}}});page.flush();assert.equal(cards[0].testShadow.querySelector('.answer').textContent,'Account B checked finding.');assertTokenCount(cards[0],44);
+});
+
+function oauthReadingBeforeBFCache(){
+  const page=fixture({postCount:2});oauthFeedConfig(page);const accepted=page.port.sent.filter(message=>message.type==='ANALYZE'),cards=page.cards();
+  page.port.onMessage.emit({type:'RESULT',requestId:accepted[0].requestId,result:{provider:'oauth',text:'Account A completed evidence before navigation.',verificationStatus:'completed',sources:[{url:'https://example.com/retained-oauth',title:'Account A primary evidence'}],usage:{total_tokens:35},model:'grok-4.3'}});
+  page.port.onMessage.emit({type:'START',requestId:accepted[1].requestId});page.port.onMessage.emit({type:'UPDATE',requestId:accepted[1].requestId,phase:'verify',text:'Account A interrupted partial before navigation.',usage:{total_tokens:20},model:'grok-4.3'});page.flush();
+  cards[0].testShadow.querySelector('.generate-comments').emit('click');const draft=page.port.sent.find(message=>message.type==='GENERATE_COMMENTS');page.port.onMessage.emit({type:'COMMENT_RESULT',requestId:draft.requestId,comments:suggestions,usage:{total_tokens:6},model:'grok-4.3'});page.flush();
+  const old=page.port;page.document.hidden=true;page.document.emit('visibilitychange');page.window.emit('pagehide',{persisted:true});page.flush();page.replacePort();page.document.hidden=false;page.window.emit('pageshow',{persisted:true});page.document.emit('visibilitychange');page.flush();
+  return {page,cards,accepted,draft,old};
+}
+
+test('cold OAuth restoration preserves the same accounts completed reading and interrupted work without replaying paid requests',()=>{
+  for(const staleReady of [false,true]){
+    const {page,cards,accepted,draft,old}=oauthReadingBeforeBFCache(),retainedSources=cards[0].testShadow.querySelector('.sources').textContent;
+    oauthFeedConfig(page,{ready:staleReady,credentialIdentity:'',oauthStatus:{state:'restoring',connected:false}});page.elapse(60000);
+    assert.equal(cards[0].testShadow.querySelector('.answer').textContent,'Account A completed evidence before navigation.');assert.equal(cards[0].testShadow.querySelector('.sources').textContent,retainedSources);assert.deepEqual(cards[0].testShadow.querySelectorAll('.comment-copy').map(button=>button.textContent),suggestions);assertTokenCount(cards[0],41);
+    assert.equal(cards[1].testShadow.querySelector('.answer').textContent,'Account A interrupted partial before navigation.');assertTokenCount(cards[1],20);
+    cards[1].testShadow.querySelector('.retry').emit('click');cards[0].testShadow.querySelector('.generate-comments').emit('click');page.flush();assert.equal(page.port.sent.some(message=>['ANALYZE','GENERATE_COMMENTS'].includes(message.type)),false,'Restoring is never ready even if its CONFIG has a stale true flag');
+    for(const request of accepted)old.onMessage.emit({type:'RESULT',requestId:request.requestId,result:{provider:'oauth',text:'Obsolete old-page answer.',usage:{total_tokens:999}}});old.onMessage.emit({type:'COMMENT_RESULT',requestId:draft.requestId,comments:['Obsolete first.','Obsolete second.','Obsolete third.'],usage:{total_tokens:999}});
+    oauthFeedConfig(page);page.elapse(60000);assert.equal(page.port.sent.some(message=>['ANALYZE','GENERATE_COMMENTS'].includes(message.type)),false,'Authoritative account A restores reading without replay or deferred button intent');
+    assert.equal(cards[0].testShadow.querySelector('.answer').textContent,'Account A completed evidence before navigation.');assert.deepEqual(cards[0].testShadow.querySelectorAll('.comment-copy').map(button=>button.textContent),suggestions);assertTokenCount(cards[0],41);assert.equal(cards[1].testShadow.querySelector('.answer').textContent,'Account A interrupted partial before navigation.');assertTokenCount(cards[1],20);
+    cards[1].testShadow.querySelector('.retry').emit('click');page.flush();const retried=page.port.sent.filter(message=>message.type==='ANALYZE');assert.equal(retried.length,1);assert.equal(retried[0].post.id,accepted[1].post.id);assert.equal(retried[0].force,true);assert.notEqual(retried[0].requestId,accepted[1].requestId);assert.equal(page.port.sent.some(message=>message.type==='GENERATE_COMMENTS'),false);
+  }
+});
+
+test('an authoritative replacement account or logout after cold restoration clears prior account reading and drafts',()=>{
+  for(const authority of ['account-b','signed-out']){
+    const {page,cards,accepted,draft,old}=oauthReadingBeforeBFCache();oauthFeedConfig(page,{ready:false,credentialIdentity:'',oauthStatus:{state:'restoring',connected:false}});
+    assert.equal(cards[0].testShadow.querySelector('.answer').textContent,'Account A completed evidence before navigation.');assertTokenCount(cards[0],41);
+    oauthFeedConfig(page,{ready:false,credentialIdentity:authority==='account-b'?'oauth:account-b':'',oauthStatus:authority==='account-b'?{state:'connected',connected:true,modelAvailable:false}:{state:'idle',connected:false}});
+    for(const card of cards){assert.equal(card.testShadow.querySelector('.answer').textContent,'',authority);assert.equal(card.testShadow.querySelector('.sources').textContent,'',authority);assert.equal(card.testShadow.querySelectorAll('.comment-copy').length,0,authority);assert.equal(tokenHeader(card).hidden,true,authority);}
+    for(const request of accepted)old.onMessage.emit({type:'RESULT',requestId:request.requestId,result:{provider:'oauth',text:'Late account A evidence.',usage:{total_tokens:999}}});old.onMessage.emit({type:'COMMENT_RESULT',requestId:draft.requestId,comments:suggestions,usage:{total_tokens:999}});page.elapse(60000);
+    for(const card of cards){assert.equal(card.testShadow.querySelector('.answer').textContent,'');assert.equal(card.testShadow.querySelectorAll('.comment-copy').length,0);assert.equal(tokenHeader(card).hidden,true);}assert.equal(page.port.sent.some(message=>['ANALYZE','GENERATE_COMMENTS'].includes(message.type)),false);
+  }
+});
+
+test('pending OAuth identity never carries prior account reading across an explicit provider switch',()=>{
+  for(const nextProvider of ['api','build']){
+    const {page,cards}=oauthReadingBeforeBFCache();oauthFeedConfig(page,{ready:true,credentialIdentity:'',oauthStatus:{state:'restoring',connected:false}});
+    assert.equal(cards[0].testShadow.querySelector('.answer').textContent,'Account A completed evidence before navigation.');assertTokenCount(cards[1],20);
+    page.port.onMessage.emit({type:'CONFIG',settings:{...core.DEFAULT_SETTINGS,provider:nextProvider,dwellMs:0},ready:false,credentialIdentity:'',keyState:'missing',buildStatus:{errorCode:'BUILD_NOT_CONNECTED'},oauthStatus:{state:'restoring',connected:false}});page.flush();
+    for(const card of cards){assert.equal(card.testShadow.querySelector('.answer').textContent,'',nextProvider);assert.equal(card.testShadow.querySelectorAll('.comment-copy').length,0,nextProvider);assert.equal(card.testShadow.querySelector('.sources').textContent,'',nextProvider);assert.equal(tokenHeader(card).hidden,true,nextProvider);}
+    page.elapse(60000);assert.equal(page.port.sent.some(message=>['ANALYZE','GENERATE_COMMENTS'].includes(message.type)),false);
+    oauthFeedConfig(page,{ready:false,credentialIdentity:'',oauthStatus:{state:'restoring',connected:false}});for(const card of cards)assert.equal(card.testShadow.querySelector('.answer').textContent,'','Switching back to an unknown OAuth identity cannot recover former account content');
+  }
 });
 
 test('remembering the same subscription login changes storage only and preserves an active paid finding',()=>{

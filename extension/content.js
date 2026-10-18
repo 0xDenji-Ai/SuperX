@@ -13,7 +13,7 @@
   const t = (key, vars) => UI.t(key, uiLanguage, vars);
   let settings = Core.DEFAULT_SETTINGS, providerReady = false, connected = false, port, used = 0, collapsed = false;
   let lastPath = location.pathname, scanTimer, reconnectTimer, handshakeTimer, dwellTimer, dwellDeadline=0, needsPageRefresh = false;
-  let hasConfig=false,workerSleeping=false,awaitingConfig=false,reconnectFailures=0,xModalBlocked=false;
+  let hasConfig=false,workerSleeping=false,awaitingConfig=false,reconnectFailures=0,xModalBlocked=false,pageSuspended=false;
   let oauthState={},credentialIdentity='';
   const wakeActions=new Map(),wakeControls=new Map();
   const entries = new Map(), detachedEntries = new Set(), requests = new Map(), visible = new Set();
@@ -116,19 +116,34 @@
       wakeActions.clear();
       cancelDwellTimer();
       queue.clear();post({type:'CANCEL_ALL'});requests.clear();
-      for(const entry of allEntries()){clearRetries(entry);entry.since=0;entry.pending=false;if(['queued','running','retry-wait'].includes(entry.status)){entry.status='new';refreshCard(entry);}if(['queued','running','retry-wait'].includes(entry.commentStatus)){entry.commentStatus='error';entry.commentError='status.cancelled';refreshComments(entry);}}
+      // Sent work may already have consumed tokens even before the first
+      // chunk arrives. Retain it for an explicit retry, never an automatic replay.
+      for(const entry of allEntries()){clearRetries(entry);entry.since=0;entry.pending=false;if(['queued','running','retry-wait'].includes(entry.status)){entry.status='error';status(entry,'status.cancelled');refreshCard(entry);}if(['queued','running','retry-wait'].includes(entry.commentStatus)){entry.commentStatus='error';entry.commentError='status.cancelled';refreshComments(entry);}}
     }
     else {if(!connected&&!needsPageRefresh)connect();scheduleScan();tick();}
     scheduleLayout();
   });
-  window.addEventListener('pagehide',()=>{cancelDwellTimer();post({type:'CANCEL_ALL'});try{port?.disconnect();}catch{}});
+  window.addEventListener('pagehide',()=>{
+    pageSuspended=true;
+    post({type:'CANCEL_ALL'});
+    // disconnect() does not fire onDisconnect on this end. Detach locally
+    // before BFCache freezes the document and reject any late messages.
+    connectionLost();
+    clearTimeout(reconnectTimer);reconnectTimer=undefined;
+  });
+  window.addEventListener('pageshow',event=>{
+    if(!event.persisted&&!pageSuspended)return;
+    pageSuspended=false;themeDirty=true;
+    if(!document.hidden&&!needsPageRefresh)connect();
+    scheduleScan();scheduleLayout();tick();
+  });
 
   function invalidContext(error) {
     try {return needsPageRefresh || !chrome.runtime.id || /extension context invalidated/i.test(String(error?.message || ''));}
     catch {return true;}
   }
   function scheduleReconnect() {
-    if(needsPageRefresh || reconnectTimer)return;
+    if(pageSuspended || needsPageRefresh || reconnectTimer)return;
     const delay=Math.min(30000,3000*2**Math.min(reconnectFailures++,4));
     reconnectTimer=setTimeout(()=>{reconnectTimer=undefined;if(!document.hidden)connect();},delay);
   }
@@ -162,11 +177,12 @@
     else if(!idle)scheduleReconnect();
   }
   function post(message) {
+    if(pageSuspended&&message.type!=='CANCEL_ALL')return false;
     if(!connected){if(invalidContext())connectionLost();else if(!workerSleeping)scheduleReconnect();return false;}
     try {port.postMessage(message);return true;}catch(error){connectionLost(error);return false;}
   }
   function postControl(message) {
-    if(needsPageRefresh)return false;
+    if(pageSuspended||needsPageRefresh)return false;
     if(workerSleeping||awaitingConfig){
       // These are user preferences, not API tasks. Retain the latest value
       // while waking; dispatch it before new analysis uses the old preference.
@@ -191,7 +207,7 @@
     if(!connected)connect();
     return true;
   }
-  function usableConnection(){return !needsPageRefresh&&providerReady&&(connected||workerSleeping||awaitingConfig);}
+  function usableConnection(){return !pageSuspended&&!needsPageRefresh&&providerReady&&(connected||workerSleeping||awaitingConfig);}
   let buildErrorCode='';
   function needsProvider(){
     if(settings.provider==='oauth'){
@@ -387,12 +403,17 @@
     scheduleLayout();if(!collapsed)tick();
   }
   function connect() {
-    if(needsPageRefresh||connected)return;
+    if(pageSuspended||needsPageRefresh||connected)return;
     clearTimeout(reconnectTimer);reconnectTimer=undefined;
     try {
       const nextPort=chrome.runtime.connect({name:'GROKFIRST_FEED'});port=nextPort;connected=true;workerSleeping=false;awaitingConfig=true;
       nextPort.onMessage.addListener(message=>{if(port===nextPort)handleMessage(message);});
-      nextPort.onDisconnect.addListener(()=>{if(port===nextPort)connectionLost(undefined,nextPort);});
+      nextPort.onDisconnect.addListener(()=>{
+        // Chrome exposes expected lifecycle disconnects through lastError.
+        // Read it synchronously even for a stale port to avoid Unchecked logs.
+        void chrome.runtime.lastError;
+        if(port===nextPort)connectionLost(undefined,nextPort);
+      });
       handshakeTimer=setTimeout(()=>{if(port===nextPort&&awaitingConfig)connectionLost(new Error('Background configuration timed out'),nextPort);},8000);
       post({type:'UI_LANGUAGE',language:xUILanguage});
     } catch(error){connectionLost(error);}
@@ -416,17 +437,22 @@
       // An archived explanation draft can survive upgrades, but never changes
       // current fact-check jobs or their visible results.
       for(const field of ['explainPrompt','verifyPrompt','commentsPrompt','interfaceLanguage','dwellMs','analysisDefaultsVersion','oauthRemember']){delete previousOptions[field];delete nextOptions[field];}
-      const accountChanged=credentialIdentity!==(message.credentialIdentity||'');
+      // A waking worker can report OAuth restoration before decrypting the
+      // saved identity. Unknown is not a new account: keep retained results
+      // terminal until an authoritative identity arrives, with calls blocked.
+      const pendingOAuthIdentity=nextSettings.provider==='oauth'&&settings.provider==='oauth'&&message.oauthStatus?.state==='restoring'&&!message.credentialIdentity;
+      const nextCredentialIdentity=pendingOAuthIdentity?credentialIdentity:message.credentialIdentity||'';
+      const accountChanged=credentialIdentity!==nextCredentialIdentity;
       const allChanged=accountChanged||JSON.stringify(previousOptions)!==JSON.stringify(nextOptions);
       const presentationOrPromptsOnlyChanged=!allChanged&&JSON.stringify(settings)!==JSON.stringify(nextSettings);
       const identity=value=>JSON.stringify([value.provider,value.apiModel,value.apiReasoningEffort,value.oauthModel,value.oauthReasoningEffort,value.buildModel,value.buildReasoningEffort,value.buildTransport,value.buildPort,value.language,value.webSearch,value.xSearch,value.apiVerification,value.explanationMode]);
       const previous=identity(settings),dwellChanged=settings.dwellMs!==nextSettings.dwellMs;
       const wasReady=providerReady;
       settings=nextSettings;
-      credentialIdentity=message.credentialIdentity||'';oauthState=message.oauthStatus||{};
+      credentialIdentity=nextCredentialIdentity;oauthState=message.oauthStatus||{};
       if(dwellChanged)resetDwellWaits();
       configureHistory(message.historyEnabled,message.historyEpoch);
-      providerReady=Boolean(message.ready);used=message.used || 0;
+      providerReady=Boolean(message.ready)&&!pendingOAuthIdentity;used=message.used || 0;
       buildErrorCode=typeof message.buildStatus?.errorCode==='string'?message.buildStatus.errorCode:'';
       syncUILanguage();
       for(const entry of allEntries())if(entry.connectionStatus){
@@ -1007,6 +1033,7 @@
     dwellTimer=setTimeout(()=>{dwellTimer=undefined;dwellDeadline=0;tick();},Math.max(1,deadline-Date.now()));
   }
   function tick() {
+    if(pageSuspended){resetDwellWaits();return;}
     const blocked=syncXModalVisibility();
     recordHistory();
     if(blocked){pauseUnseenRailQueue();return;}
