@@ -2,6 +2,20 @@
 
 This checklist separates reproducible checks from manual browser and service checks. A passing mock test suite is not evidence that a particular X account, browser installation, or paid API request works.
 
+## 0.9.12 Preview — 2026-10-19
+
+[Preview release](https://github.com/bwjoke/SuperX/releases/tag/v0.9.12) · [Installable ZIP](https://github.com/bwjoke/SuperX/releases/download/v0.9.12/SuperX.zip). This repair keeps X's inline reply toolbar out of primary-navigation detection and updates rail geometry when native navigation changes height. Chrome Web Store and GitHub **Stable/Latest remain 0.9.11**; 0.9.12 is a separate Pre-release.
+
+- [x] Pass **263 content regressions** and **1,082 automated validation checks**, including inline reply controls, real navigation, hidden/duplicate tabs, temporary zero/oversized navigation, observation cleanup and preserved existing answers.
+- [x] Pass **912 isolated browser checks across 12 scenarios with 38 screenshots**, covering the layout repair. These do not establish new live provider or installed-browser account acceptance.
+- [x] Validate exported public source with **1,082 checks** and rebuild the installation ZIP with identical bytes.
+- [x] After the user reloaded the extension, exercise actual installed **Windows Chrome 0.9.12**: focus the inline reply editor, scroll away and back, open an image, and open/close the new-post dialog. The rail returns correctly and the four existing completed answers remain available.
+- [x] Record the accepted installation ZIP SHA-256: `c34d378b2eb37660a0d029c0e2c36b2dd4077a3548413a5a9b35ca55d293c885`. The versioned ZIP and `SuperX.zip` alias must have identical bytes.
+- [ ] Upload that exact installation ZIP to the existing Chrome Web Store item. It has **not been uploaded or submitted** by this publication step; do not upload the source ZIP.
+- [ ] After 0.9.12 is actually published by the store, verify the version and delivered package before promoting the same GitHub release to Stable/Latest. Preserve 0.9.11's published tag and attachments.
+
+This is targeted layout acceptance. It does not add evidence for the earlier pending four-scope full-browser restart, natural token expiry, installed Edge/macOS operation or new live API Key/CLI acceptance. Those scopes remain as recorded below.
+
 <a id="0911-preview--2026-10-18"></a>
 
 ## 0.9.11 Stable promotion — 2026-10-19

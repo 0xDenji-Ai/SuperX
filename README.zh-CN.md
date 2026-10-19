@@ -8,6 +8,8 @@ SuperX 是 Chrome / Edge 扩展，通过 Grok 订阅登录、自己的 API Key �
 
 **最新稳定版：[0.9.11](https://github.com/bwjoke/SuperX/releases/tag/v0.9.11)——[Chrome 商店安装](https://chromewebstore.google.com/detail/superx/clcflilaihhnnglfamdblhopokpnlioo)或[下载安装 ZIP](https://github.com/bwjoke/SuperX/releases/download/v0.9.11/SuperX.zip)。** 0.9.11 直接进行 Fact Check，不再前置解释，优先提供简洁结论、相关证据和出处，避免在右栏复述左侧已有的原帖。同时区分中间过程、工具指令和最终回答；没有收到面向读者的回答时，提示核查未完成。商店与 GitHub Stable/Latest 现已提供同一版本。
 
+**预览版 [0.9.12](https://github.com/bwjoke/SuperX/releases/tag/v0.9.12)——[下载 ZIP](https://github.com/bwjoke/SuperX/releases/download/v0.9.12/SuperX.zip)：** 修复展开帖子内回复框后，右栏顶部被向下拉动的问题。此预览版需手动安装，尚未上传 Chrome 商店。
+
 0.9.11 依次提供三种独立连接方式：**订阅登录 · The X Subscription**（浏览器内 OAuth，新安装默认）、**Grok API Key**、**本机 Grok Build · CLI / ACP**。三种均提供 **Windows 和 macOS** 引导，保留语言同步、自定义指令、评论、历史及 Token／模型信息。已有来源和设置保留；旧设置非空但没有来源选项，或设置缺失／为空而留有旧版凭据时，继续使用 API 路径。不会自动切换来源或绕过额度。见 [连接引导](docs/CONNECTIONS.md)。此前 Windows Chrome 验收使用六项授权范围。新的四项权限现已由用户确认官方页不再显示姓名／头像和邮箱，重新授权后已连接；随后真实 Grok 4.3 核查及可点击出处通过。四项权限的完整浏览器重启恢复和自然到期仍待单独验收；商店上架不等于新增实装功能验收通过。见 [验收范围](docs/CONNECTIONS.md#acceptance-scope)。
 
 使用 Manifest V3 和原生 JavaScript，浏览器内订阅登录及 API Key 模式安装无需构建或下载依赖。目前为 Beta；X 页面结构变化、模型表现与 API 可用性会影响结果。SuperX 是独立项目，与 X 或 xAI 没有隶属关系。
@@ -22,12 +24,13 @@ SuperX 是 Chrome / Edge 扩展，通过 Grok 订阅登录、自己的 API Key �
 | --- | --- | --- |
 | [Chrome 商店 · 稳定版](https://chromewebstore.google.com/detail/superx/clcflilaihhnnglfamdblhopokpnlioo) | 通过 Chrome 安装与更新 | 0.9.11 已上架 |
 | [稳定版 0.9.11](https://github.com/bwjoke/SuperX/releases/tag/v0.9.11) · [下载 ZIP](https://github.com/bwjoke/SuperX/releases/download/v0.9.11/SuperX.zip) | 同一版本的手动安装与更新 | Stable/Latest |
+| [预览版 0.9.12](https://github.com/bwjoke/SuperX/releases/tag/v0.9.12) · [下载 ZIP](https://github.com/bwjoke/SuperX/releases/download/v0.9.12/SuperX.zip) | 回复框与右栏顶部对齐修复，需手动更新 | Pre-release，尚未上传商店 |
 | [0.7.26 历史版本](https://github.com/bwjoke/SuperX/releases/tag/v0.7.26) | 含解释功能的旧版，原始文件保留 | 历史归档 |
 | [所有 GitHub Releases](https://github.com/bwjoke/SuperX/releases) | 各版本安装包、源码及校验值 | 已开放 |
 | [最新稳定版 ZIP](https://github.com/bwjoke/SuperX/releases/latest/download/SuperX.zip) | GitHub 最新稳定版本的安装包 | 0.9.11 |
 | [GitHub Issues](https://github.com/bwjoke/SuperX/issues) | 两个渠道共用的报错、需求与支持入口 | 已开放 |
 
-[SuperX.vip](https://superx.vip/) 是官网；[bwjoke/SuperX](https://github.com/bwjoke/SuperX) 是代码、更新说明和支持的项目主页。**GitHub 的 Latest 指最新稳定版。** 0.9.11 在商店公开后，于 2026-10-19 从 Preview 晋升为 Stable/Latest，保留原 tag、附件及校验值。目前没有更新的预览版；未来预览仍使用同一套源码和递增版本，在 [Releases](https://github.com/bwjoke/SuperX/releases) 单独提供。发布与晋升流程见[双渠道说明](docs/RELEASE_CHANNELS.md)。
+[SuperX.vip](https://superx.vip/) 是官网；[bwjoke/SuperX](https://github.com/bwjoke/SuperX) 是代码、更新说明和支持的项目主页。**GitHub 的 Latest 指最新稳定版。** 0.9.11 在商店公开后，于 2026-10-19 从 Preview 晋升为 Stable/Latest，保留原 tag、附件及校验值。较新的 [0.9.12 Preview](https://github.com/bwjoke/SuperX/releases/tag/v0.9.12) 单独提供，不替换稳定版下载。发布与晋升流程见[双渠道说明](docs/RELEASE_CHANNELS.md)。
 
 [验收记录](docs/RELEASE_CHECKLIST.md)区分了 0.9.11 的 Windows Chrome OAuth 实测和 0.7.26 历史结果。商店上架不等于已新增商店实装功能、四项权限完整浏览器重启／到期或 Edge／macOS 实装验收。
 
