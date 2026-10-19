@@ -71,7 +71,7 @@
   refreshHeaderLanguage();
   document.body.append(overlay);
   let layoutFrame = null, themeDirty = true, themeSignature = '', themePrimary = null;
-  const observedNativeCells=new Set();
+  const observedNativeCells=new Set(),observedNativeHeaders=new Set();
   const resizeObserver = typeof ResizeObserver === 'function' ? new ResizeObserver(()=>scheduleLayout()) : null;
   const observer = new IntersectionObserver(changes=>{
     for(const change of changes) {
@@ -801,8 +801,53 @@
       for(const [name,value] of Object.entries(styles))if(rule.style[name]!==value)rule.style[name]=value;
     });
   }
+  function syncNativeHeaders(targets=[]) {
+    const next=new Set(targets);
+    for(const node of observedNativeHeaders)if(!next.has(node))resizeObserver?.unobserve(node);
+    for(const node of next)if(!observedNativeHeaders.has(node))resizeObserver?.observe(node,{box:'border-box'});
+    observedNativeHeaders.clear();for(const node of next)observedNativeHeaders.add(node);
+  }
+  function primaryHeaderTabs(primary) {
+    const firstContent=primary.querySelector('[data-testid="cellInnerDiv"], article[data-testid="tweet"], [data-testid="tweetTextarea_0"]');
+    const beforeContent=tabs=>{
+      if(!firstContent)return true;
+      // Compare DOM branches, not viewport coordinates: a real profile/feed
+      // navigation still precedes its posts after those posts scroll above it.
+      const ancestors=new Set();
+      for(let node=tabs;node;node=node.parentElement)ancestors.add(node);
+      let common=firstContent;
+      while(common&&!ancestors.has(common))common=common.parentElement;
+      if(!common||common===tabs||common===firstContent)return false;
+      let tabBranch=tabs,contentBranch=firstContent;
+      while(tabBranch.parentElement!==common)tabBranch=tabBranch.parentElement;
+      while(contentBranch.parentElement!==common)contentBranch=contentBranch.parentElement;
+      for(const child of common.children){if(child===tabBranch)return true;if(child===contentBranch)return false;}
+      return false;
+    };
+    const candidates=Array.from(primary.querySelectorAll('[role="tablist"], [data-testid="grokFirstDemoHeader"]')).filter(tabs=>{
+      // Inline reply media controls also use role=tablist (inside toolBar and
+      // cellInnerDiv). They must never move the header or clip existing answers.
+      if(!tabs.isConnected||tabs.closest('article, [data-testid="cellInnerDiv"], [data-testid="toolBar"], form, [role="textbox"]')||!beforeContent(tabs))return false;
+      for(let node=tabs;node;node=node.parentElement){
+        if(node.hidden||node.hasAttribute('hidden')||node.hasAttribute('inert')||node.getAttribute('aria-hidden')==='true'||
+            node.hasAttribute('contenteditable')&&node.getAttribute('contenteditable')!=='false'||node.getAttribute('data-testid')?.startsWith('tweetTextarea_'))return false;
+        const style=getComputedStyle(node);
+        if(style.display==='none'||['hidden','collapse'].includes(style.visibility)||style.contentVisibility==='hidden'||Number.parseFloat(style.opacity)===0)return false;
+        if(node===primary)break;
+      }
+      return true;
+    });
+    // Fonts and CSS size transitions need not produce a DOM mutation. Observe
+    // navigation containers up to the feed branch, including temporary zero
+    // sizes, so they can recover without waiting for a scroll or resize.
+    const selected=candidates.find(tabs=>{const rect=tabs.getBoundingClientRect();return rect.width>0&&rect.height>=32&&rect.height<=100;});
+    const targets=new Set();
+    for(let node=selected||candidates[0];node&&node!==primary&&!(firstContent&&node.contains(firstContent));node=node.parentElement)targets.add(node);
+    syncNativeHeaders(targets);
+    return selected;
+  }
   function headerGeometry(primary,viewport) {
-    const tabs=primary.querySelector('[role="tablist"]')||primary.querySelector('[data-testid="grokFirstDemoHeader"]');
+    const tabs=primaryHeaderTabs(primary);
     let source=tabs,rect=tabs?.getBoundingClientRect(),borderWidth=1;
     if(rect&&rect.height>=32&&rect.height<=100) {
       for(let node=tabs;node&&node!==primary;node=node.parentElement) {
@@ -843,7 +888,7 @@
     overlay.hidden=document.hidden || !settings.enabled || !supportedPage()||blocked;
     if(overlay.hidden){
       if(blocked){rail.hidden=railHeader.hidden=railExpand.hidden=railSeparators.hidden=true;for(const entry of allEntries())entry.card.hidden=true;pauseUnseenRailQueue();}
-      syncNativeCells(null,null);return;
+      syncNativeCells(null,null);syncNativeHeaders();return;
     }
     // Focusing a descendant can scroll an overflow-hidden ancestor. Only each
     // answer box should scroll; keep the fixed rail and row hosts stationary.
@@ -871,7 +916,7 @@
     const primaryRect=primary?.getBoundingClientRect(),nativeCells=syncNativeCells(primary,primaryRect);
     const bounds=Layout.railBounds(primaryRect,sidebar?.getBoundingClientRect(),viewport);
     rail.hidden=railHeader.hidden=railSeparators.hidden=bounds.hidden||collapsed;railExpand.hidden=bounds.hidden||!collapsed;
-    if(bounds.hidden){pauseUnseenRailQueue();for(const item of items)item.id.card.hidden=true;return;}
+    if(bounds.hidden){syncNativeHeaders();pauseUnseenRailQueue();for(const item of items)item.id.card.hidden=true;return;}
     syncTheme(primary);
     const header=headerGeometry(primary,viewport),headerHeight=header.top+header.height;
     railHeader.dataset.compact=String(bounds.width<310);

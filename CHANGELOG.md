@@ -2,6 +2,14 @@
 
 SuperX release history. The extension's `manifest.json` is the authoritative installed version. Test counts below describe those releases' recorded checks, not live provider or browser-store certification.
 
+## 0.9.12 — Keep the rail aligned when replying (unreleased candidate)
+
+- Fix the post-detail inline reply editor moving the SuperX header down to its media toolbar and clipping the original post's answer. X uses `role="tablist"` for both page navigation and reply controls; only visible navigation before the feed can now position the rail header.
+- Exclude post, media, poll, recommendation and editor tab bars, including hidden or zero-width duplicates. Preserve real home/profile navigation, fractional borders, partially clipped headers and navigation that has scrolled offscreen.
+- Observe native navigation and its containers for size changes caused by fonts or CSS transitions, without waiting for scrolling or DOM mutations. Release obsolete observations when navigation changes or the rail is hidden.
+- Keep existing streamed answers, usage, sources and answer scroll positions while the inline reply expands or changes height. Focusing the editor does not cancel or repeat analysis. Existing dialog/media suppression remains in effect.
+- This is a local repair candidate; Chrome Web Store and GitHub Stable/Latest remain 0.9.11. Its published tag, packages and checksums are unchanged.
+
 ## 0.9.11 — Browser-only Grok subscription login (Stable, 2026-10-19; Preview, 2026-10-18)
 
 - Promote the existing 0.9.11 release to Stable/Latest after verifying its public Chrome Web Store listing and Google-delivered payload on October 19. The store adds only `update_url` to the manifest and `_metadata/verified_contents.json`; all other files match the accepted ZIP. Preserve the original tag, installation/source attachments and checksums. Store publication does not turn remaining browser/account acceptance scenarios into passes.

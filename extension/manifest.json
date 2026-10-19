@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "SuperX",
-  "version": "0.9.11",
+  "version": "0.9.12",
   "homepage_url": "https://superx.vip/",
   "description": "__MSG_extensionDescription__",
   "default_locale": "en",

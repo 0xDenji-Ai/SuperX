@@ -881,6 +881,147 @@ test('partially clipped headers preserve the visible bottom edge and dock contro
   assert.deepEqual(page.writes,[]);
 });
 
+function nativePrimaryTabBar(page,{top=0,height=53,borderWidth=0.8}={}) {
+  const container=page.document.createElement('div'),tabs=page.document.createElement('div');
+  container.rect={...page.primary.rect,top,bottom:top+height,height};container.computed={position:'sticky',top:'0px',borderBottomWidth:borderWidth+'px'};
+  tabs.setAttribute('role','tablist');tabs.rect={...container.rect};container.append(tabs);page.primary.prepend(container);
+  container.original=tabs.original=true;return {container,tabs};
+}
+
+for(const withCell of [false,true])test('expanding an inline reply toolbar '+(withCell?'inside a timeline cell':'without a timeline cell')+' never moves the header or hides the running answer',()=>{
+  const page=fixture({postCount:2});page.location.pathname='/test/status/100';page.location.href='https://x.com/test/status/100';page.tick();
+  page.articles[0].rect={...page.articles[0].rect,top:90,bottom:610,height:520};page.articles[1].rect={...page.articles[1].rect,top:790,bottom:1070,height:280};
+  page.configure();page.intersect();const [first,reply]=page.port.sent.filter(message=>message.type==='ANALYZE'),[card,replyCard]=page.cards();
+  page.port.onMessage.emit({type:'START',requestId:first.requestId});page.port.onMessage.emit({type:'UPDATE',requestId:first.requestId,phase:'verify',text:'The original evidence is still streaming.',usage:{total_tokens:31},model:'grok-4.3'});
+  page.port.onMessage.emit({type:'RESULT',requestId:reply.requestId,result:{provider:'api',text:'A reply finding below the composer.',verificationStatus:'completed',usage:{total_tokens:17},sources:[]}});page.flush();
+  const header=page.nodes.find(node=>node.className==='rail-head'),box=card.testShadow.querySelector('.card');box.scrollTop=47;
+  const expectedBox={top:box.style.top,height:box.style.height},before=page.port.sent.length;
+  assert.equal(header.style.top,'0px');assert.equal(header.style.height,'53px');assert.equal(card.hidden,false);assertTokenCount(card,31);
+  const composer=page.document.createElement('div'),editor=page.document.createElement('div'),tools=page.document.createElement('div'),nav=page.document.createElement('nav'),wrapper=page.document.createElement('div'),swipe=page.document.createElement('div'),tabs=page.document.createElement('div');
+  editor.setAttribute('data-testid','tweetTextarea_0');editor.setAttribute('role','textbox');tools.setAttribute('data-testid','toolBar');nav.setAttribute('role','navigation');swipe.setAttribute('data-testid','ScrollSnap-SwipeableList');tabs.setAttribute('data-testid','ScrollSnap-List');tabs.setAttribute('role','tablist');
+  composer.rect={...page.primary.rect,top:610,bottom:790,height:180};editor.rect={...page.primary.rect,top:610,bottom:740,height:130};
+  const toolNodes=[tools,nav,wrapper,swipe,tabs],moveTools=top=>{for(const node of toolNodes)node.rect={...page.primary.rect,top,bottom:top+50,height:50};};moveTools(740);
+  swipe.append(tabs);wrapper.append(swipe);nav.append(wrapper);tools.append(nav);composer.append(editor,tools);
+  const cell=withCell?page.document.createElement('div'):null;if(cell){cell.setAttribute('data-testid','cellInnerDiv');cell.rect={...composer.rect};cell.append(composer);page.primary.append(cell);}else page.primary.append(composer);
+  for(const node of [composer,editor,...toolNodes,...(cell?[cell]:[])])node.original=true;page.clearWrites();
+  const stable=()=>{
+    assert.equal(header.hidden,false);assert.equal(header.style.top,'0px','An inline toolbar is content, not the primary navigation');assert.equal(header.style.height,'53px');
+    assert.equal(card.hidden,false,'The original post answer remains visible above the inline reply');assert.equal(replyCard.hidden,false);assert.equal(page.cards()[0],card);assert.equal(card.testShadow.querySelector('.card'),box);
+    assert.equal(box.style.top,expectedBox.top);assert.equal(box.style.height,expectedBox.height);assert.equal(box.scrollTop,47);assert.equal(card.testShadow.querySelector('.answer').textContent,'The original evidence is still streaming.');assertTokenCount(card,31);
+    assert.equal(replyCard.testShadow.querySelector('.answer').textContent,'A reply finding below the composer.');assert.equal(page.port.sent.slice(before).some(message=>['ANALYZE','CANCEL','CANCEL_ALL','CANCEL_IF_QUEUED'].includes(message.type)),false);for(const node of toolNodes)assert.equal(nativeHeaderObserved(page,node),false,'Inline reply controls are not native-header resize targets');assert.deepEqual(page.writes,[]);
+  };
+  page.mutate([{type:'childList',target:page.primary}]);stable();
+  moveTools(850);composer.rect={...composer.rect,bottom:900,height:290};if(cell)cell.rect={...composer.rect};page.clearWrites();page.mutate([{type:'attributes',attributeName:'style',target:composer}]);stable();
+  tools.hidden=true;page.clearWrites();page.mutate([{type:'attributes',attributeName:'hidden',target:tools}]);stable();
+  tools.hidden=false;page.clearWrites();page.mutate([{type:'attributes',attributeName:'hidden',target:tools}]);stable();
+  (cell||composer).remove();page.clearWrites();page.mutate([{type:'childList',target:page.primary}]);stable();
+  page.port.onMessage.emit({type:'RESULT',requestId:first.requestId,result:{provider:'api',text:'The original check completed without replay.',verificationStatus:'completed',usage:{total_tokens:54},model:'grok-4.3',sources:[]}});page.flush();
+  assert.equal(page.cards()[0],card);assert.equal(card.testShadow.querySelector('.answer').textContent,'The original check completed without replay.');assertTokenCount(card,54);assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,2);assert.deepEqual(page.writes,[]);
+});
+
+for(const kind of ['poll','media','recommendation'])test('a '+kind+' content tablist cannot become the primary rail header',()=>{
+  const page=fixture({postCount:2}),module=page.document.createElement('div'),tabs=page.document.createElement('div');
+  module.setAttribute('data-testid',kind==='recommendation'?'cellInnerDiv':kind==='media'?'tweetPhoto':'cardPoll');
+  module.rect={...page.primary.rect,top:0,bottom:180,height:180};tabs.setAttribute('role','tablist');tabs.rect={...page.primary.rect,top:7,bottom:47,height:40};module.append(tabs);
+  if(kind==='recommendation')page.primary.prepend(module);else page.articles[0].children[0].append(module);module.original=tabs.original=true;page.clearWrites();
+  page.configure();page.intersect();const header=page.nodes.find(node=>node.className==='rail-head');
+  assert.equal(header.style.top,'0px');assert.equal(header.style.height,'53px','Content tabs cannot set the reserved navigation edge');assert.equal(page.displayedCards().length,2);assert.deepEqual(page.writes,[]);
+});
+
+for(const kind of ['hidden','zero-width','aria-hidden','inert','display-none','visibility-hidden','opacity-zero'])test('a '+kind+' navigation ancestor cannot override the visible native primary tabs',()=>{
+  const page=fixture({postCount:1});nativePrimaryTabBar(page);const ancestor=page.document.createElement('div'),invalid=page.document.createElement('div');invalid.setAttribute('role','tablist');
+  invalid.rect={...page.primary.rect,top:0,bottom:41,height:41,...(kind==='zero-width'?{right:page.primary.rect.left,width:0}:{})};ancestor.rect={...page.primary.rect,top:0,bottom:41,height:41};
+  if(kind==='hidden')ancestor.hidden=true;if(kind==='aria-hidden')ancestor.setAttribute('aria-hidden','true');if(kind==='inert')ancestor.setAttribute('inert','');
+  if(kind==='display-none')ancestor.computed={display:'none'};if(kind==='visibility-hidden')ancestor.computed={visibility:'hidden'};if(kind==='opacity-zero')ancestor.computed={opacity:'0'};
+  ancestor.append(invalid);page.primary.prepend(ancestor);ancestor.original=invalid.original=true;page.clearWrites();page.configure();page.intersect();const header=page.nodes.find(node=>node.className==='rail-head');
+  assert.equal(header.style.top,'0px');assert.equal(header.style.height,'53px');assert.equal(header.style.borderBottomWidth,'0.8px');assert.equal(page.cards()[0].hidden,false);assert.deepEqual(page.writes,[]);
+});
+
+for(const kind of ['form','textbox','contenteditable','tweet-editor'])test('a '+kind+' tablist outside timeline cells is still excluded from primary navigation',()=>{
+  const page=fixture({postCount:1}),editor=page.document.createElement(kind==='form'?'form':'div'),tabs=page.document.createElement('div');
+  if(kind==='textbox')editor.setAttribute('role','textbox');if(kind==='contenteditable')editor.setAttribute('contenteditable','true');if(kind==='tweet-editor')editor.setAttribute('data-testid','tweetTextarea_1');
+  tabs.setAttribute('role','tablist');tabs.rect={...page.primary.rect,top:11,bottom:51,height:40};editor.append(tabs);page.primary.prepend(editor);editor.original=tabs.original=true;page.clearWrites();
+  page.configure();page.intersect();const header=page.nodes.find(node=>node.className==='rail-head');assert.equal(header.style.top,'0px');assert.equal(header.style.height,'53px');assert.equal(page.cards()[0].hidden,false);assert.deepEqual(page.writes,[]);
+});
+
+test('an unmarked tablist between posts cannot replace navigation just because it is full width and near the viewport top',()=>{
+  const page=fixture({postCount:2}),module=page.document.createElement('div'),tabs=page.document.createElement('div'),second=page.articles[1];
+  tabs.setAttribute('role','tablist');tabs.rect={...page.primary.rect,top:3,bottom:43,height:40};module.append(tabs);second.remove();page.primary.append(module,second);module.original=tabs.original=true;page.clearWrites();
+  page.configure();page.intersect();const header=page.nodes.find(node=>node.className==='rail-head');assert.equal(header.style.top,'0px');assert.equal(header.style.height,'53px');assert.equal(page.displayedCards().length,2);assert.deepEqual(page.writes,[]);
+});
+
+test('native primary tab bars retain fractional, clipped and offscreen geometry independently of reply controls',()=>{
+  for(const sample of [{top:0,height:53,expectedTop:0,expectedHeight:53},{top:21.5,height:52.8,expectedTop:21.5,expectedHeight:52.8},{top:-20,height:53,expectedTop:0,expectedHeight:33},{top:-60,height:53,expectedTop:0,expectedHeight:53}]){
+    const page=fixture({postCount:1});nativePrimaryTabBar(page,{top:sample.top,height:sample.height});page.clearWrites();page.configure();page.intersect();const header=page.nodes.find(node=>node.className==='rail-head');
+    assert.equal(header.style.top,sample.expectedTop+'px');assert.equal(header.style.height,sample.expectedHeight+'px');assert.equal(header.style.borderBottomWidth,'0.8px');assert.deepEqual(page.writes,[]);
+  }
+});
+
+test('profile navigation before the timeline remains valid below the fold and after its posts scroll above the header',()=>{
+  const page=fixture({postCount:1}),native=nativePrimaryTabBar(page,{top:350,height:53});page.articles[0].rect={...page.articles[0].rect,top:420,bottom:700};page.clearWrites();page.configure();page.intersect();
+  const header=page.nodes.find(node=>node.className==='rail-head'),card=page.cards()[0],request=page.port.sent.find(message=>message.type==='ANALYZE');assert.ok(request);page.port.onMessage.emit({type:'START',requestId:request.requestId});
+  assert.equal(header.style.top,'350px');assert.equal(header.style.height,'53px');assert.equal(card.hidden,false);const before=page.port.sent.length;
+  for(const node of [native.container,native.tabs])node.rect={...node.rect,top:0,bottom:53};page.scroll(520);
+  assert.equal(page.articles[0].rect.top,-100);assert.equal(header.style.top,'0px');assert.equal(header.style.height,'53px');assert.equal(header.style.borderBottomWidth,'0.8px');assert.equal(card.hidden,false);
+  assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,1);assert.equal(page.port.sent.slice(before).some(message=>['CANCEL','CANCEL_ALL','CANCEL_IF_QUEUED'].includes(message.type)),false);assert.deepEqual(page.writes,[]);
+});
+
+function nativeHeaderObserved(page,node) {return page.resizeObservers.some(observer=>observer.observed.has(node));}
+function resizeNativeHeader(page,node) {
+  const observing=page.resizeObservers.filter(observer=>observer.observed.has(node));assert.ok(observing.length,'The selected native header must have a size observer');
+  for(const observer of observing)observer.callback([{target:node,contentRect:{...node.rect}}]);page.flush();
+}
+
+test('pure native tab and border-source resizes update rail clipping without a DOM mutation or scrolling',()=>{
+  const page=fixture({postCount:1}),native=nativePrimaryTabBar(page);page.articles[0].rect={...page.articles[0].rect,top:20,bottom:300,height:280};page.clearWrites();page.configure();page.intersect();
+  const header=page.nodes.find(node=>node.className==='rail-head'),card=page.cards()[0],box=card.testShadow.querySelector('.card'),request=page.port.sent.find(message=>message.type==='ANALYZE');
+  page.port.onMessage.emit({type:'START',requestId:request.requestId});page.port.onMessage.emit({type:'UPDATE',requestId:request.requestId,phase:'verify',text:'A retained finding while native fonts change.',usage:{total_tokens:29}});page.flush();box.scrollTop=39;const before=page.port.sent.length;
+  assert.equal(nativeHeaderObserved(page,native.tabs),true);assert.equal(nativeHeaderObserved(page,native.container),true);assert.equal(header.style.height,'53px');assert.equal(box.style.top,'33px');assert.equal(box.style.height,'247px');
+  for(const node of [native.tabs,native.container])node.rect={...node.rect,bottom:79.5,height:79.5};resizeNativeHeader(page,native.tabs);
+  assert.equal(header.style.top,'0px');assert.equal(header.style.height,'79.5px');assert.equal(box.style.top,'59.5px');assert.equal(box.style.height,'220.5px');assert.equal(page.nodes.find(node=>node.className==='rail-separators').style.top,'79.5px');
+  native.container.rect={...native.container.rect,bottom:80.5,height:80.5};native.container.computed={...native.container.computed,borderBottomWidth:'1.8px'};resizeNativeHeader(page,native.container);
+  assert.equal(header.style.height,'80.5px');assert.equal(header.style.borderBottomWidth,'1.8px');assert.equal(box.style.top,'60.5px');assert.equal(box.style.height,'219.5px');
+  assert.equal(page.cards()[0],card);assert.equal(card.hidden,false);assert.equal(box.scrollTop,39);assert.equal(card.testShadow.querySelector('.answer').textContent,'A retained finding while native fonts change.');assertTokenCount(card,29);
+  assert.equal(page.port.sent.slice(before).some(message=>['ANALYZE','CANCEL','CANCEL_ALL','CANCEL_IF_QUEUED'].includes(message.type)),false);assert.deepEqual(page.writes,[]);
+});
+
+test('transient zero-height or oversized native navigation remains observed and recovers from size changes alone',()=>{
+  for(const transientHeight of [0,120]){
+    const page=fixture({postCount:1}),native=nativePrimaryTabBar(page);page.articles[0].rect={...page.articles[0].rect,top:20,bottom:300,height:280};page.clearWrites();page.configure();page.intersect();
+    const header=page.nodes.find(node=>node.className==='rail-head'),card=page.cards()[0],box=card.testShadow.querySelector('.card'),request=page.port.sent.find(message=>message.type==='ANALYZE');page.port.onMessage.emit({type:'START',requestId:request.requestId});const before=page.port.sent.length;
+    assert.equal(header.style.height,'53px');assert.equal(nativeHeaderObserved(page,native.tabs),true);assert.equal(nativeHeaderObserved(page,native.container),true);
+    for(const node of [native.tabs,native.container])node.rect={...node.rect,bottom:transientHeight,height:transientHeight};resizeNativeHeader(page,native.tabs);
+    assert.equal(header.style.top,'0px');assert.equal(header.style.height,'53px','An unusable transition size uses the compact fallback');assert.equal(nativeHeaderObserved(page,native.tabs),true,'Do not lose the next CSS size notification');assert.equal(nativeHeaderObserved(page,native.container),true);assert.equal(card.hidden,false);
+    for(const node of [native.tabs,native.container])node.rect={...node.rect,bottom:74,height:74};resizeNativeHeader(page,native.container);
+    assert.equal(header.style.top,'0px');assert.equal(header.style.height,'74px');assert.equal(box.style.top,'54px');assert.equal(box.style.height,'226px');assert.equal(page.nodes.find(node=>node.className==='rail-separators').style.top,'74px');
+    assert.equal(nativeHeaderObserved(page,native.tabs),true);assert.equal(nativeHeaderObserved(page,native.container),true);assert.equal(page.cards()[0],card);assert.equal(card.hidden,false);assert.equal(page.port.sent.slice(before).some(message=>['ANALYZE','CANCEL','CANCEL_ALL','CANCEL_IF_QUEUED'].includes(message.type)),false);assert.deepEqual(page.writes,[]);
+  }
+});
+
+test('native-header resize observations follow selection changes and release replaced or removed nodes',()=>{
+  const page=fixture({postCount:1}),first=nativePrimaryTabBar(page);page.clearWrites();page.configure();page.intersect();
+  assert.equal(nativeHeaderObserved(page,first.tabs),true);assert.equal(nativeHeaderObserved(page,first.container),true);
+  const next=nativePrimaryTabBar(page,{top:10,height:60,borderWidth:0.5});page.clearWrites();page.mutate([{type:'childList',target:page.primary}]);
+  assert.equal(first.tabs.isConnected,true,'A no-longer-selected header may still exist in X DOM');assert.equal(nativeHeaderObserved(page,first.tabs),false);assert.equal(nativeHeaderObserved(page,first.container),false);
+  assert.equal(nativeHeaderObserved(page,next.tabs),true);assert.equal(nativeHeaderObserved(page,next.container),true);assert.equal(page.nodes.find(node=>node.className==='rail-head').style.height,'60px');
+  next.container.remove();page.clearWrites();page.mutate([{type:'childList',target:page.primary}]);assert.equal(nativeHeaderObserved(page,next.tabs),false);assert.equal(nativeHeaderObserved(page,next.container),false);assert.equal(nativeHeaderObserved(page,first.tabs),true);assert.equal(nativeHeaderObserved(page,first.container),true);
+  first.container.remove();page.clearWrites();page.mutate([{type:'childList',target:page.primary}]);assert.equal(nativeHeaderObserved(page,first.tabs),false);assert.equal(nativeHeaderObserved(page,first.container),false);assert.equal(page.nodes.find(node=>node.className==='rail-head').style.height,'53px');assert.deepEqual(page.writes,[]);
+});
+
+test('hiding a selected native-header ancestor releases its observations and re-showing selects it again',()=>{
+  const page=fixture({postCount:1}),native=nativePrimaryTabBar(page);page.clearWrites();page.configure();assert.equal(nativeHeaderObserved(page,native.tabs),true);assert.equal(nativeHeaderObserved(page,native.container),true);
+  native.container.hidden=true;page.clearWrites();page.mutate([{type:'attributes',attributeName:'hidden',target:native.container}]);assert.equal(nativeHeaderObserved(page,native.tabs),false);assert.equal(nativeHeaderObserved(page,native.container),false);assert.equal(page.nodes.find(node=>node.className==='rail-head').style.height,'53px');
+  native.container.hidden=false;page.clearWrites();page.mutate([{type:'attributes',attributeName:'hidden',target:native.container}]);assert.equal(nativeHeaderObserved(page,native.tabs),true);assert.equal(nativeHeaderObserved(page,native.container),true);assert.deepEqual(page.writes,[]);
+});
+
+for(const state of ['disabled','no-rail-space'])test('native-header resize observations are released when '+state+' and restored with the visible rail',()=>{
+  const page=fixture({postCount:1}),native=nativePrimaryTabBar(page);page.clearWrites();page.configure();assert.equal(nativeHeaderObserved(page,native.tabs),true);assert.equal(nativeHeaderObserved(page,native.container),true);
+  if(state==='disabled')page.configure({enabled:false});else page.resize(950);
+  assert.equal(nativeHeaderObserved(page,native.tabs),false);assert.equal(nativeHeaderObserved(page,native.container),false);
+  if(state==='disabled')page.configure({enabled:true});else page.resize(1440);
+  assert.equal(nativeHeaderObserved(page,native.tabs),true);assert.equal(nativeHeaderObserved(page,native.container),true);assert.deepEqual(page.writes,[]);
+});
+
 test('SuperX links use stable theme blue rather than the first post link color',()=>{
   const page=fixture({postCount:2}),body=page.articles[0].children[0],link=page.document.createElement('a');body.setAttribute('data-testid','tweetText');link.setAttribute('href','https://example.com/colored-post-link');link.computed={color:'rgb(128, 0, 128)'};body.append(link);
   page.primary.computed={backgroundColor:'rgb(0, 0, 0)'};page.clearWrites();page.configure();const overlay=page.nodes.find(node=>node.id==='grokfirst-overlay'),request=page.port.sent.find(message=>message.type==='ANALYZE');
