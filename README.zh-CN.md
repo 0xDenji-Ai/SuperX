@@ -2,34 +2,34 @@
 
 **读懂 X，边刷边核查。**
 
-[Chrome 商店安装](https://chromewebstore.google.com/detail/superx/clcflilaihhnnglfamdblhopokpnlioo) · [稳定版 ZIP](https://github.com/bwjoke/SuperX/releases/latest/download/SuperX.zip) · [0.9.11 预览版 ZIP](https://github.com/bwjoke/SuperX/releases/download/v0.9.11/SuperX.zip) · [官网](https://superx.vip/) · [支持](https://github.com/bwjoke/SuperX/issues) · [English](README.md) · [隐私说明](PRIVACY.md)
+[Chrome 商店安装](https://chromewebstore.google.com/detail/superx/clcflilaihhnnglfamdblhopokpnlioo) · [稳定版 ZIP](https://github.com/bwjoke/SuperX/releases/latest/download/SuperX.zip) · [0.9.11 更新说明](https://github.com/bwjoke/SuperX/releases/tag/v0.9.11) · [官网](https://superx.vip/) · [支持](https://github.com/bwjoke/SuperX/issues) · [English](README.md) · [隐私说明](PRIVACY.md)
 
 SuperX 是 Chrome / Edge 扩展，通过 Grok 订阅登录、自己的 API Key 或官方本机 Grok Build 连接，核查当前可见 X 帖子中的事实主张。答案流式显示在紧贴信息流的完整右栏，跟随 X 的主题、字体和界面语言，保留左栏及原帖布局。
 
-**最新预览版：[0.9.11](https://github.com/bwjoke/SuperX/releases/tag/v0.9.11)——[下载安装 ZIP](https://github.com/bwjoke/SuperX/releases/download/v0.9.11/SuperX.zip)。** 此预览版移除解释步骤，直接进行 Fact Check，优先提供简洁结论、相关证据和出处，避免在右栏复述左侧已有的原帖。同时区分中间过程、工具指令和最终回答；没有收到面向读者的回答时，提示核查未完成。下方 Chrome 商店及 GitHub 稳定版下载仍为包含解释功能的 **0.7.26**。「功能」「设置与运行方式」以下描述的是 0.9.11 预览版行为，尚非 Chrome 商店版本。
+**最新稳定版：[0.9.11](https://github.com/bwjoke/SuperX/releases/tag/v0.9.11)——[Chrome 商店安装](https://chromewebstore.google.com/detail/superx/clcflilaihhnnglfamdblhopokpnlioo)或[下载安装 ZIP](https://github.com/bwjoke/SuperX/releases/download/v0.9.11/SuperX.zip)。** 0.9.11 直接进行 Fact Check，不再前置解释，优先提供简洁结论、相关证据和出处，避免在右栏复述左侧已有的原帖。同时区分中间过程、工具指令和最终回答；没有收到面向读者的回答时，提示核查未完成。商店与 GitHub Stable/Latest 现已提供同一版本。
 
-0.9.11 预览版依次提供三种独立连接方式：**订阅登录 · The X Subscription**（浏览器内 OAuth，新安装默认）、**Grok API Key**、**本机 Grok Build · CLI / ACP**。三种均提供 **Windows 和 macOS** 引导，保留语言同步、自定义指令、评论、历史及 Token／模型信息。已有来源和设置保留；旧设置非空但没有来源选项，或设置缺失／为空而留有旧版凭据时，继续使用 API 路径。不会自动切换来源或绕过额度。见 [连接引导](docs/CONNECTIONS.md)。此前 Windows Chrome 验收使用六项授权范围。新的四项权限现已由用户确认官方页不再显示姓名／头像和邮箱，重新授权后已连接；随后真实 Grok 4.3 核查及可点击出处通过。四项权限的重启恢复和自然到期仍待单独验收。见 [验收范围](docs/CONNECTIONS.md#acceptance-scope)。
+0.9.11 依次提供三种独立连接方式：**订阅登录 · The X Subscription**（浏览器内 OAuth，新安装默认）、**Grok API Key**、**本机 Grok Build · CLI / ACP**。三种均提供 **Windows 和 macOS** 引导，保留语言同步、自定义指令、评论、历史及 Token／模型信息。已有来源和设置保留；旧设置非空但没有来源选项，或设置缺失／为空而留有旧版凭据时，继续使用 API 路径。不会自动切换来源或绕过额度。见 [连接引导](docs/CONNECTIONS.md)。此前 Windows Chrome 验收使用六项授权范围。新的四项权限现已由用户确认官方页不再显示姓名／头像和邮箱，重新授权后已连接；随后真实 Grok 4.3 核查及可点击出处通过。四项权限的完整浏览器重启恢复和自然到期仍待单独验收；商店上架不等于新增实装功能验收通过。见 [验收范围](docs/CONNECTIONS.md#acceptance-scope)。
 
 使用 Manifest V3 和原生 JavaScript，浏览器内订阅登录及 API Key 模式安装无需构建或下载依赖。目前为 Beta；X 页面结构变化、模型表现与 API 可用性会影响结果。SuperX 是独立项目，与 X 或 xAI 没有隶属关系。
 
 ![SuperX 在 X 上展示中文解读与事实核查](docs/assets/superx-preview-zh-CN.png)
 
-*SuperX 0.7.26 在 X 上的使用截图，展示中文解读与事实核查；0.9.11 预览版仅保留 Fact Check。*
+*SuperX 0.7.26 在 X 上的使用截图，展示中文解读与事实核查；0.9.11 仅保留 Fact Check。*
 
 ## 下载与支持
 
 | 入口 | 用途 | 当前状态 |
 | --- | --- | --- |
-| [Chrome 商店 · 稳定版](https://chromewebstore.google.com/detail/superx/clcflilaihhnnglfamdblhopokpnlioo) | 通过 Chrome 安装与更新 | 0.7.26 已上架 |
-| [稳定版 0.7.26 ZIP](https://github.com/bwjoke/SuperX/releases/download/v0.7.26/SuperX.zip) | 同一版本的手动安装包 | 已发布 |
-| [预览版 0.9.11](https://github.com/bwjoke/SuperX/releases/tag/v0.9.11) · [下载 ZIP](https://github.com/bwjoke/SuperX/releases/download/v0.9.11/SuperX.zip) | 提前体验新功能，手动安装与更新 | 已发布预览版，尚非商店版本 |
+| [Chrome 商店 · 稳定版](https://chromewebstore.google.com/detail/superx/clcflilaihhnnglfamdblhopokpnlioo) | 通过 Chrome 安装与更新 | 0.9.11 已上架 |
+| [稳定版 0.9.11](https://github.com/bwjoke/SuperX/releases/tag/v0.9.11) · [下载 ZIP](https://github.com/bwjoke/SuperX/releases/download/v0.9.11/SuperX.zip) | 同一版本的手动安装与更新 | Stable/Latest |
+| [0.7.26 历史版本](https://github.com/bwjoke/SuperX/releases/tag/v0.7.26) | 含解释功能的旧版，原始文件保留 | 历史归档 |
 | [所有 GitHub Releases](https://github.com/bwjoke/SuperX/releases) | 各版本安装包、源码及校验值 | 已开放 |
-| [最新稳定版 ZIP](https://github.com/bwjoke/SuperX/releases/latest/download/SuperX.zip) | GitHub 最新稳定版本的安装包 | 0.7.26 |
+| [最新稳定版 ZIP](https://github.com/bwjoke/SuperX/releases/latest/download/SuperX.zip) | GitHub 最新稳定版本的安装包 | 0.9.11 |
 | [GitHub Issues](https://github.com/bwjoke/SuperX/issues) | 两个渠道共用的报错、需求与支持入口 | 已开放 |
 
-[SuperX.vip](https://superx.vip/) 是官网；[bwjoke/SuperX](https://github.com/bwjoke/SuperX) 是代码、更新说明和支持的项目主页。预览与稳定版使用同一套源码和递增版本，商店版可以落后于更新的预览版。**GitHub 的 Latest 指最新稳定版，不包含预览版。** 预览版可直接打开 [0.9.11 发布页](https://github.com/bwjoke/SuperX/releases/tag/v0.9.11)下载安装包、查看更新说明，也可浏览所有 Releases。发布和晋升流程见 [双渠道说明](docs/RELEASE_CHANNELS.md)。[0.7.26 稳定版](https://github.com/bwjoke/SuperX/releases/tag/v0.7.26) 已在 Chrome 商店和 GitHub 发布。更新的 **0.9.11 预览版**作为 GitHub prerelease 发布，不替换稳定版下载。
+[SuperX.vip](https://superx.vip/) 是官网；[bwjoke/SuperX](https://github.com/bwjoke/SuperX) 是代码、更新说明和支持的项目主页。**GitHub 的 Latest 指最新稳定版。** 0.9.11 在商店公开后，于 2026-10-19 从 Preview 晋升为 Stable/Latest，保留原 tag、附件及校验值。目前没有更新的预览版；未来预览仍使用同一套源码和递增版本，在 [Releases](https://github.com/bwjoke/SuperX/releases) 单独提供。发布与晋升流程见[双渠道说明](docs/RELEASE_CHANNELS.md)。
 
-0.7.26 核心功能已由用户在 Windows 11 Chrome 中确认正常；商店安装后的解释、Fact Check、Key 保存及重启恢复也已确认。Edge 实际安装验收仍待完成。
+[验收记录](docs/RELEASE_CHECKLIST.md)区分了 0.9.11 的 Windows Chrome OAuth 实测和 0.7.26 历史结果。商店上架不等于已新增商店实装功能、四项权限完整浏览器重启／到期或 Edge／macOS 实装验收。
 
 ## 功能
 
@@ -49,24 +49,24 @@ AI 功能需要配置一种连接；本机浏览历史不依赖连接。订阅 O
 
 需要桌面版 Chrome 或 Chromium 版 Edge 120 及以上，以及所选模型／工具的使用权限。API Key 和 OAuth 均仅需浏览器；可选本机模式提供 Windows PowerShell 和 macOS 终端引导。OAuth 已在 Windows Chrome 实装测试；macOS、其他浏览器及本机 CLI 仍需各自验收。自动化测试不等于实机通过。
 
-安装 Chrome 稳定版 0.7.26：
+安装 Chrome 稳定版 0.9.11：
 
 1. 打开 [Chrome 商店中的 SuperX](https://chromewebstore.google.com/detail/superx/clcflilaihhnnglfamdblhopokpnlioo)，点击「添加至 Chrome」。
-2. 打开 SuperX 设置，填写自己的 xAI API Key，保存并启用 SuperX，再打开 X。
+2. 打开「设置 → 连接」。新安装默认选择「订阅登录 · The X Subscription」：点击「登录 Grok」，在官方页核对短码并授权。也可改为「Grok API Key」或「本机 Grok Build · CLI / ACP」。三种来源分别默认 **Grok 4.3／关闭推理**。保存设置、启用 SuperX，再打开 X。
 3. Chrome 自动管理扩展更新。如果已有解压安装的旧副本，先停用它以避免重复分析，再单独配置商店副本。
 
 使用 Edge 或从 GitHub 手动安装时：
 
-1. 下载 [**0.9.11 预览版安装 ZIP**](https://github.com/bwjoke/SuperX/releases/download/v0.9.11/SuperX.zip) 并解压，或在 [Releases](https://github.com/bwjoke/SuperX/releases) 中选择其他预览／稳定版本。附加的 `SuperX-<版本>.zip` 和 `SuperX.zip` 内容完全相同。也可下载源码，使用其中的 `extension/` 文件夹。
+1. 下载 [**0.9.11 稳定版安装 ZIP**](https://github.com/bwjoke/SuperX/releases/download/v0.9.11/SuperX.zip) 并解压，或在 [Releases](https://github.com/bwjoke/SuperX/releases) 中选择其他预览／稳定版本。附加的 `SuperX-<版本>.zip` 和 `SuperX.zip` 内容完全相同。也可下载源码，使用其中的 `extension/` 文件夹。
 2. 打开 `chrome://extensions` 或 `edge://extensions`，开启「开发者模式」。
 3. 点击「加载已解压的扩展程序」，选择包含 `manifest.json` 的文件夹。
-4. 在 SuperX 设置中配置该版本支持的连接，保存、启用 SuperX 并刷新 X。预览版 0.9.11 新增订阅登录和 CLI／ACP；稳定版 0.7.26 使用 API Key。
+4. 在 SuperX 设置中配置该版本支持的连接，保存、启用 SuperX 并刷新 X。0.9.11 支持订阅登录、API Key 和 CLI／ACP；归档的旧版本可能提供较少连接方式。
 
 手动安装版升级时，将新版文件覆盖到实际加载的目录，重新加载扩展，再刷新 X。请把该目录放在固定位置。GitHub 自动生成的源码压缩包与 Release 附加的扩展安装包不同。
 
 从解压版切到商店版属于另一安装，当前不自动迁移设置与 Key。请先停用旧安装，避免重复分析，再配置新安装。
 
-## Grok 订阅登录——0.9.11 预览版
+## Grok 订阅登录
 
 新安装在「设置 → 连接」默认选择「订阅登录 · The X Subscription」，点击「登录 Grok」。核对短码后，由你本人在官方 xAI 授权页确认权限，再返回 SuperX。Windows 和 macOS 均无需填写 API Key、安装 CLI 或额外 SuperX 程序。登录成功后只加载账号模型目录，不发送测试核查；三种来源分别默认 **Grok 4.3／关闭推理**，账号不提供该模型时，需要你明确选择可用模型，不会自动改成 4.7。
 
@@ -94,7 +94,7 @@ API 模式的请求由扩展后台直接发送至 `api.x.ai`，项目没有中�
 
 API Key 和本机 CLI／ACP 的求证、评论遇到临时错误后等待 3 秒，每条任务最多额外重试 5 次。等待重试不占并发名额，之后重新排入共享队列，其他帖子继续处理。部分回答和已报告的用量跨重试保留。Key 无效、账户／余额限制、不支持的设置、输出上限或本机取消未确认等问题不自动反复请求。OAuth 在收到 HTTP 200、流中错误、未完成输出或超时后不自动重放生成；HTTP 401 拒绝可刷新授权一次后恢复请求一次。单条报错不会暂停整个队列。重试或手动重复请求可能产生额外用量和费用。
 
-没有插件级条数上限或消费上限。多个标签页、搜索工具、重试和重新分析会增加调用。0.9.11 预览版每次求证尝试使用一次生成请求，评论建议另用一次请求；检索和模型处理仍需要时间，同一请求也可能使用多次检索。插件不会自动启用收费的 Priority Processing、更改账户预算或切换模型。实际价格、用量及账单以对应的 Grok Dashboard 或 xAI Console 账户为准。
+没有插件级条数上限或消费上限。多个标签页、搜索工具、重试和重新分析会增加调用。0.9.11 每次求证尝试使用一次生成请求，评论建议另用一次请求；检索和模型处理仍需要时间，同一请求也可能使用多次检索。插件不会自动启用收费的 Priority Processing、更改账户预算或切换模型。实际价格、用量及账单以对应的 Grok Dashboard 或 xAI Console 账户为准。
 
 ## 设置与运行方式
 
@@ -104,13 +104,13 @@ API 模式的模型和推理档位分别通过下拉框选择：提供 `grok-4.3
 
 内置与自定义模式都以原帖 URL 为核心上下文，要求工具获取包含 **Show more** 后文字的全文。可见正文、作者、媒体及引用快照是辅助输入。工具可能无法取得全文；插件不保证模型已完整读取线程或查看所有媒体。
 
-0.9.11 预览版仅提供 **Fact Check**：读取原帖链接后，一次流式请求深入核查明确说法、合理隐含的事实前提及可查证细节，沿出处和背景、数字、比较、因果等相关角度继续调查，不再先解释、复述原帖或追加第二次求证。只在连接核查发现与原主张确有必要时最少引用原文；区分作者原话与推断，不编造主张或强行挑错，不将缺少证据当作错误的证明。有出处的答案仍可能出错。
+0.9.11 仅提供 **Fact Check**：读取原帖链接后，一次流式请求深入核查明确说法、合理隐含的事实前提及可查证细节，沿出处和背景、数字、比较、因果等相关角度继续调查，不再先解释、复述原帖或追加第二次求证。只在连接核查发现与原主张确有必要时最少引用原文；区分作者原话与推断，不编造主张或强行挑错，不将缺少证据当作错误的证明。有出处的答案仍可能出错。
 
 自定义模式可编辑事实核查和评论指令，每项最多 12,000 字符；空白使用默认指令。保存只影响新任务，点击「重新分析」可更新当前答案。固定应用规则仍约束输出语言、来源材料的安全处理、避免重复原帖及评论输出格式。旧版解释设置不再选择额外生成步骤；已有历史中的旧解释与回答继续保留，按原规则到期或由用户删除。
 
 语言设置分为两项，默认均为 Auto，互不影响。「Grok 回答的语言」优先使用 X 当前显示正文的有效语言标记，再根据作者当前显示的正文判断；引用帖和搜索资料不决定语言。选择固定回答语言后，不随原文／翻译切换。「SuperX 界面的语言」在 Auto 下跟随 X 的界面语言；还没打开过 X 时使用浏览器界面语言，也可以单独指定右栏、设置和弹窗的固定语言。支持 12 种界面语言，其余回退英文。只切换界面语言不会重新生成回答或中断正在进行的请求。
 
-顶部箭头收起 SuperX，恢复 X 原右栏；点击边缘 Logo 展开。收起取消未开始的任务，已开始任务可能继续完成并保留结果。帖子离开视窗时撤出尚未开始的排队任务；已开始的回答继续生成，返回时恢复原任务。0.9.11 预览版切换浏览器标签页后，也会保留已开始的核查、评论及其重试，回来后继续显示原任务；新的自动任务等信息流重新可见后再触发。刷新、导航离开或关闭标签页仍会停止该页任务；已发出的请求仍可能计费。
+顶部箭头收起 SuperX，恢复 X 原右栏；点击边缘 Logo 展开。收起取消未开始的任务，已开始任务可能继续完成并保留结果。帖子离开视窗时撤出尚未开始的排队任务；已开始的回答继续生成，返回时恢复原任务。0.9.11 切换浏览器标签页后，也会保留已开始的核查、评论及其重试，回来后继续显示原任务；新的自动任务等信息流重新可见后再触发。刷新、导航离开或关闭标签页仍会停止该页任务；已发出的请求仍可能计费。
 
 X 发帖／回复弹窗、放大媒体及全屏内容优先显示：SuperX 的右栏、顶部和展开按钮暂时隐藏，不再启动新的自动核查，已开始的请求可继续完成。关闭后恢复信息流及设定的停留等待。回答与来源链接使用当前深浅主题对应的固定蓝色，不再受个别帖子链接样式影响。
 

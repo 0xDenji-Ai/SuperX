@@ -2,9 +2,13 @@
 
 This checklist separates reproducible checks from manual browser and service checks. A passing mock test suite is not evidence that a particular X account, browser installation, or paid API request works.
 
-## 0.9.11 Preview — 2026-10-18
+<a id="0911-preview--2026-10-18"></a>
 
-[Preview release](https://github.com/bwjoke/SuperX/releases/tag/v0.9.11) · [Installable ZIP](https://github.com/bwjoke/SuperX/releases/download/v0.9.11/SuperX.zip). This is a GitHub **Pre-release**, excluded from Latest. Chrome Web Store and GitHub Stable/Latest remain **0.7.26**; no 0.9.11 store approval or publication is claimed.
+## 0.9.11 Stable promotion — 2026-10-19
+
+[Stable release](https://github.com/bwjoke/SuperX/releases/tag/v0.9.11) · [Installable ZIP](https://github.com/bwjoke/SuperX/releases/download/v0.9.11/SuperX.zip) · [Chrome Web Store](https://chromewebstore.google.com/detail/superx/clcflilaihhnnglfamdblhopokpnlioo). The official listing reports version **0.9.11**, updated **October 19, 2026**. Promote the existing GitHub release from Preview to **Stable/Latest** by changing status only: do not move its tag, rebuild or replace attachments, or change published hashes. The 0.7.26 release remains a historical archive, not the current Latest.
+
+The functional evidence below was collected on October 18 from the installed Windows Chrome candidate. Store publication is a distribution result, not a new store-installed functional pass or evidence for pending browsers, restart or expiry scenarios.
 
 - [x] Run the current automated validation: **1,057 tests passed**. These use controlled browser/provider fixtures and do not establish live account eligibility or billing.
 - [x] Complete **16 isolated Edge Manifest V3 locale-selection checks**, covering packaged metadata language selection. This is isolated browser coverage, not acceptance of the installed extension on a real Edge account.
@@ -17,15 +21,18 @@ This checklist separates reproducible checks from manual browser and service che
 - [ ] Complete four-scope **full Chrome exit/reopen** restoration and a new uncached check; extension reload/refresh is a different scenario.
 - [ ] Observe real natural access-token expiry and safe refresh/reauthorization behavior. Simulated expiry is not a live-expiry pass.
 - [ ] Complete installed Edge and macOS acceptance; repeat official CLI / ACP installation and inference with real accounts on Windows/macOS. New live API Key inference has not been established by this run.
-- [x] Prepare separate Preview downloads, three-source installation notes, updated privacy guidance, bounded-retry behavior and [PR #1 community credit](https://github.com/bwjoke/SuperX/pull/1), accurately identifying the independent implementation.
-- [ ] Record the final reviewed commit, ZIP/source inventories and SHA-256; verify the downloaded release assets and GitHub workflow outcomes after publication. Preserve the existing 0.7.26 Stable attachments.
-- [ ] Submit the accepted exact ZIP separately for store review; keep 0.9.11 Preview until the same version is actually published and verified from the store.
+- [x] Prepare versioned Stable downloads, three-source installation notes, updated privacy guidance, bounded-retry behavior and [PR #1 community credit](https://github.com/bwjoke/SuperX/pull/1), accurately identifying the independent implementation.
+- [x] Preserve the original tagged source commit `151985851dd6555e62864b9f2fb6d2568e9b4d77`, installation ZIP SHA-256 `cc77b5b1c3f2aa0fcc679127f53003ceac562f3b35ba54af14ec34761d1789bc` and source ZIP SHA-256 `62064c03dacfe4f62209871ca837be180160d2a271946430be0b195a5f17f89e`. The original [CI](https://github.com/bwjoke/SuperX/actions/runs/39127074307) and [release workflow](https://github.com/bwjoke/SuperX/actions/runs/39127074254) passed; all seven release attachments were anonymously verified. This promotion does not replace them or the historical 0.7.26 artifacts.
+- [x] Verify the official public Chrome Web Store listing reports **0.9.11**, updated **2026-10-19**, for item `clcflilaihhnnglfamdblhopokpnlioo`.
+- [x] Compare the Google HTTPS-delivered 0.9.11 CRX against the accepted ZIP: **51 versus 50 files**, **49 ordinary files byte-identical**, only Google `update_url` added semantically to the manifest, and only `_metadata/verified_contents.json` added. No manifest key or other semantic change was found. CRX SHA-256: `80abbbe205bb8664639fdc8771167ab7bd5f191d351aac5ad678f10788a3873d`. CRX and ZIP whole-package hashes differ by format; this comparison did not install the CRX or independently verify its signature.
+- [x] Promote the existing GitHub 0.9.11 release to Stable/Latest and verify the anonymous Latest ZIP. The download matches SHA-256 `cc77b5b1c3f2aa0fcc679127f53003ceac562f3b35ba54af14ec34761d1789bc`; the original tag and all seven attachment digests remain unchanged.
+- [ ] Complete a new store-installed functional test separately; listing availability and file comparison do not establish that pass.
 
 The earlier six-scope authorization used `openid profile email offline_access grok-cli:access api:access` and separately passed live checks, three comments/copying, cross-tab cache reuse and new uncached checks after fully restarting Chrome. The current flow requests only `openid offline_access grok-cli:access api:access`. Those six-scope results do **not** prove current four-scope restart restoration or expiry. Current observations also do not establish all-plan eligibility, Included billing treatment or captured raw native-annotation protocol behavior. Exact evidence and remaining limits are in [CONNECTIONS.md](CONNECTIONS.md#acceptance-scope).
 
 ## Historical development snapshots
 
-The following 0.8.x/0.9.1 entries record earlier local candidates, not separately published releases or the current acceptance checklist. The combined 0.9.11 Preview supersedes their current-status wording; keep historical passes and pending evidence scoped to their original builds.
+The following 0.8.x/0.9.1 entries record earlier local candidates, not separately published releases or the current acceptance checklist. The combined 0.9.11 release supersedes their current-status wording; keep historical passes and pending evidence scoped to their original builds.
 
 ## 0.9.1 local candidate — official connection, Windows and macOS
 
@@ -164,9 +171,9 @@ Use the shared [release channels](RELEASE_CHANNELS.md) procedure. GitHub hosts p
 6. Complete browser acceptance for a chosen candidate. Verify its published installation ZIP checksum and upload that exact package to the store. Keep its GitHub status Preview during review.
 7. Once the same version is actually available from the store, verify it and promote the existing GitHub release to Stable/Latest without replacing attachments or moving its tag. Update the channel entries and release report together.
 
-- [x] Record the public store item ID, version 0.7.26 and actual listing URL; the page is published, not merely approved.
+- [x] Record the public store item ID and listing URL. The October 8 entry records historical 0.7.26 publication; the October 19 section records current 0.9.11 publication.
 - [x] Confirm the stable `SuperX.zip` alias has the same bytes as the versioned ZIP, is included in its checksums and is available through `/releases/latest/download/SuperX.zip`.
-- [x] Keep Preview separate from Stable/Latest. The October 8 promotion had no newer Preview; the October 18 update adds direct 0.9.11 Preview release/ZIP links without changing Stable 0.7.26 or `/latest`.
+- [x] Keep Preview separate from Stable/Latest. Version 0.9.11 was Preview on October 18 and promoted on October 19; current download entries use Stable/Latest and no longer list the same version as a new Preview.
 - [ ] Check that store support points to the repository's public Issues and privacy links use the verified public policy URL.
 - [ ] Keep manual update and channel-switch instructions accurate; do not promise automatic Key/settings migration across installation IDs.
 

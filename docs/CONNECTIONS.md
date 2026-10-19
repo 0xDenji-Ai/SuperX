@@ -1,6 +1,6 @@
 # Connect SuperX
 
-The **0.9.11 GitHub Preview** offers three independent connections: [release notes](https://github.com/bwjoke/SuperX/releases/tag/v0.9.11) and [installable ZIP](https://github.com/bwjoke/SuperX/releases/download/v0.9.11/SuperX.zip). **Sign in · The X Subscription** is first and the default for new installations; **Grok API Key** uses a Key you create; **Grok Build · Local CLI / ACP** connects to the official service on your computer. All three initially select **Grok 4.3 / reasoning None** and retain their own choices. Existing selections and settings are preserved. Nonempty older settings without a source keep API; missing/empty settings with legacy credentials also keep that conservative API path. Switching sources never substitutes another credential, changes account budgets or bypasses quotas. Published Stable remains **0.7.26** and supports API Key mode.
+The **0.9.11 Stable** release offers three independent connections: [Chrome Web Store](https://chromewebstore.google.com/detail/superx/clcflilaihhnnglfamdblhopokpnlioo), [release notes](https://github.com/bwjoke/SuperX/releases/tag/v0.9.11) and [installable ZIP](https://github.com/bwjoke/SuperX/releases/download/v0.9.11/SuperX.zip). **Sign in · The X Subscription** is first and the default for new installations; **Grok API Key** uses a Key you create; **Grok Build · Local CLI / ACP** connects to the official service on your computer. All three initially select **Grok 4.3 / reasoning None** and retain their own choices. Existing selections and settings are preserved. Nonempty older settings without a source keep API; missing/empty settings with legacy credentials also keep that conservative API path. Switching sources never substitutes another credential, changes account budgets or bypasses quotas. Archived 0.7.26 supports API Key mode only.
 
 | Connection | What you need | Where you sign in / manage usage |
 | --- | --- | --- |
@@ -10,7 +10,7 @@ The **0.9.11 GitHub Preview** offers three independent connections: [release not
 
 ## Grok subscription (OAuth) — browser only
 
-This Preview connects directly from Chrome / Edge on Windows or macOS. **No Grok CLI, terminal, additional SuperX program or API Key is required.**
+This connection works directly from Chrome / Edge on Windows or macOS. **No Grok CLI, terminal, additional SuperX program or API Key is required.**
 
 1. Open **Settings → Connection**. New installations already select **Sign in · The X Subscription**; choose **Sign in to Grok**.
 2. SuperX displays a short authorization code and opens the official `accounts.x.ai` / `auth.x.ai` device page. Check that the code matches and confirm the requested access yourself. Enter your account password only on the official site, never in SuperX.
@@ -48,7 +48,7 @@ Eligible API use from The X Subscription shares the plan's weekly allowance. For
 
 Use the official Grok installation and account login. **No separate SuperX installer, Node installation, browser host registration or downloaded profile file is required.** The browser communicates with the official CLI's ACP WebSocket service; it cannot start terminal programs by itself.
 
-The guide covers **Windows PowerShell** and **macOS Terminal**, including Apple silicon and Intel Macs supported by the official Grok distribution. Use desktop Chrome or Chromium-based Edge 120+. This Preview checks compatibility with **Grok Build 1.0.60** before sending a task; another version is rejected until its protocol and restrictions are reviewed.
+The guide covers **Windows PowerShell** and **macOS Terminal**, including Apple silicon and Intel Macs supported by the official Grok distribution. Use desktop Chrome or Chromium-based Edge 120+. This release checks compatibility with **Grok Build 1.0.60** before sending a task; another version is rejected until its protocol and restrictions are reviewed.
 
 1. Follow the [official Grok installation instructions](https://github.com/xai-org/grok-build). Open PowerShell on Windows or Terminal on macOS. Run `grok --version` to check the installation, then `grok login` and finish signing in on the official page. SuperX does not ask for your account password or receive the login token.
 2. Open **SuperX Settings → Grok Build · Local CLI / ACP → Step-by-step guide**. Select Windows or macOS, then **Generate launch command**. SuperX creates a random local connection code automatically; you do not need to invent a password or edit configuration files.
@@ -83,7 +83,7 @@ Generated cache entries and saved-history answers/comments are scoped to the sel
 | OAuth connected but model directory unavailable | Reload the model directory; this is separate from the login state. Keep the selected model until the account confirms availability. |
 | Cannot connect | Keep the service terminal open. Check that its port and code match SuperX; stop any older service before starting a replacement. |
 | Local permission denied | Allow SuperX's optional local-address access from the connection check. API mode does not need it. |
-| Unsupported version | Compare `grok --version` with this Preview's tested version. Use API mode while a newer official runtime is awaiting compatibility review. |
+| Unsupported version | Compare `grok --version` with this release's tested version. Use API mode while a newer official runtime is awaiting compatibility review. |
 | Model / effort unavailable | Select the choices reported by the connected account. API and CLI catalogs may differ; no model is silently substituted. |
 | Restricted session could not be confirmed | Use the generated command. Managed-device policy may prevent this setup; do not disable company protections. API mode remains available. |
 | Stop could not be confirmed | Press Ctrl+C in the official service terminal. SuperX does not replay the request automatically. |
@@ -118,7 +118,7 @@ An earlier October 18 Windows Chrome installation used `openid profile email off
 
 The recorded local validation passed **1,057 automated tests**, and **16 isolated Edge Manifest V3 locale-selection checks** verified packaged metadata selection. Windows/macOS command generation, OAuth lifecycle, provider behavior and hidden-tab continuation have controlled coverage. These are not real-account Edge/macOS or official CLI installation/inference passes.
 
-This run did not establish new live API Key inference, official CLI / ACP real-account installation/inference, installed Edge/macOS operation or actual natural token expiry. It does not guarantee every subscription's eligibility, Included billing treatment, factual accuracy or service availability. See [the release checklist](RELEASE_CHECKLIST.md#0911-preview--2026-10-18). Stable remains 0.7.26; the 0.9.11 Preview is not store approval.
+This run did not establish new live API Key inference, official CLI / ACP real-account installation/inference, installed Edge/macOS operation or actual natural token expiry. It does not guarantee every subscription's eligibility, Included billing treatment, factual accuracy or service availability. See [the release checklist](RELEASE_CHECKLIST.md#0911-stable-promotion--2026-10-19). The Chrome Web Store publicly lists 0.9.11 as of October 19, 2026, and GitHub 0.9.11 is Stable/Latest. The store payload matches the accepted ZIP apart from Google's update metadata; publication does not mark the remaining live scenarios as passed.
 
 For API failures, open **Local diagnostic log** at the bottom of Settings. It keeps up to 30 failures from the last 24 hours of the current browser session, with redacted provider details and supported trace IDs. Transport HTTP status and an error event's status are separate: an HTTP 200 stream can still fail later, and a `spending_limit` event alone does not establish HTTP 402 or an exhausted subscription. Review the matching account's usage and the recorded cause before deciding what to change. Existing failures whose details were not retained cannot be reconstructed. Copying or clearing this local log does not call the provider or clear browsing history.
 
@@ -134,7 +134,7 @@ OAuth 已收到 HTTP 200 后的流错误、未完成或超时不自动重放；�
 
 **2026-10-18 四项权限实测：**用户在官方授权页确认不再列出姓名／头像和邮箱后亲自授权，初次真实 Grok 4.3 核查返回 23,754 Tokens 和四个可点出处。最新重载扩展并刷新 X 后，已有四项权限登录恢复；新 Grok 4.3 核查返回 **30,226 Tokens（输入 29,693／输出 533），六个不同引用源**；随后生成恰好三条评论，**1,373 Tokens（输入 1,305／输出 68）**。复制按钮在剪贴板写入返回成功后显示 **Copied**，但未独立核验系统剪贴板读回。用户确认生成中切走其他标签页，再回来仍继续同一任务，没有重新请求。完整退出重开 Chrome 后的四项权限恢复和自然到期仍未建立。不能把重载扩展当作完整浏览器重启，也不能沿用早先六项权限的评论复制、跨标签缓存和完整重启结果宣称这些项目通过。
 
-当前记录另有 **1,057 项自动测试**和 **16 项隔离 Edge Manifest V3 语言选择检查**通过，不能代替 Edge／macOS 实装、新 API Key 推理或本机 CLI 真实账号安装／推理验收。本次未捕获原始请求体、Token 返回的 scope 字段或原生 annotation 协议；不保证所有套餐资格、Included 计费或服务可用性。完整范围见上方[验收记录](#acceptance-scope)。0.9.11 是 GitHub 预览版；商店及 Stable/Latest 仍为 0.7.26。
+当前记录另有 **1,057 项自动测试**和 **16 项隔离 Edge Manifest V3 语言选择检查**通过，不能代替 Edge／macOS 实装、新 API Key 推理或本机 CLI 真实账号安装／推理验收。本次未捕获原始请求体、Token 返回的 scope 字段或原生 annotation 协议；不保证所有套餐资格、Included 计费或服务可用性。完整范围见上方[验收记录](#acceptance-scope)。2026-10-19 已核验商店公开版本为 0.9.11，且与原验收 ZIP 仅有 Google 更新元数据差异；GitHub 同版本晋升 Stable/Latest，剩余实机待测项保持不变。
 
 **Grok API Key 模式**在 Windows 和 Mac 上都只需浏览器：打开「设置 → 连接 → Grok API Key」，按需展开获取帮助。使用订阅 API 额度时，去 [Grok Dashboard → API Keys](https://grok.com/dashboard/api-keys) 创建 **Grok Inference** 类型而非 Cursor 类型的 Key，按账号要求授权 Chat／模型；使用按量付费 API 时，去 [xAI 控制台](https://console.x.ai/) 创建 Key、购买额度。两种来源均粘贴到同一个 API Key 输入框并保存，不另选来源。默认在本机自动加密记住，无需 SuperX 密码；保存不代表已验证 API 权限或剩余额度。用量和费用请到创建 Key 的账户查看。
 
@@ -144,6 +144,6 @@ OAuth 已收到 HTTP 200 后的流错误、未完成或超时不自动重放；�
 
 启动命令只监听本机地址，自动生成连接码并隔离工作／配置目录。连接码只用于本机官方服务，不是账号密码或 API Key；请勿公开连接码、完整命令或相关截图。SuperX 本机加密保存连接码，不读取或复制官方登录文件。重启电脑后需要重新运行启动命令；按 Ctrl+C 停止服务。浏览器断线不等于官方任务已经停止，若提示停止未确认，请在终端按 Ctrl+C 手动停止。停止后若提示仍在，请从设置重新加载 SuperX，再启动服务并重新检查连接；停止未确认时不会自动重试，也不会转为 API 计费。
 
-CLI／ACP 支持 Windows 和 macOS 引导；此预览版按官方 Grok 1.0.60 检查兼容性。工具限制不等同于系统沙箱，本机 CLI 的 Mac 及真实账号实机验收仍需另行完成。完整数据说明见 [隐私说明](../PRIVACY.md)。
+CLI／ACP 支持 Windows 和 macOS 引导；此版本按官方 Grok 1.0.60 检查兼容性。工具限制不等同于系统沙箱，本机 CLI 的 Mac 及真实账号实机验收仍需另行完成。完整数据说明见 [隐私说明](../PRIVACY.md)。
 
 Sources: [official Grok Build installation](https://github.com/xai-org/grok-build), [official agent / WebSocket mode](https://github.com/xai-org/grok-build/blob/main/crates/codegen/xai-grok-pager/docs/user-guide/15-agent-mode.md), [headless CLI and ACP](https://docs.x.ai/build/cli/headless-scripting).
