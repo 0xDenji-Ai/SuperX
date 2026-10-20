@@ -2,13 +2,13 @@
 
 **Understand X. Fact-check as you scroll.**
 
-[Install for Chrome](https://chromewebstore.google.com/detail/superx/clcflilaihhnnglfamdblhopokpnlioo) · [Stable ZIP](https://github.com/bwjoke/SuperX/releases/latest/download/SuperX.zip) · [0.9.11 release notes](https://github.com/bwjoke/SuperX/releases/tag/v0.9.11) · [Website](https://superx.vip/) · [Support](https://github.com/bwjoke/SuperX/issues) · [简体中文](README.zh-CN.md) · [Privacy](PRIVACY.md)
+[Install for Chrome](https://chromewebstore.google.com/detail/superx/clcflilaihhnnglfamdblhopokpnlioo) · [Stable ZIP](https://github.com/bwjoke/SuperX/releases/latest/download/SuperX.zip) · [0.9.12 release notes](https://github.com/bwjoke/SuperX/releases/tag/v0.9.12) · [Website](https://superx.vip/) · [Support](https://github.com/bwjoke/SuperX/issues) · [简体中文](README.zh-CN.md) · [Privacy](PRIVACY.md)
 
 SuperX is a Chrome / Edge extension that checks factual claims in visible X posts using a Grok subscription login, your own API Key or an official local Grok Build connection. Answers stream into a right-hand column that follows X's theme, font and interface language. Your left navigation and original feed keep their layout.
 
-**Latest Stable: [0.9.11](https://github.com/bwjoke/SuperX/releases/tag/v0.9.11) — [install from the Chrome Web Store](https://chromewebstore.google.com/detail/superx/clcflilaihhnnglfamdblhopokpnlioo) or [download the ZIP](https://github.com/bwjoke/SuperX/releases/download/v0.9.11/SuperX.zip).** Version 0.9.11 runs Fact Check directly, without the previous explanation step. It asks for concise findings, relevant evidence and sources rather than retelling the post beside its original text. It separates intermediate/tool-command output from the final answer and reports an incomplete check if no reader-facing answer arrives. The store and GitHub Stable/Latest now offer the same version.
+**Latest Stable: [0.9.12](https://github.com/bwjoke/SuperX/releases/tag/v0.9.12) — [install from the Chrome Web Store](https://chromewebstore.google.com/detail/superx/clcflilaihhnnglfamdblhopokpnlioo) or [download the ZIP](https://github.com/bwjoke/SuperX/releases/download/v0.9.12/SuperX.zip).** Version 0.9.12 fixes the right-column header jumping down when expanding an inline reply. Published in the Chrome Web Store on October 20, 2026, it is now also GitHub Stable/Latest.
 
-**Preview [0.9.12](https://github.com/bwjoke/SuperX/releases/tag/v0.9.12) — [download ZIP](https://github.com/bwjoke/SuperX/releases/download/v0.9.12/SuperX.zip):** fixes the right-column header jumping down when expanding an inline reply. This manually installed Preview is not yet uploaded to the Chrome Web Store.
+Introduced in 0.9.11, Fact Check runs directly, without the previous explanation step. It asks for concise findings, relevant evidence and sources rather than retelling the post beside its original text. It separates intermediate/tool-command output from the final answer and reports an incomplete check if no reader-facing answer arrives.
 
 Version 0.9.11 offers three independent connections, in this order: **Sign in · The X Subscription** (browser-only OAuth, the default for a new installation), **Grok API Key**, and **Grok Build · Local CLI / ACP**. All three have guidance for **Windows and macOS**, and retain language following, custom prompts, comments, history and Token/model information. Existing selections and settings are preserved; nonempty older settings without a connection choice, or missing/empty settings with legacy credentials, keep the API route. There is no automatic provider fallback or quota bypass. See [connection setup](docs/CONNECTIONS.md). Earlier Windows Chrome acceptance used six authorization scopes. The current four-scope flow has now passed fresh user-approved sign-in with the reduced permissions shown on the official page, followed by a live Grok 4.3 Fact Check with clickable sources. Four-scope full-browser restart and natural-expiry checks remain separate; store publication is not a new installed-browser pass. See [acceptance scope](docs/CONNECTIONS.md#acceptance-scope).
 
@@ -22,17 +22,16 @@ The extension uses Manifest V3 and plain JavaScript. Browser-only subscription l
 
 | Entry | Purpose | Current status |
 | --- | --- | --- |
-| [Chrome Web Store — Stable](https://chromewebstore.google.com/detail/superx/clcflilaihhnnglfamdblhopokpnlioo) | Install and update through Chrome | 0.9.11 published |
-| [Stable 0.9.11](https://github.com/bwjoke/SuperX/releases/tag/v0.9.11) · [Download ZIP](https://github.com/bwjoke/SuperX/releases/download/v0.9.11/SuperX.zip) | The same version for manual installation and updates | Stable/Latest |
-| [Preview 0.9.12](https://github.com/bwjoke/SuperX/releases/tag/v0.9.12) · [Download ZIP](https://github.com/bwjoke/SuperX/releases/download/v0.9.12/SuperX.zip) | Inline reply and header-alignment fix; manual updates | Pre-release; not yet uploaded to the store |
+| [Chrome Web Store — Stable](https://chromewebstore.google.com/detail/superx/clcflilaihhnnglfamdblhopokpnlioo) | Install and update through Chrome | 0.9.12 published |
+| [Stable 0.9.12](https://github.com/bwjoke/SuperX/releases/tag/v0.9.12) · [Download ZIP](https://github.com/bwjoke/SuperX/releases/download/v0.9.12/SuperX.zip) | The same version for manual installation and updates | Stable/Latest |
 | [0.7.26 archive](https://github.com/bwjoke/SuperX/releases/tag/v0.7.26) | Earlier release with explanations; original files retained | Historical |
 | [All GitHub Releases](https://github.com/bwjoke/SuperX/releases) | Versioned installation packages, source and checksums | Available |
-| [Latest stable ZIP](https://github.com/bwjoke/SuperX/releases/latest/download/SuperX.zip) | Installation package of the latest stable GitHub release | 0.9.11 |
+| [Latest stable ZIP](https://github.com/bwjoke/SuperX/releases/latest/download/SuperX.zip) | Installation package of the latest stable GitHub release | 0.9.12 |
 | [GitHub Issues](https://github.com/bwjoke/SuperX/issues) | Bugs, feature requests and shared support for both channels | Open |
 
-[SuperX.vip](https://superx.vip/) is the website; [bwjoke/SuperX](https://github.com/bwjoke/SuperX) is the project home for source, release notes and support. **GitHub's Latest entry means the latest stable release.** Version 0.9.11 was promoted from Preview to Stable/Latest on October 19, 2026 after store publication; its tag, attachments and hashes remain unchanged. The newer [0.9.12 Preview](https://github.com/bwjoke/SuperX/releases/tag/v0.9.12) is available separately and does not replace the stable download. See [release channels](docs/RELEASE_CHANNELS.md).
+[SuperX.vip](https://superx.vip/) is the website; [bwjoke/SuperX](https://github.com/bwjoke/SuperX) is the project home for source, release notes and support. **GitHub's Latest entry means the latest stable release.** Version 0.9.12 was promoted from Preview to Stable/Latest on October 20, 2026 after store publication; its tag, attachments and hashes remain unchanged. See [release channels](docs/RELEASE_CHANNELS.md).
 
-The [acceptance record](docs/RELEASE_CHECKLIST.md) separates 0.9.11's Windows Chrome OAuth checks from historical 0.7.26 results. Store availability does not establish a new store-installed functional test, four-scope full-browser restart/expiry behavior or installed Edge/macOS acceptance.
+The [acceptance record](docs/RELEASE_CHECKLIST.md) separates 0.9.12's reply/header checks, 0.9.11's Windows Chrome OAuth checks and historical 0.7.26 results. Store availability does not establish a new store-installed functional test, four-scope full-browser restart/expiry behavior or installed Edge/macOS acceptance.
 
 ## Features
 
@@ -52,7 +51,7 @@ SuperX's AI features require a configured connection; local browsing history wor
 
 Requirements: desktop Chrome or Chromium-based Edge 120+, and provider access to the selected model and search tools. API Key and OAuth modes run entirely in the browser. The optional local mode provides Windows PowerShell and macOS Terminal guidance for official Grok. OAuth has been exercised in installed Windows Chrome; macOS, other browsers and local CLI acceptance remain separate checks. Automated tests are not a live-device pass.
 
-For Chrome Stable 0.9.11, install from the store:
+For Chrome Stable 0.9.12, install from the store:
 
 1. Open [SuperX in the Chrome Web Store](https://chromewebstore.google.com/detail/superx/clcflilaihhnnglfamdblhopokpnlioo) and choose **Add to Chrome**.
 2. Open **Settings → Connection**. New installations default to **Sign in · The X Subscription**: choose **Sign in to Grok** and approve the short code on the official page. You can instead configure **Grok API Key** or **Grok Build · Local CLI / ACP**. Each initially selects **Grok 4.3 / None**. Save settings, enable SuperX and open X.
@@ -60,10 +59,10 @@ For Chrome Stable 0.9.11, install from the store:
 
 For Edge or a manual GitHub installation:
 
-1. Download the [**0.9.11 Stable installation ZIP**](https://github.com/bwjoke/SuperX/releases/download/v0.9.11/SuperX.zip) and extract it, or choose another labelled Preview or Stable package from [Releases](https://github.com/bwjoke/SuperX/releases). The versioned `SuperX-<version>.zip` and `SuperX.zip` attachments are identical. Alternatively, download the source and use its `extension/` folder.
+1. Download the [**0.9.12 Stable installation ZIP**](https://github.com/bwjoke/SuperX/releases/download/v0.9.12/SuperX.zip) and extract it, or choose another labelled Preview or Stable package from [Releases](https://github.com/bwjoke/SuperX/releases). The versioned `SuperX-<version>.zip` and `SuperX.zip` attachments are identical. Alternatively, download the source and use its `extension/` folder.
 2. Open `chrome://extensions` or `edge://extensions` and enable **Developer mode**.
 3. Choose **Load unpacked** and select the folder containing `manifest.json`.
-4. Open SuperX settings, configure a connection available in that release and save. Enable SuperX and refresh X. Version 0.9.11 supports subscription sign-in, API Key and CLI / ACP; older archived releases may offer fewer connections.
+4. Open SuperX settings, configure a connection available in that release and save. Enable SuperX and refresh X. Version 0.9.12 supports subscription sign-in, API Key and CLI / ACP; older archived releases may offer fewer connections.
 
 To upgrade a manual installation, replace the files in the folder you actually loaded, reload the extension, then refresh X. Keep that folder in a permanent location. The GitHub-generated source archive is different from the extension ZIP attached to a release.
 

@@ -2,13 +2,13 @@
 
 **读懂 X，边刷边核查。**
 
-[Chrome 商店安装](https://chromewebstore.google.com/detail/superx/clcflilaihhnnglfamdblhopokpnlioo) · [稳定版 ZIP](https://github.com/bwjoke/SuperX/releases/latest/download/SuperX.zip) · [0.9.11 更新说明](https://github.com/bwjoke/SuperX/releases/tag/v0.9.11) · [官网](https://superx.vip/) · [支持](https://github.com/bwjoke/SuperX/issues) · [English](README.md) · [隐私说明](PRIVACY.md)
+[Chrome 商店安装](https://chromewebstore.google.com/detail/superx/clcflilaihhnnglfamdblhopokpnlioo) · [稳定版 ZIP](https://github.com/bwjoke/SuperX/releases/latest/download/SuperX.zip) · [0.9.12 更新说明](https://github.com/bwjoke/SuperX/releases/tag/v0.9.12) · [官网](https://superx.vip/) · [支持](https://github.com/bwjoke/SuperX/issues) · [English](README.md) · [隐私说明](PRIVACY.md)
 
 SuperX 是 Chrome / Edge 扩展，通过 Grok 订阅登录、自己的 API Key 或官方本机 Grok Build 连接，核查当前可见 X 帖子中的事实主张。答案流式显示在紧贴信息流的完整右栏，跟随 X 的主题、字体和界面语言，保留左栏及原帖布局。
 
-**最新稳定版：[0.9.11](https://github.com/bwjoke/SuperX/releases/tag/v0.9.11)——[Chrome 商店安装](https://chromewebstore.google.com/detail/superx/clcflilaihhnnglfamdblhopokpnlioo)或[下载安装 ZIP](https://github.com/bwjoke/SuperX/releases/download/v0.9.11/SuperX.zip)。** 0.9.11 直接进行 Fact Check，不再前置解释，优先提供简洁结论、相关证据和出处，避免在右栏复述左侧已有的原帖。同时区分中间过程、工具指令和最终回答；没有收到面向读者的回答时，提示核查未完成。商店与 GitHub Stable/Latest 现已提供同一版本。
+**最新稳定版：[0.9.12](https://github.com/bwjoke/SuperX/releases/tag/v0.9.12)——[Chrome 商店安装](https://chromewebstore.google.com/detail/superx/clcflilaihhnnglfamdblhopokpnlioo)或[下载安装 ZIP](https://github.com/bwjoke/SuperX/releases/download/v0.9.12/SuperX.zip)。** 0.9.12 修复展开帖子内回复框后，右栏顶部被向下拉动的问题。该版本已于 2026-10-20 在 Chrome 商店上架，并晋升为 GitHub Stable/Latest。
 
-**预览版 [0.9.12](https://github.com/bwjoke/SuperX/releases/tag/v0.9.12)——[下载 ZIP](https://github.com/bwjoke/SuperX/releases/download/v0.9.12/SuperX.zip)：** 修复展开帖子内回复框后，右栏顶部被向下拉动的问题。此预览版需手动安装，尚未上传 Chrome 商店。
+0.9.11 开始直接进行 Fact Check，不再前置解释，优先提供简洁结论、相关证据和出处，避免在右栏复述左侧已有的原帖。同时区分中间过程、工具指令和最终回答；没有收到面向读者的回答时，提示核查未完成。
 
 0.9.11 依次提供三种独立连接方式：**订阅登录 · The X Subscription**（浏览器内 OAuth，新安装默认）、**Grok API Key**、**本机 Grok Build · CLI / ACP**。三种均提供 **Windows 和 macOS** 引导，保留语言同步、自定义指令、评论、历史及 Token／模型信息。已有来源和设置保留；旧设置非空但没有来源选项，或设置缺失／为空而留有旧版凭据时，继续使用 API 路径。不会自动切换来源或绕过额度。见 [连接引导](docs/CONNECTIONS.md)。此前 Windows Chrome 验收使用六项授权范围。新的四项权限现已由用户确认官方页不再显示姓名／头像和邮箱，重新授权后已连接；随后真实 Grok 4.3 核查及可点击出处通过。四项权限的完整浏览器重启恢复和自然到期仍待单独验收；商店上架不等于新增实装功能验收通过。见 [验收范围](docs/CONNECTIONS.md#acceptance-scope)。
 
@@ -22,17 +22,16 @@ SuperX 是 Chrome / Edge 扩展，通过 Grok 订阅登录、自己的 API Key �
 
 | 入口 | 用途 | 当前状态 |
 | --- | --- | --- |
-| [Chrome 商店 · 稳定版](https://chromewebstore.google.com/detail/superx/clcflilaihhnnglfamdblhopokpnlioo) | 通过 Chrome 安装与更新 | 0.9.11 已上架 |
-| [稳定版 0.9.11](https://github.com/bwjoke/SuperX/releases/tag/v0.9.11) · [下载 ZIP](https://github.com/bwjoke/SuperX/releases/download/v0.9.11/SuperX.zip) | 同一版本的手动安装与更新 | Stable/Latest |
-| [预览版 0.9.12](https://github.com/bwjoke/SuperX/releases/tag/v0.9.12) · [下载 ZIP](https://github.com/bwjoke/SuperX/releases/download/v0.9.12/SuperX.zip) | 回复框与右栏顶部对齐修复，需手动更新 | Pre-release，尚未上传商店 |
+| [Chrome 商店 · 稳定版](https://chromewebstore.google.com/detail/superx/clcflilaihhnnglfamdblhopokpnlioo) | 通过 Chrome 安装与更新 | 0.9.12 已上架 |
+| [稳定版 0.9.12](https://github.com/bwjoke/SuperX/releases/tag/v0.9.12) · [下载 ZIP](https://github.com/bwjoke/SuperX/releases/download/v0.9.12/SuperX.zip) | 同一版本的手动安装与更新 | Stable/Latest |
 | [0.7.26 历史版本](https://github.com/bwjoke/SuperX/releases/tag/v0.7.26) | 含解释功能的旧版，原始文件保留 | 历史归档 |
 | [所有 GitHub Releases](https://github.com/bwjoke/SuperX/releases) | 各版本安装包、源码及校验值 | 已开放 |
-| [最新稳定版 ZIP](https://github.com/bwjoke/SuperX/releases/latest/download/SuperX.zip) | GitHub 最新稳定版本的安装包 | 0.9.11 |
+| [最新稳定版 ZIP](https://github.com/bwjoke/SuperX/releases/latest/download/SuperX.zip) | GitHub 最新稳定版本的安装包 | 0.9.12 |
 | [GitHub Issues](https://github.com/bwjoke/SuperX/issues) | 两个渠道共用的报错、需求与支持入口 | 已开放 |
 
-[SuperX.vip](https://superx.vip/) 是官网；[bwjoke/SuperX](https://github.com/bwjoke/SuperX) 是代码、更新说明和支持的项目主页。**GitHub 的 Latest 指最新稳定版。** 0.9.11 在商店公开后，于 2026-10-19 从 Preview 晋升为 Stable/Latest，保留原 tag、附件及校验值。较新的 [0.9.12 Preview](https://github.com/bwjoke/SuperX/releases/tag/v0.9.12) 单独提供，不替换稳定版下载。发布与晋升流程见[双渠道说明](docs/RELEASE_CHANNELS.md)。
+[SuperX.vip](https://superx.vip/) 是官网；[bwjoke/SuperX](https://github.com/bwjoke/SuperX) 是代码、更新说明和支持的项目主页。**GitHub 的 Latest 指最新稳定版。** 0.9.12 在商店公开后，于 2026-10-20 从 Preview 晋升为 Stable/Latest，保留原 tag、附件及校验值。发布与晋升流程见[双渠道说明](docs/RELEASE_CHANNELS.md)。
 
-[验收记录](docs/RELEASE_CHECKLIST.md)区分了 0.9.11 的 Windows Chrome OAuth 实测和 0.7.26 历史结果。商店上架不等于已新增商店实装功能、四项权限完整浏览器重启／到期或 Edge／macOS 实装验收。
+[验收记录](docs/RELEASE_CHECKLIST.md)区分了 0.9.12 的回复框／右栏顶部检查、0.9.11 的 Windows Chrome OAuth 实测和 0.7.26 历史结果。商店上架不等于已新增商店实装功能、四项权限完整浏览器重启／到期或 Edge／macOS 实装验收。
 
 ## 功能
 
@@ -52,7 +51,7 @@ AI 功能需要配置一种连接；本机浏览历史不依赖连接。订阅 O
 
 需要桌面版 Chrome 或 Chromium 版 Edge 120 及以上，以及所选模型／工具的使用权限。API Key 和 OAuth 均仅需浏览器；可选本机模式提供 Windows PowerShell 和 macOS 终端引导。OAuth 已在 Windows Chrome 实装测试；macOS、其他浏览器及本机 CLI 仍需各自验收。自动化测试不等于实机通过。
 
-安装 Chrome 稳定版 0.9.11：
+安装 Chrome 稳定版 0.9.12：
 
 1. 打开 [Chrome 商店中的 SuperX](https://chromewebstore.google.com/detail/superx/clcflilaihhnnglfamdblhopokpnlioo)，点击「添加至 Chrome」。
 2. 打开「设置 → 连接」。新安装默认选择「订阅登录 · The X Subscription」：点击「登录 Grok」，在官方页核对短码并授权。也可改为「Grok API Key」或「本机 Grok Build · CLI / ACP」。三种来源分别默认 **Grok 4.3／关闭推理**。保存设置、启用 SuperX，再打开 X。
@@ -60,10 +59,10 @@ AI 功能需要配置一种连接；本机浏览历史不依赖连接。订阅 O
 
 使用 Edge 或从 GitHub 手动安装时：
 
-1. 下载 [**0.9.11 稳定版安装 ZIP**](https://github.com/bwjoke/SuperX/releases/download/v0.9.11/SuperX.zip) 并解压，或在 [Releases](https://github.com/bwjoke/SuperX/releases) 中选择其他预览／稳定版本。附加的 `SuperX-<版本>.zip` 和 `SuperX.zip` 内容完全相同。也可下载源码，使用其中的 `extension/` 文件夹。
+1. 下载 [**0.9.12 稳定版安装 ZIP**](https://github.com/bwjoke/SuperX/releases/download/v0.9.12/SuperX.zip) 并解压，或在 [Releases](https://github.com/bwjoke/SuperX/releases) 中选择其他预览／稳定版本。附加的 `SuperX-<版本>.zip` 和 `SuperX.zip` 内容完全相同。也可下载源码，使用其中的 `extension/` 文件夹。
 2. 打开 `chrome://extensions` 或 `edge://extensions`，开启「开发者模式」。
 3. 点击「加载已解压的扩展程序」，选择包含 `manifest.json` 的文件夹。
-4. 在 SuperX 设置中配置该版本支持的连接，保存、启用 SuperX 并刷新 X。0.9.11 支持订阅登录、API Key 和 CLI／ACP；归档的旧版本可能提供较少连接方式。
+4. 在 SuperX 设置中配置该版本支持的连接，保存、启用 SuperX 并刷新 X。0.9.12 支持订阅登录、API Key 和 CLI／ACP；归档的旧版本可能提供较少连接方式。
 
 手动安装版升级时，将新版文件覆盖到实际加载的目录，重新加载扩展，再刷新 X。请把该目录放在固定位置。GitHub 自动生成的源码压缩包与 Release 附加的扩展安装包不同。
 

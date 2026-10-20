@@ -2,17 +2,19 @@
 
 This checklist separates reproducible checks from manual browser and service checks. A passing mock test suite is not evidence that a particular X account, browser installation, or paid API request works.
 
-## 0.9.12 Preview — 2026-10-19
+## 0.9.12 Stable promotion — 2026-10-20
 
-[Preview release](https://github.com/bwjoke/SuperX/releases/tag/v0.9.12) · [Installable ZIP](https://github.com/bwjoke/SuperX/releases/download/v0.9.12/SuperX.zip). This repair keeps X's inline reply toolbar out of primary-navigation detection and updates rail geometry when native navigation changes height. Chrome Web Store and GitHub **Stable/Latest remain 0.9.11**; 0.9.12 is a separate Pre-release.
+[Stable release](https://github.com/bwjoke/SuperX/releases/tag/v0.9.12) · [Installable ZIP](https://github.com/bwjoke/SuperX/releases/download/v0.9.12/SuperX.zip) · [Chrome Web Store](https://chromewebstore.google.com/detail/superx/clcflilaihhnnglfamdblhopokpnlioo). This repair keeps X's inline reply toolbar out of primary-navigation detection and updates rail geometry when native navigation changes height. First published as Preview on October 19, it became Chrome Web Store and GitHub **Stable/Latest** on October 20. The layout checks below belong to the October 19 installed candidate.
 
 - [x] Pass **263 content regressions** and **1,082 automated validation checks**, including inline reply controls, real navigation, hidden/duplicate tabs, temporary zero/oversized navigation, observation cleanup and preserved existing answers.
 - [x] Pass **912 isolated browser checks across 12 scenarios with 38 screenshots**, covering the layout repair. These do not establish new live provider or installed-browser account acceptance.
 - [x] Validate exported public source with **1,082 checks** and rebuild the installation ZIP with identical bytes.
 - [x] After the user reloaded the extension, exercise actual installed **Windows Chrome 0.9.12**: focus the inline reply editor, scroll away and back, open an image, and open/close the new-post dialog. The rail returns correctly and the four existing completed answers remain available.
 - [x] Record the accepted installation ZIP SHA-256: `c34d378b2eb37660a0d029c0e2c36b2dd4077a3548413a5a9b35ca55d293c885`. The versioned ZIP and `SuperX.zip` alias must have identical bytes.
-- [ ] Upload that exact installation ZIP to the existing Chrome Web Store item. It has **not been uploaded or submitted** by this publication step; do not upload the source ZIP.
-- [ ] After 0.9.12 is actually published by the store, verify the version and delivered package before promoting the same GitHub release to Stable/Latest. Preserve 0.9.11's published tag and attachments.
+- [x] The maintainer confirmed store publication. A direct request to the public listing and the Google-delivered CRX both report **0.9.12** on October 20.
+- [x] Compare the delivered CRX with the accepted installation ZIP: **49 ordinary files byte-identical**, only Google's `update_url` added to the manifest, and only `_metadata/verified_contents.json` added. CRX SHA-256: `2b96c5b4ff1b4043d7f4cc236e7d0230ce1ba5748ef30b724ba367a186ba1386`. This is a payload comparison, not installation or independent CRX-signature verification.
+- [x] Promote the same GitHub release to Stable/Latest without moving its tag or replacing its seven attachments. Preserve all published 0.9.11 files as historical artifacts.
+- [ ] Complete a new store-installed functional test separately; public availability and payload comparison do not establish that pass.
 
 This is targeted layout acceptance. It does not add evidence for the earlier pending four-scope full-browser restart, natural token expiry, installed Edge/macOS operation or new live API Key/CLI acceptance. Those scopes remain as recorded below.
 
@@ -20,7 +22,7 @@ This is targeted layout acceptance. It does not add evidence for the earlier pen
 
 ## 0.9.11 Stable promotion — 2026-10-19
 
-[Stable release](https://github.com/bwjoke/SuperX/releases/tag/v0.9.11) · [Installable ZIP](https://github.com/bwjoke/SuperX/releases/download/v0.9.11/SuperX.zip) · [Chrome Web Store](https://chromewebstore.google.com/detail/superx/clcflilaihhnnglfamdblhopokpnlioo). The official listing reports version **0.9.11**, updated **October 19, 2026**. Promote the existing GitHub release from Preview to **Stable/Latest** by changing status only: do not move its tag, rebuild or replace attachments, or change published hashes. The 0.7.26 release remains a historical archive, not the current Latest.
+[Archived release](https://github.com/bwjoke/SuperX/releases/tag/v0.9.11) · [Installable ZIP](https://github.com/bwjoke/SuperX/releases/download/v0.9.11/SuperX.zip). The official listing reported **0.9.11** on **October 19, 2026**. That release was promoted from Preview to **Stable/Latest** by changing status only; its tag, attachments and hashes were preserved. Version 0.9.12 superseded it on October 20; both 0.9.11 and 0.7.26 remain historical archives.
 
 The functional evidence below was collected on October 18 from the installed Windows Chrome candidate. Store publication is a distribution result, not a new store-installed functional pass or evidence for pending browsers, restart or expiry scenarios.
 
