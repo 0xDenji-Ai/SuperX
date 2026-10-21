@@ -169,6 +169,7 @@ function queueBuildConnection(message,clear=false){
   if(next&&!next.webSearch&&!next.xSearch)return Promise.resolve({ok:false,errorKey:'options.urlSearchRequired'});
   if(!clear&&sameBuildConnection(connection))return queueSettingsMutation(next??settings);
   const generation=++buildConnectionGeneration;buildConnectionPending++;
+  if(settings.provider==='build')revision++;
   for(const job of [...jobs.values()].filter(job=>job.settings.provider==='build'))abortJob(job);
   buildStatusAt=0;buildStatus={connected:false,available:false,installed:false,errorCode:'BUILD_CONNECTION_REQUIRED'};
   void broadcastConfig();
@@ -233,7 +234,7 @@ async function publicConfig() {
   const status=securityStatus();
   const historyConfig=history.config();
   if(settings.provider==='build')ensureBuildStatus();
-  return {settings,ready:providerAllowsCalls(),keyState:status.keyState,credentialIdentity:settings.provider==='oauth'?oauthCredentialIdentity:'',oauthStatus:oauthFeedStatus(),apiBudgetPaused:false,apiCapacityPaused:false,...(settings.provider==='build'?{buildStatus:{...buildStatus,ready:buildReady()}}:{}),buildConnection:{configured:validBuildSecret(buildSecret),port:settings.buildPort},historyEnabled:historyConfig.enabled,historyEpoch:historyConfig.epoch};
+  return {settings,taskRevision:revision,ready:providerAllowsCalls(),keyState:status.keyState,credentialIdentity:settings.provider==='oauth'?oauthCredentialIdentity:'',oauthStatus:oauthFeedStatus(),apiBudgetPaused:false,apiCapacityPaused:false,...(settings.provider==='build'?{buildStatus:{...buildStatus,ready:buildReady()}}:{}),buildConnection:{configured:validBuildSecret(buildSecret),port:settings.buildPort},historyEnabled:historyConfig.enabled,historyEpoch:historyConfig.epoch};
 }
 async function notifyHistoryChanged(){await chrome.runtime.sendMessage({type:'HISTORY_CHANGED',...history.config()}).catch(()=>{});}
 async function broadcastHistoryConfig(){
@@ -283,6 +284,68 @@ function sanitizePost(raw) {
   const context = p => ({id:text(p.id),url:Core.canonicalPostUrl(p.url),text:text(p.text),language:language(p.language),author:text(p.author).slice(0,200),timestamp:text(p.timestamp).slice(0,60),hasMedia:Boolean(p.hasMedia),images:(Array.isArray(p.images)?p.images:[]).slice(0,4).map(img=>({url:GrokFirstAPI.safeUrl(img.url),alt:text(img.alt).slice(0,500)})).filter(img=>img.url && new URL(img.url).hostname === 'pbs.twimg.com')});
   return {...context(raw),id,url,quotedContext:(Array.isArray(raw.quotedContext)?raw.quotedContext:[]).slice(0,2).map(context)};
 }
+function sanitizeDraft(raw) {
+  if(!raw||typeof raw!=='object'||Array.isArray(raw)||typeof raw.id!=='string'||!/^[A-Za-z0-9_-]{1,80}$/.test(raw.id)||typeof raw.text!=='string'||!raw.text.trim()||raw.text.length>30000)throw new Error('请输入不超过 30000 字符的草稿。');
+  if(raw.mode!=null&&!['post','reply'].includes(raw.mode))throw new Error('无法识别草稿类型。');
+  const mode=raw.mode||(raw.context!=null||raw.threadContext!=null?'reply':'post');
+  const result={kind:'draft',id:raw.id,text:raw.text.trim(),mode,...(raw.hasMedia===true?{hasMedia:true}:{})};
+  // A native composer preview can lack a permalink. Only its explicit marker
+  // permits a text snapshot, never a malformed or mismatched supplied identity.
+  // Quotes have a bounded depth/count; composer attachments remain excluded.
+  const project=(value,limit,quoteDepth=0,full=false)=>{
+    if(!value||typeof value!=='object'||Array.isArray(value))throw new Error('无法识别帖子上下文。');
+    const snapshot=value.snapshotOnly===true&&value.id==null&&value.url==null;
+    let post;
+    if(snapshot){
+      if(typeof value.text!=='string'||!value.text.trim()&&value.hasMedia!==true)throw new Error('无法识别帖子快照。');
+      const hint=Core.resolvePostLanguage('auto',{language:value.language,text:''});
+      post={id:null,url:null,text:value.text.slice(0,12000),language:hint==='auto'?'':hint,
+        author:typeof value.author==='string'?value.author.slice(0,200):'',timestamp:typeof value.timestamp==='string'?value.timestamp.slice(0,60):'',hasMedia:value.hasMedia===true};
+    }else post=sanitizePost(value);
+    const shortened=typeof value.text==='string'&&value.text.length>limit;
+    const out=full&&!snapshot?{...post}:{id:post.id,url:post.url,text:post.text,language:post.language,author:post.author,timestamp:post.timestamp,hasMedia:post.hasMedia};
+    out.text=post.text.slice(0,limit);
+    if(snapshot)out.snapshotOnly=true;
+    if(shortened||value.textTruncated===true)out.textTruncated=true;
+    if(quoteDepth>0&&Object.hasOwn(value,'quotedContext')){
+      if(!Array.isArray(value.quotedContext))throw new Error('无法识别引用帖上下文。');
+      const seen=new Set();out.quotedContext=[];
+      for(const child of value.quotedContext){
+        const quote=project(child,3000,quoteDepth-1),key=contextKey(quote);
+        if(seen.has(key))continue;
+        seen.add(key);out.quotedContext.push(quote);if(out.quotedContext.length===2)break;
+      }
+    }else delete out.quotedContext;
+    return out;
+  };
+  // `value` is already projected and bounded. A snapshot's quoted content,
+  // language and media/truncation flags distinguish otherwise identical text.
+  const contextKey=value=>value.id?'id:'+value.id:JSON.stringify(['snapshot',value]);
+  if(mode==='reply'){
+    if(raw.context!=null)result.context=project(raw.context,12000,2,true);
+    if(Object.hasOwn(raw,'threadContext')){
+      if(!Array.isArray(raw.threadContext))throw new Error('无法识别回复上下文。');
+      const seen=new Set(result.context?[contextKey(result.context)]:[]),unique=[];
+      for(const value of raw.threadContext){
+        const post=project(value,12000,2),key=contextKey(post);
+        if(seen.has(key))continue;
+        seen.add(key);unique.push(post);
+      }
+      const selected=unique.length>6?[unique[0],...unique.slice(-5)]:unique;
+      result.threadContext=selected.map((value,index)=>project(value,index===0?3000:1000,2));
+    }
+  }else if(Object.hasOwn(raw,'quotedContext')){
+    if(!Array.isArray(raw.quotedContext))throw new Error('无法识别引用帖上下文。');
+    const seen=new Set();
+    result.quotedContext=[];
+    for(const value of raw.quotedContext){
+      const post=project(value,3000,2),key=contextKey(post);if(seen.has(key))continue;
+      seen.add(key);result.quotedContext.push(post);
+      if(result.quotedContext.length===2)break;
+    }
+  }
+  return result;
+}
 function cacheKey(post, s, inputFingerprint) {
   const mode=Core.explanationMode(s);
   const prompts=['fact-check-prompts-v2-deeper',mode==='preset'?Core.DEFAULT_PROMPTS.verify:s.verifyPrompt];
@@ -302,6 +365,7 @@ function commentCacheKey(post,s,inputFingerprint,analysis) {
   return JSON.stringify(['GrokFirst-comments-v2-language',s.provider,s.provider==='build'?['official-ws-v1',s.buildPort,s.buildModel]:s.provider==='oauth'?[s.oauthCredentialId,s.oauthModel]:s.apiModel,s.language,Core.postFingerprint(post),analysis,...prompts,selectedEffort(s)]);
 }
 function commentsJob(job) { return job.settings.task==='comments'; }
+function draftJob(job) { return job.settings.task==='draft'; }
 function billingMetadata(value,provider) { return ['api','build','oauth'].includes(provider)?GrokFirstAPI.sanitizedMetadata(value):{}; }
 function requestMetadata(value,provider) {
   if(!['api','oauth'].includes(provider))return {};
@@ -328,6 +392,9 @@ async function loadAPIDiagnostics() {
   }catch{/* Diagnostics must not prevent normal requests or account safety. */}
 }
 function rememberAPIDiagnostics(job,value,code) {
+  // Unpublished draft tasks never write provider diagnostics to storage. Even
+  // a nominally redacted upstream error may echo a fragment of private input.
+  if(draftJob(job))return;
   if(!['api','oauth'].includes(job.settings.provider)||job.diagnosticsRecorded||!API_DIAGNOSTIC_CODES.has(code))return;
   const diagnostics=requestMetadata(value,'api').requestDiagnostics;
   if(!diagnostics)return;
@@ -472,10 +539,10 @@ chrome.runtime.onConnect.addListener(port => {
       if(message.type==='SET_RAIL_COLLAPSED') {
         railStates[client.tabId]=Boolean(message.collapsed);
         if(railStates[client.tabId]) {
-          for(const waiting of [...jobs.values()].filter(job=>job.client.tabId===client.tabId&&!runningJobs.has(job))) {
+          for(const waiting of [...jobs.values()].filter(job=>job.client.tabId===client.tabId&&!draftJob(job)&&!runningJobs.has(job))) {
             abortJob(waiting,true);jobError(waiting,'右栏已收起，未开始的分析已暂停。','RAIL_COLLAPSED');
           }
-          queue=queue.filter(job=>job.client.tabId!==client.tabId);pump();
+          queue=queue.filter(job=>job.client.tabId!==client.tabId||draftJob(job));pump();
         }
         for(const peer of clients)if(peer.tabId===client.tabId)send(peer.port,{type:'RAIL_VISIBILITY',collapsed:Boolean(railStates[client.tabId])});
         await persistRailStates();return;
@@ -489,8 +556,9 @@ chrome.runtime.onConnect.addListener(port => {
         if(job?.client===client)abortJob(job);
         send(port,{type:'ERROR',requestId:messageRequestId,error:'未开始的分析已暂停。',code:'CANCELLED'});return;
       }
-      if(!['ANALYZE','GENERATE_COMMENTS'].includes(message.type)) return;
+      if(!['ANALYZE','ANALYZE_DRAFT','GENERATE_COMMENTS'].includes(message.type)) return;
       const comments=message.type==='GENERATE_COMMENTS';
+      const draft=message.type==='ANALYZE_DRAFT';
       const report=(error,code,extra={})=>send(port,{type:comments?'COMMENT_ERROR':'ERROR',requestId,error,code,...extra});
       const requestId=messageRequestId;
       if(!requestId) return;
@@ -498,21 +566,21 @@ chrome.runtime.onConnect.addListener(port => {
       const currentCredentials=()=>settings.provider==='oauth'?receivedOAuthGeneration===oauthGeneration:settings.provider==='build'?receivedBuildGeneration===buildConnectionGeneration:receivedCredentialGeneration===securityGeneration;
       if(client.cancelEpoch!==receivedEpoch || receivedRevision!==revision||!currentCredentials()){report('任务已取消。','CANCELLED');return;}
       if(settings.provider==='api'&&(securityPending || securityFault)) { report('API Key 设置需要重新确认，请在设置中重试。','NEEDS_KEY');return; }
-      const snapshot={...settings,...(settings.provider==='oauth'?{oauthCredentialId:oauth.status().credentialId||''}:{}),...(comments?{task:'comments'}:{})};
+      const snapshot={...settings,...(settings.provider==='oauth'?{oauthCredentialId:oauth.status().credentialId||''}:{}),...(comments?{task:'comments'}:draft?{task:'draft',language:'auto'}:{})};
       if(Core.isNonTextGenerationModel(Core.providerModel(snapshot))){report(GrokFirstAPI.publicError({code:'MODEL_UNSUPPORTED'}).error,'MODEL_UNSUPPORTED');return;}
-      if(!settings.enabled&&!comments) { report('已暂停自动分析。','PAUSED'); return; }
-      if(railStates[client.tabId]){report('右栏已收起。','RAIL_COLLAPSED');return;}
+      if(!settings.enabled&&!comments&&!draft) { report('已暂停自动分析。','PAUSED'); return; }
+      if(railStates[client.tabId]&&!draft){report('右栏已收起。','RAIL_COLLAPSED');return;}
       let post,inputFingerprint;
-      try { inputFingerprint=Core.postFingerprint(message.post);post=sanitizePost(message.post); } catch(e) { report(e.message,'POST_INVALID'); return; }
-      if(!comments&&!snapshot.webSearch&&!snapshot.xSearch) { report('通过帖子链接读取全文需要启用 X 搜索或网页搜索。','URL_SEARCH_REQUIRED');return; }
+      try { if(draft)post=sanitizeDraft(message.draft);else {inputFingerprint=Core.postFingerprint(message.post);post=sanitizePost(message.post);} } catch(e) { report(draft?'请输入有效的草稿和回复上下文。':e.message,draft?'DRAFT_INVALID':'POST_INVALID'); return; }
+      if(!comments&&!draft&&!snapshot.webSearch&&!snapshot.xSearch) { report('通过帖子链接读取全文需要启用 X 搜索或网页搜索。','URL_SEARCH_REQUIRED');return; }
       const analysis=comments?sanitizeAnalysis(message.analysis):undefined;
-      const fingerprint=comments?commentCacheKey(post,snapshot,inputFingerprint,analysis):cacheKey(post,snapshot,inputFingerprint);
-      const ticket=historyTicket(post,snapshot),historyLanguage=Core.resolvePostLanguage(snapshot.language,post);
-      const cached=message.force ? null : cachedResult(fingerprint);
+      const fingerprint=draft?null:comments?commentCacheKey(post,snapshot,inputFingerprint,analysis):cacheKey(post,snapshot,inputFingerprint);
+      const ticket=draft?null:historyTicket(post,snapshot),historyLanguage=draft?'':Core.resolvePostLanguage(snapshot.language,post);
+      const cached=draft||message.force ? null : cachedResult(fingerprint);
       if(cached) { rememberHistoryResult(ticket,cached,comments,historyLanguage);send(port,comments?{type:'COMMENT_RESULT',requestId,comments:cached.comments,cached:true,...billingMetadata(cached,snapshot.provider)}:{type:'RESULT',requestId,result:withBillingMetadata(cached,snapshot.provider,snapshot.apiVerification),cached:true}); return; }
       const config=await publicConfig();
       if(!clients.has(client)||client.cancelEpoch!==receivedEpoch||receivedRevision!==revision||client.requestCancellations.get(requestId)!==receivedCancellation||!currentCredentials())return;
-      if(railStates[client.tabId]){report('右栏已收起。','RAIL_COLLAPSED');return;}
+      if(railStates[client.tabId]&&!draft){report('右栏已收起。','RAIL_COLLAPSED');return;}
       if(!config.ready) {
         if(settings.provider==='oauth')report('请在设置中连接 Grok 订阅并选择可用模型。',oauth.status().errorCode||(!oauth.status().connected?'OAUTH_LOGIN_REQUIRED':'OAUTH_MODEL_UNAVAILABLE'));
         else report(settings.provider==='build'?'请在设置中连接 Grok Build。':'请打开设置并输入 xAI API Key。',settings.provider==='build'?(buildStatus.errorCode||'BUILD_NOT_CONNECTED'):'NEEDS_KEY');
@@ -522,7 +590,7 @@ chrome.runtime.onConnect.addListener(port => {
       if(jobs.has(key)) return;
       const job={key,requestId,post,inputFingerprint,analysis,client,clientEpoch:receivedEpoch,settings:snapshot,revision:receivedRevision,fingerprint,historyTicket:ticket,historyLanguage,started:false,retryAttempts:0,completedBilling:[],controller:new AbortController()};
       jobs.set(key,job);
-      const before=comments?queue.findIndex(waiting=>!commentsJob(waiting)):-1;
+      const before=comments||draft?queue.findIndex(waiting=>!commentsJob(waiting)&&!draftJob(waiting)):-1;
       if(before>=0)queue.splice(before,0,job);else queue.push(job);
       if(!comments)send(port,{type:'QUEUED',requestId});pump();
     }).catch(()=>send(port,{type:message.type==='GENERATE_COMMENTS'?'COMMENT_ERROR':'ERROR',requestId:message.requestId,error:'处理失败，请重新加载扩展。'}));
@@ -604,7 +672,7 @@ function completeAttempt(job){
   if(job.attemptCompleted)return;
   job.attemptCompleted=true;releaseAPISlot(job);runningJobs.delete(job);
   const plan=job.retryPlan;job.retryPlan=undefined;
-  if(plan&&logicalJobActive(job)&&!railStates[job.client.tabId]){
+  if(plan&&logicalJobActive(job)&&(!railStates[job.client.tabId]||draftJob(job))){
     const billing=aggregateBilling(job,job.billing);
     job.completedBilling.push(billingMetadata(job.billing,job.settings.provider));
     const next=job.retryAttempts+1;
@@ -614,7 +682,7 @@ function completeAttempt(job){
       error:plan.error,code:plan.code,...plan.extra,...billing,...(partialResult?{partialResult}:{})});
     job.retryTimer=setTimeout(()=>{
       job.retryTimer=undefined;
-      if(!logicalJobActive(job)||railStates[job.client.tabId]){removeJob(job);return;}
+      if(!logicalJobActive(job)||railStates[job.client.tabId]&&!draftJob(job)){removeJob(job);return;}
       job.previousPartial=job.retainedFactCheck?sanitizeAnalysis(job.retainedFactCheck):undefined;
       job.nextRetryAttempt=next;job.controller=new AbortController();job.executionFinished=false;job.attemptCompleted=false;
       job.billing=undefined;job.requestDiagnostics=undefined;job.diagnosticsRecorded=false;job.attemptHasReaderText=false;
@@ -653,9 +721,9 @@ async function executeJob(job) {
   try {
     // Legacy session counts are informational only, never a dispatch limit.
     // Manual comment drafts are a separate task and do not increment them.
-    const used=commentsJob(job)?quotas[client.tabId]||0:quotas[client.tabId]=(quotas[client.tabId] || 0)+1;
+    const used=commentsJob(job)||draftJob(job)?quotas[client.tabId]||0:quotas[client.tabId]=(quotas[client.tabId] || 0)+1;
     startAPIDeadline(job);
-    if(!commentsJob(job))void persistQuotas().catch(()=>{});
+    if(!commentsJob(job)&&!draftJob(job))void persistQuotas().catch(()=>{});
     if(!liveJob(job))return;
     send(client.port,{type:commentsJob(job)?'COMMENT_START':'START',requestId,retryAttempt:job.retryAttempts,maxRetries:Core.AUTO_RETRY_LIMIT,...(commentsJob(job)?{}:{used})});
     const onUpdate=update=>{
@@ -696,8 +764,8 @@ async function executeJob(job) {
     Object.assign(result,aggregateBilling(job,job.billing));
     releaseAPISlot(job);pump();
     result.completedAt=Date.now();
-    rememberHistoryResult(job.historyTicket,result,commentsJob(job),job.historyLanguage);
-    if(epoch===cacheEpoch && !['incomplete','failed'].includes(result.verificationStatus)) {
+    if(!draftJob(job))rememberHistoryResult(job.historyTicket,result,commentsJob(job),job.historyLanguage);
+    if(!draftJob(job)&&epoch===cacheEpoch && !['incomplete','failed'].includes(result.verificationStatus)) {
       cache[job.fingerprint]=result;
       cache=pruneCache(cache);
       // Display a completed answer immediately. Optional serialized cache I/O
@@ -728,7 +796,7 @@ async function executeJob(job) {
       const safeError=e.code==='MODEL_UNSUPPORTED'?GrokFirstAPI.publicError(e):job.settings.provider==='build'?SuperXBuild.publicError(e):GrokFirstAPI.publicError(e);
       const budgetFailure=['api','oauth'].includes(job.settings.provider)?apiBudgetFailure(e):undefined;
       const capacityFailure=['api','oauth'].includes(job.settings.provider)&&apiCapacityFailure(e)?GrokFirstAPI.sanitizedVerificationFailure(e.verificationFailure)||GrokFirstAPI.sanitizedVerificationFailure({stage:'verify',code:'SERVER',...e.failureDetails,errorCode:'API_CAPACITY'}):undefined;
-      if(partialResult)rememberHistoryResult(job.historyTicket,{...partialResult,completedAt:Date.now()},false,job.historyLanguage);
+      if(partialResult&&!draftJob(job))rememberHistoryResult(job.historyTicket,{...partialResult,completedAt:Date.now()},false,job.historyLanguage);
       rememberAPIDiagnostics(job,{...diagnosticMetadata,verificationFailure:e.verificationFailure||partialResult?.verificationFailure||budgetFailure||capacityFailure},safeError.code);
       const failureMetadata={...errorBilling,...diagnosticMetadata,...(commentsJob(job)?(budgetFailure||capacityFailure?{verificationFailure:budgetFailure||capacityFailure}:{}):{...verificationMetadata({verificationFailure:e.verificationFailure||partialResult?.verificationFailure||budgetFailure||capacityFailure},job.settings.apiVerification),partialResult})};
       if(!retryPlan(job,e,safeError.code,failureMetadata))jobError(job,safeError.error,safeError.code,{...failureMetadata,retryAttempts:job.retryAttempts});
@@ -739,7 +807,7 @@ async function executeJob(job) {
       const billing=aggregateBilling(job,job.billing);
       const partialResult=timedOut&&job.retainedFactCheck?withBillingMetadata({...job.retainedFactCheck,...billing,verificationStatus:'incomplete',
         ...verificationMetadata(reason,job.settings.apiVerification)},job.settings.provider,job.settings.apiVerification):undefined;
-      if(partialResult)rememberHistoryResult(job.historyTicket,{...partialResult,completedAt:Date.now()},false,job.historyLanguage);
+      if(partialResult&&!draftJob(job))rememberHistoryResult(job.historyTicket,{...partialResult,completedAt:Date.now()},false,job.historyLanguage);
       const metadata={...billing,...(timedOut&&!commentsJob(job)?verificationMetadata(reason,job.settings.apiVerification):{}),...(partialResult?{partialResult}:{} )};
       if(!timedOut||!retryPlan(job,reason,reason.code,metadata))jobError(job,timedOut?GrokFirstAPI.publicError(reason).error:'请求已取消；可手动重试。',timedOut?reason.code:'CANCELLED',{...metadata,retryAttempts:job.retryAttempts});
     }
@@ -848,7 +916,11 @@ function queueSecurityMutation(message) {
   securityPending++;
   let pauseReset;
   if(message.settings&&JSON.stringify(message.settings)!==JSON.stringify(settings))pauseReset=invalidateSecurityJobs();
-  else {for(const job of [...jobs.values()].filter(job=>job.settings.provider==='api'))abortJob(job);pauseReset=clearQueuePause('api');}
+  else {
+    if(settings?.provider==='api')revision++;
+    for(const job of [...jobs.values()].filter(job=>job.settings.provider==='api'))abortJob(job);
+    pauseReset=clearQueuePause('api');
+  }
   cache={};cacheEpoch++;
   // Invalidate at receipt, before asynchronous storage or settings changes.
   void ready.then(()=>broadcastConfig()).catch(()=>{});
@@ -889,7 +961,7 @@ async function saveSettings(input) {
   if(JSON.stringify(next)!==JSON.stringify(settings)) {
     const modelChanged=next.apiModel!==settings.apiModel;
     const jobSettings=value=>{
-      const {explainPrompt,verifyPrompt,commentsPrompt,interfaceLanguage,dwellMs,analysisDefaultsVersion,oauthRemember,...other}=value;
+      const {explainPrompt,verifyPrompt,draftPrompt,postDraftPrompt,replyDraftPrompt,commentsPrompt,interfaceLanguage,dwellMs,analysisDefaultsVersion,oauthRemember,...other}=value;
       return other;
     };
     const cancelsJobs=JSON.stringify(jobSettings(next))!==JSON.stringify(jobSettings(settings));

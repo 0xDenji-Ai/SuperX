@@ -2,13 +2,15 @@
 
 **读懂 X，边刷边核查。**
 
-[Chrome 商店安装](https://chromewebstore.google.com/detail/superx/clcflilaihhnnglfamdblhopokpnlioo) · [稳定版 ZIP](https://github.com/bwjoke/SuperX/releases/latest/download/SuperX.zip) · [0.9.12 更新说明](https://github.com/bwjoke/SuperX/releases/tag/v0.9.12) · [官网](https://superx.vip/) · [支持](https://github.com/bwjoke/SuperX/issues) · [English](README.md) · [隐私说明](PRIVACY.md)
+[Chrome 商店安装](https://chromewebstore.google.com/detail/superx/clcflilaihhnnglfamdblhopokpnlioo) · [稳定版 ZIP](https://github.com/bwjoke/SuperX/releases/latest/download/SuperX.zip) · [试用 0.9.13 Preview](https://github.com/bwjoke/SuperX/releases/tag/v0.9.13) · [官网](https://superx.vip/) · [支持](https://github.com/bwjoke/SuperX/issues) · [English](README.md) · [隐私说明](PRIVACY.md)
 
 SuperX 是 Chrome / Edge 扩展，通过 Grok 订阅登录、自己的 API Key 或官方本机 Grok Build 连接，核查当前可见 X 帖子中的事实主张。答案流式显示在紧贴信息流的完整右栏，跟随 X 的主题、字体和界面语言，保留左栏及原帖布局。
 
 **最新稳定版：[0.9.12](https://github.com/bwjoke/SuperX/releases/tag/v0.9.12)——[Chrome 商店安装](https://chromewebstore.google.com/detail/superx/clcflilaihhnnglfamdblhopokpnlioo)或[下载安装 ZIP](https://github.com/bwjoke/SuperX/releases/download/v0.9.12/SuperX.zip)。** 0.9.12 修复展开帖子内回复框后，右栏顶部被向下拉动的问题。该版本已于 2026-10-20 在 Chrome 商店上架，并晋升为 GitHub Stable/Latest。
 
 0.9.11 开始直接进行 Fact Check，不再前置解释，优先提供简洁结论、相关证据和出处，避免在右栏复述左侧已有的原帖。同时区分中间过程、工具指令和最终回答；没有收到面向读者的回答时，提示核查未完成。
+
+**最新预览版——[0.9.13](https://github.com/bwjoke/SuperX/releases/tag/v0.9.13)：** 发帖或回复时，可点击 Post／Reply 左侧的圆形 **SuperX** 标志按钮，在撰写工具栏下方查看核查回答，长回答原地展开。按钮在空草稿时保持显示但禁用，输入文字后启用。沿用当前连接，回答跟随草稿语言；仅在明确点击后发送草稿文字，引用帖与可获取的上级回复作为辅助上下文，不读取草稿附件，也不自动发布或附加任何内容。草稿结果仅保留于当前页面内存，不进入历史、缓存或排障日志。[下载预览版 ZIP](https://github.com/bwjoke/SuperX/releases/download/v0.9.13/SuperX.zip) 后手动安装；Chrome 商店和 GitHub Stable/Latest 仍为 0.9.12。实测范围及待测项见[验收记录](docs/RELEASE_CHECKLIST.md#0913-draft-check-preview--2026-10-22)。
 
 0.9.11 依次提供三种独立连接方式：**订阅登录 · The X Subscription**（浏览器内 OAuth，新安装默认）、**Grok API Key**、**本机 Grok Build · CLI / ACP**。三种均提供 **Windows 和 macOS** 引导，保留语言同步、自定义指令、评论、历史及 Token／模型信息。已有来源和设置保留；旧设置非空但没有来源选项，或设置缺失／为空而留有旧版凭据时，继续使用 API 路径。不会自动切换来源或绕过额度。见 [连接引导](docs/CONNECTIONS.md)。此前 Windows Chrome 验收使用六项授权范围。新的四项权限现已由用户确认官方页不再显示姓名／头像和邮箱，重新授权后已连接；随后真实 Grok 4.3 核查及可点击出处通过。四项权限的完整浏览器重启恢复和自然到期仍待单独验收；商店上架不等于新增实装功能验收通过。见 [验收范围](docs/CONNECTIONS.md#acceptance-scope)。
 
@@ -24,6 +26,7 @@ SuperX 是 Chrome / Edge 扩展，通过 Grok 订阅登录、自己的 API Key �
 | --- | --- | --- |
 | [Chrome 商店 · 稳定版](https://chromewebstore.google.com/detail/superx/clcflilaihhnnglfamdblhopokpnlioo) | 通过 Chrome 安装与更新 | 0.9.12 已上架 |
 | [稳定版 0.9.12](https://github.com/bwjoke/SuperX/releases/tag/v0.9.12) · [下载 ZIP](https://github.com/bwjoke/SuperX/releases/download/v0.9.12/SuperX.zip) | 同一版本的手动安装与更新 | Stable/Latest |
+| [预览版 0.9.13](https://github.com/bwjoke/SuperX/releases/tag/v0.9.13) · [下载 ZIP](https://github.com/bwjoke/SuperX/releases/download/v0.9.13/SuperX.zip) | 发帖和回复前核查草稿 | Pre-release，手动更新 |
 | [0.7.26 历史版本](https://github.com/bwjoke/SuperX/releases/tag/v0.7.26) | 含解释功能的旧版，原始文件保留 | 历史归档 |
 | [所有 GitHub Releases](https://github.com/bwjoke/SuperX/releases) | 各版本安装包、源码及校验值 | 已开放 |
 | [最新稳定版 ZIP](https://github.com/bwjoke/SuperX/releases/latest/download/SuperX.zip) | GitHub 最新稳定版本的安装包 | 0.9.12 |
@@ -38,7 +41,7 @@ SuperX 是 Chrome / Edge 扩展，通过 Grok 订阅登录、自己的 API Key �
 - 停止滚动后，帖子连续可见满 1 秒才自动分析；停留时间和 API 并发都可调整，默认并发为 3。
 - 连续右栏覆盖 X 原右栏，可随时收起、恢复原右栏。
 - 一次流式请求直接进行 Fact Check，省去前置解释和重复的原帖摘要，优先给出有用的结论、证据及必要限制。
-- 内置或自定义 prompt，事实核查和评论指令分别可编辑。
+- 内置或自定义 prompt：帖子与草稿共用核查核心，新帖／回复各有可编辑的上下文说明，评论建议另有指令。新帖引用、回复链与原帖用于理解草稿，所写内容始终是核查目标，深度与证据标准一致。
 - Auto 跟随帖子当前显示的语言，切换原文／翻译时同步；也可指定固定输出语言。
 - 流式 Markdown、可点击出处、每条 Token 用量及模型详情。
 - 一键生成三条一句话评论建议，点击复制，不自动发布。

@@ -49,6 +49,49 @@ test('inline profiles use a denied curated sentinel and disable local discovery 
     for(const field of ['skills','mcpServers','tools'])assert.deepEqual(profile[field],[]);assert.equal(profile.mcpInheritance,'none');assert.deepEqual(profile.hooks,{});assert.equal(profile.memory,null);assert.equal(profile.disallowedTools.includes('x_search'),!xSearch);assert.equal(profile.disallowedTools.includes('web_search'),!webSearch);
   }
 });
+test('draft profiles keep the unpublished text as the only target with the same restricted tools',()=>{
+  for(const [xSearch,webSearch] of [[false,false],[true,false],[false,true],[true,true]]){
+    const profile=ACP.agentProfile(request({target:'draft',xSearch,webSearch}));
+    assert.match(profile.promptBody,/only fact-check target is the user's unpublished draft/);
+    assert.match(profile.promptBody,/Parent-post and reply context are auxiliary data only/);
+    assert.match(profile.promptBody,/Every finding must address the draft itself/);
+    assert.equal(profile.permissionMode,'dontAsk');assert.deepEqual(profile.toolConfig,{tools:[{id:'GrokBuild:read_file'}]});
+    for(const field of ['agentsMd','discoverSkills','inheritSkills','injectDefaultTools','background'])assert.equal(profile[field],false);
+    for(const field of ['skills','mcpServers','tools'])assert.deepEqual(profile[field],[]);
+    assert.equal(profile.disallowedTools.includes('read_file'),true);assert.equal(profile.disallowedTools.includes('run_terminal_cmd'),true);
+    assert.equal(profile.disallowedTools.includes('x_search'),!xSearch);assert.equal(profile.disallowedTools.includes('web_search'),!webSearch);
+    if(!xSearch&&!webSearch){assert.match(profile.promptBody,/requested reader-facing fact-check answer/);assert.match(profile.promptBody,/Do not use tools or search/);assert.doesNotMatch(profile.promptBody,/Return only the requested JSON array/);}
+    else {assert.match(profile.promptBody,/Search to investigate factual assertions, events and denials/);assert.match(profile.promptBody,/original reports, dates, places, mechanisms and relevant cases/);assert.match(profile.promptBody,/Search is optional for purely subjective taste/);assert.doesNotMatch(profile.promptBody,/Check the public claims/);}
+    assert.match(profile.promptBody,/supplied thread root, earlier ancestors and direct reply/);
+    assert.match(profile.promptBody,/A short denial can dispute the earlier event without repeating its details/);
+  }
+  assert.match(ACP.agentProfile({task:'comments',xSearch:false,webSearch:false}).promptBody,/Return only the requested JSON array/);
+});
+
+test('drafts may complete without search while observed allowed searches retain their evidence metadata',async()=>{
+  for(const [xSearch,webSearch,noSearch] of [[false,false,true],[true,false,true],[true,true,true],[true,false,false]]){
+    const text='The claim that PHP is universally best depends on the intended use.',f=fixture({noSearch,text});
+    const result=await f.client.run(request({target:'draft',xSearch,webSearch,prompt:'Check only the unpublished PHP draft.'}));
+    assert.equal(result.type,'RESULT');assert.equal(result.text,text);assert.equal(result.searched,!noSearch);
+    assert.equal(result.sources.length,noSearch?0:1);assert.deepEqual(f.cleanups,[{id:'session-1',cancel:false}]);
+    const sent=f.messages.find(message=>message.method==='session/prompt');assert.equal(sent.params._meta,undefined);
+    assert.deepEqual(sent.params.prompt,[{type:'text',text:'Check only the unpublished PHP draft.'}]);
+  }
+});
+
+test('draft target cannot turn a comment task or arbitrary target into a different permission profile',async()=>{
+  for(const change of [{target:'draft',task:'comments',xSearch:false},{target:'post'},{target:null},{target:true},{target:{kind:'draft'}}]){
+    const f=fixture();await assert.rejects(f.client.run(request(change)),{code:'BUILD_PROTOCOL_ERROR'});assert.equal(f.messages.length,0);
+  }
+});
+
+test('drafts still reject local tools, unenabled search families and reverse permission requests',async()=>{
+  for(const [behavior,change] of [[{localTool:true},{}],[{toolName:'read_file'},{}],[{}, {xSearch:false,webSearch:true}],[{reverse:'session/request_permission'},{}],[{reverse:'fs/read_text_file'},{}]]){
+    const f=fixture({...behavior,holdPrompt:true});await assert.rejects(f.client.run(request({target:'draft',...change})),{code:'BUILD_TOOL_POLICY'});
+    assert.equal(f.cleanups[0].cancel,true);
+  }
+});
+
 test('zero-prompt status confirms authentication, actual empty toolset and account model catalog',async()=>{
   const f=fixture({models:['grok-4.6','grok-4.7-build-fast'],currentModel:'grok-4.6'}),status=await f.client.status();assert.equal(status.available,true);assert.equal(status.authenticated,true);assert.equal(status.runtimeVersionConfirmed,true);assert.equal(status.version,'1.0.60');assert.deepEqual(status.modelCatalog.map(item=>item.id),['grok-4.6','grok-4.7-build-fast']);
   assert.equal(f.messages.some(message=>message.method==='session/prompt'),false);assert.deepEqual(f.messages[0].params.clientCapabilities,{});const created=f.messages.find(message=>message.method==='session/new');assert.equal(created.params.cwd,'C:\\SuperX\\isolated work');assert.equal(JSON.stringify(status).includes('isolated work'),false);assert.equal(created.params._meta.agentProfile.name,'superx-none');assert.deepEqual(created.params.mcpServers,[]);assert.deepEqual(f.cleanups,[{id:'session-1',cancel:false}]);

@@ -1,5 +1,5 @@
 {
   "extensionDescription": {
-    "message": "用 Grok 深入查核 X 貼文，查看證據來源和近 24 小時瀏覽紀錄。支援 The X Subscription 訂閱登入或自己的 API Key。"
+    "message": "讓 Grok 自動深入查核所有看到的 X 貼文，包括自己的發文、留言，附上證據來源連結。查看自己近 24 小時瀏覽紀錄。支援 The X Subscription 訂閱登入或自己的 API Key。"
   }
 }

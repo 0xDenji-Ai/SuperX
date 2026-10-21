@@ -32,6 +32,8 @@ Use these destinations on the README, website and store support entry:
 | Install stable | `https://chromewebstore.google.com/detail/superx/clcflilaihhnnglfamdblhopokpnlioo` |
 | Website | `https://superx.vip/` |
 | Source | `https://github.com/bwjoke/SuperX` |
+| Preview 0.9.13 release | `https://github.com/bwjoke/SuperX/releases/tag/v0.9.13` |
+| Download Preview 0.9.13 ZIP | `https://github.com/bwjoke/SuperX/releases/download/v0.9.13/SuperX.zip` |
 | Stable 0.9.12 release | `https://github.com/bwjoke/SuperX/releases/tag/v0.9.12` |
 | Download Stable 0.9.12 ZIP | `https://github.com/bwjoke/SuperX/releases/download/v0.9.12/SuperX.zip` |
 | All versions | `https://github.com/bwjoke/SuperX/releases` |
@@ -89,9 +91,11 @@ Until Discussions is enabled, the **Usage question** issue form provides a suppo
 
 [superx.vip](https://superx.vip/) provides the product website, with **Install stable**, **Try preview**, **Source**, **Support** and **Privacy** entries as each destination becomes available. Downloads come from GitHub and the Chrome Web Store. Keep [privacy/](https://superx.vip/privacy/) as a permanent public policy path. The website is deployed and maintained separately; its source and deployment configuration are excluded from the extension repository and source release. Do not deploy the extension repository over the existing website.
 
-## Current release status — 2026-10-20
+## Current release status — 2026-10-22
 
-Version **[0.9.12](https://github.com/bwjoke/SuperX/releases/tag/v0.9.12)** is available from the [Chrome Web Store](https://chromewebstore.google.com/detail/superx/clcflilaihhnnglfamdblhopokpnlioo) and GitHub **Stable/Latest**. The maintainer confirmed publication and a direct request to the public store listing returned version 0.9.12 on October 20. Use its [installation ZIP](https://github.com/bwjoke/SuperX/releases/download/v0.9.12/SuperX.zip) or the [latest stable ZIP](https://github.com/bwjoke/SuperX/releases/latest/download/SuperX.zip). There is no newer published Preview at this promotion.
+Version **[0.9.12](https://github.com/bwjoke/SuperX/releases/tag/v0.9.12)** is available from the [Chrome Web Store](https://chromewebstore.google.com/detail/superx/clcflilaihhnnglfamdblhopokpnlioo) and GitHub **Stable/Latest**. The maintainer confirmed publication and a direct request to the public store listing returned version 0.9.12 on October 20. Use its [installation ZIP](https://github.com/bwjoke/SuperX/releases/download/v0.9.12/SuperX.zip) or the [latest stable ZIP](https://github.com/bwjoke/SuperX/releases/latest/download/SuperX.zip).
+
+**[0.9.13 Preview](https://github.com/bwjoke/SuperX/releases/tag/v0.9.13)** adds explicit draft fact-checking before posting or replying, contextual reply/quote support, and updated localized summaries. Use its separate [installation ZIP](https://github.com/bwjoke/SuperX/releases/download/v0.9.13/SuperX.zip); unpacked installations update manually. Windows Chrome contextual reply and quote checks passed on the earlier functional candidate, followed by isolated validation of the final visual refinements. Installed Edge/macOS, fresh API Key/local Build draft runs and the remaining scenarios in [the checklist](RELEASE_CHECKLIST.md#0913-draft-check-preview--2026-10-22) are not claimed as live passes. Publishing this Preview does not promote it to Stable or submit it to the Chrome Web Store.
 
 Promotion changes release status, notes and current documentation only. The original 0.9.12 tag and all seven release attachments remain unchanged; installation ZIP SHA-256 is `c34d378b2eb37660a0d029c0e2c36b2dd4077a3548413a5a9b35ca55d293c885`. The 0.9.12 layout acceptance below and earlier connection acceptance retain their original scope. Store publication is not a new store-installed functional test.
 
@@ -145,7 +149,9 @@ GitHub 解压版需要手动更新，商店版由 Chrome 更新。当前不同�
 
 2026-10-08 已核验 Chrome 商店公开版本为 0.7.26，商品 ID 为 `clcflilaihhnnglfamdblhopokpnlioo`。Google CRX 与 GitHub ZIP 的非 manifest 文件逐字节相同，仅多出商店验证元数据，manifest 仅增加 `update_url`。用户已确认商店安装后的解释、Fact Check、Key 保存及重启恢复正常；GitHub 同一版本已晋升 Stable/Latest，标签及附件保持不变。这是 10 月 8 日晋升时的历史状态，当时没有更新的预览版。
 
-**当前版本：2026-10-20，[0.9.12](https://github.com/bwjoke/SuperX/releases/tag/v0.9.12) 已在 Chrome 商店公开，并晋升 GitHub Stable/Latest。** 用户确认上架后，直接获取商店公开页面也返回 0.9.12；可通过[商店安装](https://chromewebstore.google.com/detail/superx/clcflilaihhnnglfamdblhopokpnlioo)或[下载稳定版 ZIP](https://github.com/bwjoke/SuperX/releases/download/v0.9.12/SuperX.zip)。晋升保留原 tag、全部附件及校验值，0.9.11 留作历史版本；本次未新增商店实装功能验收。
+**当前稳定版：[0.9.12](https://github.com/bwjoke/SuperX/releases/tag/v0.9.12) 已在 Chrome 商店公开，并保持 GitHub Stable/Latest。** 用户确认上架后，直接获取商店公开页面也返回 0.9.12；可通过[商店安装](https://chromewebstore.google.com/detail/superx/clcflilaihhnnglfamdblhopokpnlioo)或[下载稳定版 ZIP](https://github.com/bwjoke/SuperX/releases/download/v0.9.12/SuperX.zip)。晋升保留原 tag、全部附件及校验值，0.9.11 留作历史版本；本次未新增商店实装功能验收。
+
+**最新预览版：2026-10-22，[0.9.13 Preview](https://github.com/bwjoke/SuperX/releases/tag/v0.9.13)。** 新增发帖／回复前主动核查草稿、引用帖与回复链辅助上下文，更新全部语言概要。[预览安装 ZIP](https://github.com/bwjoke/SuperX/releases/download/v0.9.13/SuperX.zip)需解压安装及手动更新。较早功能候选的 Windows Chrome 回复与引用实测通过；最终按钮视觉修改另经隔离浏览器验证。Edge／macOS 实装、新的 API Key／本机 Build 草稿推理及[清单中的其余场景](RELEASE_CHECKLIST.md#0913-draft-check-preview--2026-10-22)仍不声称实测通过。此次发布未向 Chrome 商店提交，也不改变稳定版。
 
 **2026-10-19：[0.9.11](https://github.com/bwjoke/SuperX/releases/tag/v0.9.11) 当日成为 Chrome 商店及 GitHub Stable/Latest 版本，原[安装 ZIP](https://github.com/bwjoke/SuperX/releases/download/v0.9.11/SuperX.zip)保留。** 当时官方商店公开页显示版本 0.9.11、更新日期 2026-10-19。此版本此前于 10 月 18 日作为 Preview 发布；晋升只改变状态及 Latest 指向，保留原 tag、安装／源码附件及校验值。0.9.12 当日为独立 Preview，随后于 10 月 20 日成为新的 Stable/Latest；0.9.11 和 0.7.26 均保留为历史归档。
 

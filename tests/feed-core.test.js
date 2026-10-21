@@ -72,6 +72,80 @@ const header = (handle, id, datetime = '2026-10-05T01:00:00.000Z') => e('div', {
 ]);
 const tweetText = text => e('div', { 'data-testid': 'tweetText' }, [], text);
 
+test('composer context extracts a profile-only reply preview without inventing a post ID',()=>{
+  const name=e('div',{'data-testid':'User-Name'},[e('a',{href:'/Author'},[],'Author'),e('a',{href:'/Author'},[],'@Author')]);
+  const scope=e('article',{'data-testid':'tweet'},[name,tweetText('The incident described in the reply preview.'),e('time',{datetime:'2026-10-23T10:00:00Z'},[],'2h')]);
+  assert.equal(core.extractPost(scope),null,'Ordinary feed extraction still requires a permalink');
+  const snapshot=core.extractPostContext(scope);
+  assert.equal(snapshot.id,null);assert.equal(snapshot.url,null);assert.equal(snapshot.snapshotOnly,true);
+  assert.equal(snapshot.username,'author');assert.equal(snapshot.text,'The incident described in the reply preview.');
+  assert.equal(snapshot.timestamp,'2026-10-23T10:00:00Z');assert.equal(snapshot.textTruncated,undefined);
+});
+
+test('composer context never treats a referenced body or media status link as its own permalink',()=>{
+  const name=()=>e('div',{'data-testid':'User-Name'},[e('a',{href:'/Writer'},[],'@Writer')]);
+  for(const reference of [e('div',{'data-testid':'tweetText'},[e('a',{href:'/other/status/999'},[],'Referenced claim')],'The draft refers to '),e('a',{href:'/other/status/999'},[e('img',{src:'https://pbs.twimg.com/media/preview.jpg'})])]){
+    const scope=e('article',{},[name(),tweetText('Own visible preview.'),reference,e('time',{datetime:'2026-10-23T10:00:00.000Z'},[],'now')]);
+    const context=core.extractPostContext(scope);assert.equal(context.id,null);assert.equal(context.url,null);assert.equal(context.snapshotOnly,true);assert.equal(context.username,'writer');
+    assert.equal(context.timestamp,'2026-10-23T10:00:00.000Z');assert.match(context.text,/Own visible preview/);
+  }
+  const header=e('div',{'data-testid':'User-Name'},[e('a',{href:'/Writer/status/123'},[],'@Writer')]);
+  const linked=core.extractPostContext(e('article',{},[header,tweetText('Own visible preview.'),e('a',{href:'/other/status/999'},[],'Other post')]));
+  assert.equal(linked.id,'123');assert.equal(linked.url,'https://x.com/writer/status/123');assert.equal(linked.snapshotOnly,undefined);
+});
+
+test('composer context keeps nested native quote buttons separate without tweet test IDs or status links',()=>{
+  const preview=(handle,text,children=[])=>e('button',{},[e('div',{'data-testid':'User-Name'},[
+    e('a',{href:'/'+handle},[],handle),e('a',{href:'/'+handle},[],'@'+handle)]),tweetText(text),e('time',{datetime:'2026-10-23T10:00:00Z'},[],'2h'),...children]);
+  const inner=preview('inside','Inner quotation.'),outer=preview('outside','Outer quotation.',[inner]);
+  const result=core.extractPostContext(outer);
+  assert.equal(result.text,'Outer quotation.');assert.equal(result.username,'outside');assert.equal(result.snapshotOnly,true);
+  assert.equal(result.quotedContext.length,1);assert.equal(result.quotedContext[0].text,'Inner quotation.');
+  assert.equal(result.quotedContext[0].username,'inside');assert.equal(result.quotedContext[0].snapshotOnly,true);
+  const root=e('article',{},[header('parent','100'),tweetText('Parent.'),outer]);
+  const linked=core.extractPostContext(root);
+  assert.equal(linked.id,'100');assert.equal(linked.url,'https://x.com/parent/status/100');assert.equal(linked.snapshotOnly,undefined);
+  assert.equal(linked.text,'Parent.');assert.equal(linked.quotedContext[0].text,'Outer quotation.');
+  assert.equal(linked.quotedContext[0].quotedContext[0].text,'Inner quotation.');
+});
+
+test('composer context unwraps an empty quoteTweet shell around its native preview button',()=>{
+  const source=e('button',{},[header('source','456','2026-10-23T10:00:00.000Z'),tweetText('Nested source retained separately.')]);
+  const outer=e('article',{'data-testid':'tweet'},[header('parent','123','2026-10-23T09:00:00.000Z'),tweetText('Parent visible context.'),e('div',{'data-testid':'quoteTweet'},[source])]);
+  const result=core.extractPostContext(outer);
+  assert.equal(result.id,'123');assert.equal(result.text,'Parent visible context.');assert.equal(result.timestamp,'2026-10-23T09:00:00.000Z');
+  assert.equal(result.quotedContext.length,1);assert.equal(result.quotedContext[0].id,'456');
+  assert.equal(result.quotedContext[0].text,'Nested source retained separately.');assert.equal(result.quotedContext[0].timestamp,'2026-10-23T10:00:00.000Z');
+});
+
+test('composer context preserves ordinary linked-post extraction while capping quote depth and siblings',()=>{
+  const ordinary=e('article',{},[header('parent','123'),tweetText('Parent text.'),e('div',{role:'link'},[header('quoted','456'),tweetText('Quoted text.')])]);
+  assert.deepEqual(core.extractPostContext(ordinary),core.extractPost(ordinary));
+  const preview=(text,children=[])=>e('button',{},[e('div',{'data-testid':'User-Name'},[],text),tweetText(text),e('time',{},[],'now'),...children]);
+  const deepest=preview('Too deep'),inner=preview('Inner',[deepest]),outer=preview('Outer',[inner]);
+  const result=core.extractPostContext(preview('Root',[outer,preview('Second'),preview('Third')]));
+  assert.equal(result.quotedContext.length,2);assert.equal(result.quotedContext[0].quotedContext[0].text,'Inner');
+  assert.deepEqual(result.quotedContext[0].quotedContext[0].quotedContext,[]);
+});
+
+test('composer context usernames use only an unambiguous owned header and matching profile links',()=>{
+  const scope=(name,profile)=>e('article',{},[e('div',{'data-testid':'User-Name'},[e('a',{href:profile},[],name)]),tweetText('Replying to @bodyMention is not an author identity.')]);
+  assert.equal(core.extractPostContext(scope('@OnlyHeader','/OnlyHeader')).username,'onlyheader');
+  for(const [name,profile]of [['OnlyHeader','/OnlyHeader'],['@One @Two','/One'],['@One','/Two'],['@handle_is_over_15','/handle_is_over_15']]){
+    const result=core.extractPostContext(scope(name,profile));assert.equal(result.username,'',name);assert.equal(result.id,null);assert.equal(result.url,null);
+  }
+});
+
+test('composer context marks real Show more and line-clamp truncation independently of missing permalinks',()=>{
+  const linked=e('article',{},[header('parent','123'),tweetText('Visible excerpt.'),e('button',{'data-testid':'tweet-text-show-more-link'},[],'Show more')]);
+  assert.equal(core.extractPostContext(linked).textTruncated,true);assert.equal(core.extractPostContext(linked).snapshotOnly,undefined);
+  assert.equal(core.extractPost(linked).textTruncated,undefined,'The existing feed result shape is unchanged');
+  const text=tweetText('Clamped excerpt.');text.attrs.style='display:-webkit-box;-webkit-line-clamp:2';text.clientHeight=40;text.scrollHeight=80;
+  const preview=e('button',{},[e('div',{'data-testid':'User-Name'},[],'@name'),text]);
+  assert.equal(core.extractPostContext(preview).textTruncated,true);assert.equal(core.extractPostContext(preview).snapshotOnly,true);
+  text.scrollHeight=40;assert.equal(core.extractPostContext(preview).textTruncated,undefined,'A clamp that does not overflow is not truncation');
+});
+
 test('reader output hides the screenshot tool chain at every streaming prefix and on completion',()=>{
   const commands=[
     {absolute_path:'x_thread_fetch',post_id:'2109569541072384120'},
@@ -465,6 +539,23 @@ test('subscription defaults share bounded parallelism and Fact Check while prese
   assert.equal(core.normalizeSettings({apiVerification:'off'}).apiVerification,'only');
 });
 
+test('draft prompt normalization uses an independent default and never inherits a saved post prompt',()=>{
+  const legacy={explanationMode:'custom',verifyPrompt:'Custom post instructions',commentsPrompt:'Custom comment instructions'};
+  const settings=core.normalizeSettings(legacy);
+  assert.equal(settings.verifyPrompt,legacy.verifyPrompt);assert.equal(settings.commentsPrompt,legacy.commentsPrompt);
+  assert.equal(settings.draftPrompt,core.DEFAULT_PROMPTS.draft);assert.notEqual(settings.draftPrompt,settings.verifyPrompt);
+  assert.equal(Object.hasOwn(legacy,'draftPrompt'),false,'Migration must not mutate saved input');
+  for(const draftPrompt of [undefined,null,'',' \n\t',false,0,{},[],['instructions'],'x'.repeat(core.MAX_PROMPT_LENGTH+1)]){
+    const normalized=core.normalizeSettings({...legacy,draftPrompt});
+    assert.equal(normalized.draftPrompt,core.DEFAULT_PROMPTS.draft);assert.equal(normalized.verifyPrompt,legacy.verifyPrompt);
+  }
+  for(const draftPrompt of ['  Check only what I am writing.\n','核查这段草稿。🙂','x'.repeat(core.MAX_PROMPT_LENGTH)]){
+    const normalized=core.normalizeSettings({...legacy,draftPrompt});
+    assert.equal(normalized.draftPrompt,draftPrompt);assert.equal(normalized.verifyPrompt,legacy.verifyPrompt);
+    assert.deepEqual(core.normalizeSettings(normalized),normalized,'Saved custom draft instructions survive normalization');
+  }
+});
+
 test('model profiles expose only supported reasoning choices and are deeply immutable',()=>{
   assert.deepEqual(core.API_MODELS,[
     {value:'grok-4.3',label:'Grok 4.3',efforts:['none','low','medium','high'],defaultEffort:'none'},
@@ -779,6 +870,7 @@ function uiPageFixture(file, settings=API_UI_SETTINGS, storage={}, environment={
 }
 const settleUI=()=>new Promise(resolve=>setImmediate(resolve));
 const uiMessageTypes=fixture=>fixture.messages.map(message=>message.type).filter(type=>!['GET_SECURITY_STATUS','GET_CONFIG','GET_HISTORY_STATUS','GET_BUILD_CONNECTION','GET_OAUTH_STATUS'].includes(type));
+const promptEditorId=name=>({postDraft:'post-draft-prompt',replyDraft:'reply-draft-prompt'}[name]||`${name}-prompt`);
 
 test('Settings model and reasoning controls are required dropdowns with model-specific choices',async()=>{
   const html=fs.readFileSync(path.join(__dirname,'../extension/options.html'),'utf8');
@@ -1091,6 +1183,8 @@ test('live options locale changes preserve drafts and never save settings or sen
   fixture.ids.get('explanation-mode').value='custom';fixture.ids.get('explanation-mode').listeners.change();
   fixture.ids.get('language').value='ko';
   fixture.ids.get('verify-prompt').value='核实最重要的一条事实。';
+  fixture.ids.get('post-draft-prompt').value='核查我的新帖。';
+  fixture.ids.get('reply-draft-prompt').value='只核查我写的回复。';
   fixture.ids.get('comments-prompt').value='Give three friendly replies.';
   fixture.runtimeListeners.forEach(listener=>listener({type:'UI_LANGUAGE_CHANGED',language:'ja-JP'}));
   assert.equal(fixture.ids.get('save').textContent,'設定を保存');
@@ -1105,6 +1199,8 @@ test('live options locale changes preserve drafts and never save settings or sen
   assert.equal(fixture.ids.get('explanation-mode-help').textContent,ui.t('options.customModeHelp','ar'));
   assert.equal(fixture.ids.get('language').value,'ko');
   assert.equal(fixture.ids.get('verify-prompt').value,'核实最重要的一条事实。');
+  assert.equal(fixture.ids.get('post-draft-prompt').value,'核查我的新帖。');
+  assert.equal(fixture.ids.get('reply-draft-prompt').value,'只核查我写的回复。');
   assert.equal(fixture.ids.get('comments-prompt').value,'Give three friendly replies.');
   assert.deepEqual(uiMessageTypes(fixture),['GET_UI_LANGUAGE']);
   assert.ok(fixture.messages.every(message=>!('apiKey' in message)));
@@ -1225,14 +1321,15 @@ test('Key storage preferences and credentials cannot become normalized feed sett
   assert.equal(JSON.stringify(settings).includes('fixture-only-secret'),false);
 });
 
-test('options expose only Fact Check and comments editors with accessible labels and bounded input',async()=>{
+test('options expose separate post, new-draft, reply-draft and comments editors with accessible labels and bounded input',async()=>{
   const fixture=uiPageFixture('options');await settleUI();await settleUI();
-  for(const name of ['verify','comments']){
-    const editor=fixture.ids.get(`${name}-prompt`);
+  for(const name of ['verify','postDraft','replyDraft','comments']){
+    const editor=fixture.ids.get(promptEditorId(name));
     assert.equal(editor.value,core.DEFAULT_PROMPTS[name]);assert.equal(editor.getAttribute('maxlength'),String(core.MAX_PROMPT_LENGTH));
-    assert.equal(editor.getAttribute('spellcheck'),'false');assert.equal(editor.getAttribute('dir'),'auto');assert.equal(editor.getAttribute('aria-describedby'),name==='comments'?'comments-prompt-help':'prompt-rules-help');
+    assert.equal(editor.getAttribute('spellcheck'),'false');assert.equal(editor.getAttribute('dir'),'auto');
+    assert.equal(editor.getAttribute('aria-describedby'),{verify:'verify-prompt-help prompt-rules-help',postDraft:'post-draft-prompt-help prompt-rules-help',replyDraft:'reply-draft-prompt-help prompt-rules-help',comments:'comments-prompt-help'}[name]);
   }
-  for(const id of ['explain-prompt','reset-explain-prompt','api-verification'])assert.equal(fixture.ids.has(id),false,id);
+  for(const id of ['explain-prompt','reset-explain-prompt','draft-prompt','reset-draft-prompt','api-verification'])assert.equal(fixture.ids.has(id),false,id);
   assert.equal(fixture.ids.get('provider').value,'api');
   assert.ok(!fixture.ids.get('api-fields').hidden);
   fixture.ids.get('explanation-mode').value='custom';fixture.ids.get('explanation-mode').listeners.change();
@@ -1240,58 +1337,116 @@ test('options expose only Fact Check and comments editors with accessible labels
   assert.deepEqual(uiMessageTypes(fixture),['GET_UI_LANGUAGE']);
 });
 
-test('options save and reload custom Fact Check and comments without stripping whitespace or extra requests',async()=>{
+test('prompt labels distinguish shared fact-checking rules and new-post or reply context in every supported language',()=>{
+  for(const locale of ui.SUPPORTED_LANGUAGES)for(const key of ['options.verifyPrompt','options.verifyPromptHelp','options.postDraftPrompt','options.postDraftPromptHelp','options.replyDraftPrompt','options.replyDraftPromptHelp']){
+    assert.ok(ui.catalog[locale][key]?.trim(),`${locale}: ${key}`);
+    if(locale!=='en')assert.notEqual(ui.catalog[locale][key],ui.catalog.en[key],`${locale}: ${key}`);
+  }
+  for(const locale of ui.SUPPORTED_LANGUAGES){
+    const labels=['options.verifyPrompt','options.postDraftPrompt','options.replyDraftPrompt'].map(key=>ui.t(key,locale));
+    assert.equal(new Set(labels).size,3,`${locale}: distinct post, new-draft and reply labels`);
+  }
+  assert.equal(ui.t('options.verifyPrompt','en'),'Shared fact-check prompt');
+  assert.equal(ui.t('options.verifyPrompt','zh-CN'),'通用核查提示词');
+  assert.equal(ui.t('options.postDraftPrompt','zh-CN'),'新帖上下文提示词');
+  assert.equal(ui.t('options.replyDraftPrompt','zh-CN'),'回复上下文提示词');
+  assert.match(ui.t('options.verifyPromptHelp','en'),/Posts, new drafts and replies.*same fact-checking standard/);
+  assert.match(ui.t('options.postDraftPromptHelp','en'),/quoted posts.*supporting material.*shared fact-checking standard/);
+  assert.match(ui.t('options.replyDraftPromptHelp','en'),/original post and reply chain.*shared fact-checking standard/);
+  assert.match(ui.t('options.replyDraftPromptHelp','zh-CN'),/楼顶原帖和回复链.*共用上方核查标准/);
+  assert.doesNotMatch(ui.t('options.promptsHelp','en'),/original.*primary|URL/i);
+});
+
+test('options save and reload independent custom post, new-draft, reply-draft and comments prompts without stripping whitespace or extra requests',async()=>{
   const fixture=uiPageFixture('options');await settleUI();await settleUI();
   fixture.ids.get('explanation-mode').value='custom';fixture.ids.get('explanation-mode').listeners.change();
-  const drafts={verify:'只核实原帖中可验证的断言。\n保留来源。\n',comments:'\nOffer three distinct, natural replies. 🙂\n'};
-  for(const [name,value]of Object.entries(drafts))fixture.ids.get(`${name}-prompt`).value=value;
+  const drafts={verify:'只核实原帖中可验证的断言。\n保留来源。\n',postDraft:'\n核查新帖，引用内容是辅助。\n',replyDraft:'\n结合楼顶原帖与回复链核查我写的回复。\n',comments:'\nOffer three distinct, natural replies. 🙂\n'};
+  for(const [name,value]of Object.entries(drafts))fixture.ids.get(promptEditorId(name)).value=value;
   const form=fixture.ids.get('settings-form');await form.listeners.submit({preventDefault(){},currentTarget:form});
   const saved=fixture.messages.find(message=>message.type==='SAVE_SETTINGS');assert.ok(saved);assert.equal(saved.settings.explanationMode,'custom');assert.equal(saved.settings.apiVerification,'only');
   for(const [name,value]of Object.entries(drafts))assert.equal(saved.settings[`${name}Prompt`],value);
   assert.deepEqual(uiMessageTypes(fixture),['GET_UI_LANGUAGE','SAVE_SETTINGS']);
   const reopened=uiPageFixture('options',saved.settings);await settleUI();await settleUI();
   assert.equal(reopened.ids.get('explanation-mode').value,'custom');assert.equal(reopened.ids.get('analysis-prompts').hidden,false);
-  for(const [name,value]of Object.entries(drafts))assert.equal(reopened.ids.get(`${name}-prompt`).value,value);
+  for(const [name,value]of Object.entries(drafts))assert.equal(reopened.ids.get(promptEditorId(name)).value,value);
 });
 
-test('restoring Fact Check or all active prompts edits the form only and leaves the dormant legacy draft unchanged',async()=>{
-  const settings=core.normalizeSettings({explanationMode:'custom',explainPrompt:'Dormant explanation draft',verifyPrompt:'Verify draft',commentsPrompt:'Comments draft'});
+test('restoring individual and all active prompts edits the form only and leaves the dormant legacy draft unchanged',async()=>{
+  const settings=core.normalizeSettings({explanationMode:'custom',explainPrompt:'Dormant explanation draft',verifyPrompt:'Verify draft',postDraftPrompt:'Check my new post',replyDraftPrompt:'Check my reply',draftPrompt:'Legacy draft instructions',commentsPrompt:'Comments draft'});
   const fixture=uiPageFixture('options',settings);await settleUI();await settleUI();
+  for(const [name,other]of [['postDraft','replyDraft'],['replyDraft','postDraft']]){
+    const before=fixture.ids.get(promptEditorId(other)).value;
+    fixture.ids.get(`reset-${promptEditorId(name)}`).listeners.click();
+    assert.equal(fixture.ids.get(promptEditorId(name)).value,core.DEFAULT_PROMPTS[name]);
+    assert.equal(fixture.ids.get(promptEditorId(other)).value,before);
+    assert.equal(fixture.ids.get('verify-prompt').value,'Verify draft');assert.equal(fixture.ids.get('comments-prompt').value,'Comments draft');
+  }
+  fixture.ids.get('post-draft-prompt').value='Another new post prompt';
+  fixture.ids.get('reply-draft-prompt').value='Another reply prompt';
   fixture.ids.get('reset-verify-prompt').listeners.click();
-  assert.equal(fixture.ids.get('verify-prompt').value,core.DEFAULT_PROMPTS.verify);assert.equal(fixture.ids.get('comments-prompt').value,'Comments draft');
+  assert.equal(fixture.ids.get('verify-prompt').value,core.DEFAULT_PROMPTS.verify);assert.equal(fixture.ids.get('post-draft-prompt').value,'Another new post prompt');assert.equal(fixture.ids.get('reply-draft-prompt').value,'Another reply prompt');assert.equal(fixture.ids.get('comments-prompt').value,'Comments draft');
   assert.equal(fixture.ids.get('status').textContent,ui.t('options.promptsReset','en'));assert.deepEqual(uiMessageTypes(fixture),['GET_UI_LANGUAGE']);
   fixture.ids.get('reset-prompts').listeners.click();assert.equal(fixture.ids.get('explanation-mode').value,'custom');
-  for(const name of ['verify','comments'])assert.equal(fixture.ids.get(`${name}-prompt`).value,core.DEFAULT_PROMPTS[name]);
+  for(const name of ['verify','postDraft','replyDraft','comments'])assert.equal(fixture.ids.get(promptEditorId(name)).value,core.DEFAULT_PROMPTS[name]);
   assert.deepEqual(uiMessageTypes(fixture),['GET_UI_LANGUAGE']);
   const form=fixture.ids.get('settings-form');await form.listeners.submit({preventDefault(){},currentTarget:form});
   const saved=fixture.messages.find(message=>message.type==='SAVE_SETTINGS');
-  for(const name of ['verify','comments'])assert.equal(saved.settings[`${name}Prompt`],core.DEFAULT_PROMPTS[name]);
+  for(const name of ['verify','postDraft','replyDraft','comments'])assert.equal(saved.settings[`${name}Prompt`],core.DEFAULT_PROMPTS[name]);
   assert.equal(saved.settings.explainPrompt,'Dormant explanation draft');assert.equal(saved.settings.apiVerification,'only');
+  assert.equal(saved.settings.draftPrompt,'Legacy draft instructions');
 });
 
 test('preset and custom Fact Check switches preserve active drafts without exposing retired explanation choices',async()=>{
   const fixture=uiPageFixture('options',core.normalizeSettings({explanationMode:'custom',apiVerification:'inline',nativeVerification:true}));await settleUI();await settleUI();
-  const drafts={verify:'Verify draft',comments:'Three short replies.'};
-  for(const [name,value]of Object.entries(drafts))fixture.ids.get(`${name}-prompt`).value=value;
+  const drafts={verify:'Verify draft',postDraft:'Check my new post',replyDraft:'Check my reply',comments:'Three short replies.'};
+  for(const [name,value]of Object.entries(drafts))fixture.ids.get(promptEditorId(name)).value=value;
   for(const mode of ['preset','custom']){
     fixture.ids.get('explanation-mode').value=mode;fixture.ids.get('explanation-mode').listeners.change();
     assert.equal(fixture.ids.get('analysis-prompts').hidden,mode!=='custom');assert.equal(fixture.ids.has('api-verification'),false);
     assert.equal(fixture.ids.get('explanation-mode-help').textContent,ui.t(`options.${mode}ModeHelp`,'en'));
-    for(const [name,value]of Object.entries(drafts))assert.equal(fixture.ids.get(`${name}-prompt`).value,value);
+    for(const [name,value]of Object.entries(drafts))assert.equal(fixture.ids.get(promptEditorId(name)).value,value);
     assert.ok(!fixture.ids.get('comments-prompt').hidden);
   }
   assert.deepEqual(uiMessageTypes(fixture),['GET_UI_LANGUAGE']);
 });
 
 test('saving preset Fact Check retains custom active drafts and optional archived explanation for future use',async()=>{
-  const fixture=uiPageFixture('options',core.normalizeSettings({explanationMode:'custom',explainPrompt:'My archived explanation',verifyPrompt:'My verify instructions',commentsPrompt:'My comments instructions'}));await settleUI();await settleUI();
+  const fixture=uiPageFixture('options',core.normalizeSettings({explanationMode:'custom',explainPrompt:'My archived explanation',verifyPrompt:'My verify instructions',postDraftPrompt:'My new post instructions',replyDraftPrompt:'My reply instructions',commentsPrompt:'My comments instructions'}));await settleUI();await settleUI();
   fixture.ids.get('explanation-mode').value='preset';fixture.ids.get('explanation-mode').listeners.change();
   const form=fixture.ids.get('settings-form');await form.listeners.submit({preventDefault(){},currentTarget:form});
   const saved=fixture.messages.find(message=>message.type==='SAVE_SETTINGS');assert.equal(saved.settings.explanationMode,'preset');
-  assert.equal(saved.settings.explainPrompt,'My archived explanation');assert.equal(saved.settings.verifyPrompt,'My verify instructions');assert.equal(saved.settings.commentsPrompt,'My comments instructions');
+  assert.equal(saved.settings.explainPrompt,'My archived explanation');assert.equal(saved.settings.verifyPrompt,'My verify instructions');assert.equal(saved.settings.postDraftPrompt,'My new post instructions');assert.equal(saved.settings.replyDraftPrompt,'My reply instructions');assert.equal(saved.settings.commentsPrompt,'My comments instructions');
   const reopened=uiPageFixture('options',saved.settings);await settleUI();await settleUI();
   reopened.ids.get('explanation-mode').value='custom';reopened.ids.get('explanation-mode').listeners.change();
-  assert.equal(reopened.ids.get('verify-prompt').value,'My verify instructions');assert.equal(reopened.ids.has('explain-prompt'),false);
+  assert.equal(reopened.ids.get('verify-prompt').value,'My verify instructions');assert.equal(reopened.ids.get('post-draft-prompt').value,'My new post instructions');assert.equal(reopened.ids.get('reply-draft-prompt').value,'My reply instructions');assert.equal(reopened.ids.has('explain-prompt'),false);
+});
+
+test('editing either draft prompt marks Settings dirty and saves independently from other prompts',async()=>{
+  for(const name of ['postDraft','replyDraft']){
+    const original=core.normalizeSettings({...API_UI_SETTINGS,explanationMode:'custom',verifyPrompt:'Post instructions',postDraftPrompt:'New post instructions',replyDraftPrompt:'Reply instructions'});
+    const fixture=uiPageFixture('options',original);await settleUI();await settleUI();
+    const editor=fixture.ids.get(promptEditorId(name));editor.value='Updated draft instructions';editor.listeners.input();
+    assert.equal(fixture.ids.get('status').textContent,ui.t('options.unsavedChanges','en'));
+    assert.deepEqual(uiMessageTypes(fixture),['GET_UI_LANGUAGE']);
+    const form=fixture.ids.get('settings-form');await form.listeners.submit({preventDefault(){},currentTarget:form});
+    const saved=fixture.messages.find(message=>message.type==='SAVE_SETTINGS');
+    assert.equal(saved.settings[`${name}Prompt`],'Updated draft instructions');assert.equal(saved.settings.verifyPrompt,'Post instructions');
+    const other=name==='postDraft'?'replyDraft':'postDraft';assert.equal(saved.settings[`${other}Prompt`],original[`${other}Prompt`]);
+    assert.equal(fixture.ids.get('status').textContent,ui.t('options.saved','en'));
+  }
+});
+
+test('either blank draft prompt restores its own default without replacing other custom instructions',async()=>{
+  for(const name of ['postDraft','replyDraft']){
+    const original=core.normalizeSettings({...API_UI_SETTINGS,explanationMode:'custom',verifyPrompt:'Keep my post prompt',postDraftPrompt:'Custom new post prompt',replyDraftPrompt:'Custom reply prompt'});
+    const fixture=uiPageFixture('options',original);await settleUI();await settleUI();
+    fixture.ids.get(promptEditorId(name)).value='';
+    const form=fixture.ids.get('settings-form');await form.listeners.submit({preventDefault(){},currentTarget:form});
+    const saved=fixture.messages.find(message=>message.type==='SAVE_SETTINGS');
+    assert.equal(saved.settings[`${name}Prompt`],core.DEFAULT_PROMPTS[name]);assert.equal(saved.settings.verifyPrompt,'Keep my post prompt');
+    const other=name==='postDraft'?'replyDraft':'postDraft';assert.equal(saved.settings[`${other}Prompt`],original[`${other}Prompt`]);
+    assert.equal(fixture.ids.get(promptEditorId(name)).value,core.DEFAULT_PROMPTS[name]);
+  }
 });
 
 test('every API mode requires a full-post retrieval tool before saving and accepts either search', async () => {
@@ -1322,14 +1477,15 @@ test('retired URL selection loads preset and restoring defaults keeps preset sel
 });
 
 test('options reject an oversized prompt without silently shortening or saving it', async () => {
-  const fixture=uiPageFixture('options');await settleUI();await settleUI();
-  const editor=fixture.ids.get('verify-prompt'),draft='x'.repeat(core.MAX_PROMPT_LENGTH+1);editor.value=draft;
-  const form=fixture.ids.get('settings-form');await form.listeners.submit({preventDefault(){},currentTarget:form});
-  assert.equal(editor.value,draft);
-  assert.equal(editor.focused,true);
-  assert.equal(fixture.ids.get('status').dataset.state,'error');
-  assert.equal(fixture.ids.get('status').textContent,ui.t('options.promptTooLong','en',{limit:core.MAX_PROMPT_LENGTH}));
-  assert.deepEqual(uiMessageTypes(fixture),['GET_UI_LANGUAGE']);
+  for(const name of ['verify','postDraft','replyDraft','comments']){
+    const fixture=uiPageFixture('options');await settleUI();await settleUI();
+    const editor=fixture.ids.get(promptEditorId(name)),draft='x'.repeat(core.MAX_PROMPT_LENGTH+1);editor.value=draft;
+    const form=fixture.ids.get('settings-form');await form.listeners.submit({preventDefault(){},currentTarget:form});
+    assert.equal(editor.value,draft);assert.equal(editor.focused,true);
+    assert.equal(fixture.ids.get('status').dataset.state,'error');
+    assert.equal(fixture.ids.get('status').textContent,ui.t('options.promptTooLong','en',{limit:core.MAX_PROMPT_LENGTH}));
+    assert.deepEqual(uiMessageTypes(fixture),['GET_UI_LANGUAGE']);
+  }
 });
 
 test('live popup locale changes do not read keys or start paid generation', async () => {
@@ -2338,4 +2494,19 @@ test('full-post request identity separates API OAuth and local sources without s
   assert.equal(core.apiPostIdentity({...post,text:'Expanded English content'}, {provider:'oauth',language:'auto'}),identities[1]);
   assert.notEqual(core.apiPostIdentity({...post,language:'zh'}, {provider:'oauth',language:'auto'}),identities[1]);
   assert.equal(identities.some(value=>/accessToken|refreshToken/.test(value)),false);
+});
+
+test('post and reply context prompts migrate legacy custom drafts independently without replacing explicit fields',()=>{
+  assert.equal(core.DEFAULT_PROMPTS.draft,core.DEFAULT_PROMPTS.replyDraft);
+  const legacy={explanationMode:'custom',draftPrompt:'  Keep my legacy draft instructions.\n',verifyPrompt:'Shared core.'};
+  const migrated=core.normalizeSettings(legacy);
+  assert.equal(migrated.postDraftPrompt,legacy.draftPrompt);assert.equal(migrated.replyDraftPrompt,legacy.draftPrompt);assert.equal(migrated.draftPrompt,legacy.draftPrompt);
+  assert.equal(Object.hasOwn(legacy,'postDraftPrompt'),false);assert.equal(Object.hasOwn(legacy,'replyDraftPrompt'),false);
+  for(const field of ['postDraftPrompt','replyDraftPrompt']){
+    const explicit=core.normalizeSettings({...legacy,[field]:'Explicit '+field});assert.equal(explicit[field],'Explicit '+field);
+    const empty=core.normalizeSettings({...legacy,[field]:''});assert.equal(empty[field],core.DEFAULT_PROMPTS[field==='postDraftPrompt'?'postDraft':'replyDraft']);
+  }
+  const defaults=core.normalizeSettings({draftPrompt:core.DEFAULT_PROMPTS.draft});
+  assert.equal(defaults.postDraftPrompt,core.DEFAULT_PROMPTS.postDraft);assert.equal(defaults.replyDraftPrompt,core.DEFAULT_PROMPTS.replyDraft);
+  assert.notEqual(defaults.postDraftPrompt,defaults.replyDraftPrompt);
 });

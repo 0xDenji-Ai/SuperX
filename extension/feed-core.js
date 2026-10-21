@@ -138,13 +138,25 @@
   // Recognize only our exact former default, including copies saved by the
   // custom editor. Preserve every genuinely edited instruction verbatim.
   const RETIRED_VERIFY_PROMPT = 'Fact-check the important, checkable claims in this post. Start directly with useful findings: what the evidence supports, contradicts or leaves unresolved, with corrections and clickable primary sources beside the relevant finding. Add only information the reader cannot already see in the post. Do not summarize, paraphrase, translate or repeat the original post; use at most a minimal identifying claim fragment when needed to make a correction clear. Keep the response concise and let the evidence determine its natural form, without a stock introduction, rigid checklist or generic disclaimer. If there is no meaningful checkable claim, say so briefly instead of manufacturing a fact check.';
+  const RETIRED_DRAFT_PROMPT = 'Fact-check only the user\'s unpublished draft, not the post they are replying to. Examine the draft\'s explicit claims, implied factual premises and checkable comparisons. Use reply context only to resolve references or understand what the draft asserts. Every finding must directly support, correct or qualify a claim or implication of the draft; do not add facts merely because they appear in the parent post. For opinions, jokes or broad superlatives, explain the relevant criteria and investigate useful factual implications without turning personal taste into an objective verdict. Go deeper where useful while keeping the scope anchored to the draft. Start with the most useful conclusion about the draft, followed by concise, directly relevant evidence and clickable primary sources when available. Match the answer\'s length to the draft\'s actual claims. Do not summarize either text, enumerate unrelated parent claims, or rewrite the user\'s wording.';
+  const RETIRED_SHARED_DRAFT_PROMPT = 'Go deeper into the user\'s unpublished draft by investigating its explicit claims, implied factual premises and useful comparisons. First resolve references such as "this incident", "the original post" or "that number" from the supplied thread root, earlier ancestors and direct reply context. A short reply may affirm or deny a concrete event described earlier in the conversation; identify and investigate that event instead of requiring the draft to repeat its details. When the draft makes a factual claim, denies an event, or adopts a checkable premise, use available search tools to trace original reports, dates, places, mechanisms, numbers and relevant cases. Follow leads far enough to test the draft, including chronology or statistics when they matter. For purely subjective opinions, explain relevant criteria without pretending there is a universal objective ranking. Every finding must help assess the draft or its resolved referent; do not turn the task into an unrelated audit of every parent claim. Start with the most useful conclusion, followed by concise evidence and clickable primary sources. Explain a remaining information gap only after using the available context and relevant search leads. Do not summarize either text, add generic disclaimers or rewrite the user\'s wording.';
+  const POST_DRAFT_PROMPT = 'The target is the user\'s unpublished new post. Apply the shared fact-check instructions to that draft. Quoted posts are auxiliary context, not direct parents or independent targets. Resolve references using the draft and any relevant quoted context without assuming a reply relationship.';
+  const REPLY_DRAFT_PROMPT = 'The target is the user\'s unpublished reply. Apply the shared fact-check instructions to that draft and its resolved referents. Use the thread root, earlier ancestors and direct parent to resolve expressions such as "this incident", "the original post" or "that number". A short reply can affirm or deny an earlier event without repeating its details. Use relevant original-post URLs to complete truncated context; do not replace the reply target with an unrelated audit of parent claims.';
   const DEFAULT_PROMPTS = Object.freeze({
     verify: 'Go deeper into this post by investigating its explicit factual claims, reasonably implied factual premises and checkable details. Follow relevant leads in original sources, context, numbers, comparisons and causal reasoning. Start directly with useful findings: what the evidence supports, contradicts or leaves unresolved, with corrections and clickable primary sources beside the relevant finding. Add only information the reader cannot already see in the post. Do not summarize, paraphrase, translate or repeat the original post; use at most a minimal identifying claim fragment when needed to make a correction clear. Keep the response concise and let the evidence determine its natural form, without a stock introduction, rigid checklist or generic disclaimer.',
+    postDraft: POST_DRAFT_PROMPT,
+    replyDraft: REPLY_DRAFT_PROMPT,
+    draft: REPLY_DRAFT_PROMPT,
     comments: 'Draft exactly three distinct optional comments responding to the original X post. Each comment must be one concise natural sentence with a different useful angle. Offer natural and relevant perspectives suitable for the user to review and copy.'
   });
   function normalizePrompt(value, fallback) {
     if (fallback === DEFAULT_PROMPTS.verify && typeof value === 'string' && value.trim() === RETIRED_VERIFY_PROMPT) return fallback;
+    if ([DEFAULT_PROMPTS.postDraft,DEFAULT_PROMPTS.replyDraft].includes(fallback) && typeof value === 'string' && [RETIRED_DRAFT_PROMPT,RETIRED_SHARED_DRAFT_PROMPT].includes(value.trim())) return fallback;
     return typeof value === 'string' && value.trim() && value.length <= MAX_PROMPT_LENGTH ? value : fallback;
+  }
+  function legacyCustomDraftPrompt(value) {
+    return typeof value==='string'&&value.trim()&&value.length<=MAX_PROMPT_LENGTH&&
+      ![RETIRED_DRAFT_PROMPT,RETIRED_SHARED_DRAFT_PROMPT,DEFAULT_PROMPTS.postDraft,DEFAULT_PROMPTS.replyDraft].includes(value.trim())?value:undefined;
   }
   // Defensive presentation only: these values are never executed as commands.
   const TOOL_ARGUMENTS = Object.freeze({
@@ -256,6 +268,9 @@
     xSearch: true,
     explanationMode: 'preset',
     verifyPrompt: DEFAULT_PROMPTS.verify,
+    postDraftPrompt: DEFAULT_PROMPTS.postDraft,
+    replyDraftPrompt: DEFAULT_PROMPTS.replyDraft,
+    draftPrompt: DEFAULT_PROMPTS.draft,
     commentsPrompt: DEFAULT_PROMPTS.comments
   });
 
@@ -369,6 +384,9 @@
       // This dormant field has no default and is never used by live requests.
       ...(typeof value.explainPrompt === 'string' && value.explainPrompt.trim() && value.explainPrompt.length <= MAX_PROMPT_LENGTH ? {explainPrompt: value.explainPrompt} : {}),
       verifyPrompt: normalizePrompt(value.verifyPrompt, DEFAULT_PROMPTS.verify),
+      postDraftPrompt: normalizePrompt(Object.hasOwn(value,'postDraftPrompt')?value.postDraftPrompt:legacyCustomDraftPrompt(value.draftPrompt),DEFAULT_PROMPTS.postDraft),
+      replyDraftPrompt: normalizePrompt(Object.hasOwn(value,'replyDraftPrompt')?value.replyDraftPrompt:legacyCustomDraftPrompt(value.draftPrompt),DEFAULT_PROMPTS.replyDraft),
+      draftPrompt: normalizePrompt(value.draftPrompt, DEFAULT_PROMPTS.draft),
       commentsPrompt: normalizePrompt(value.commentsPrompt, DEFAULT_PROMPTS.comments)
     };
   }
@@ -441,25 +459,25 @@
     return cursor === article ? result : null;
   }
 
-  function ownedBy(element, scope, article) {
-    const quoteRoot = quoteRootFor(element, article);
-    return scope === article ? !quoteRoot : quoteRoot === scope;
+  function ownedBy(element, scope, article, quoteRoot = quoteRootFor) {
+    const root = quoteRoot(element, article);
+    return scope === article ? !root : root === scope;
   }
 
-  function anchorsFor(scope, article) {
-    return all(scope, 'a[href]').filter(anchor => ownedBy(anchor, scope, article) && canonicalPostUrl(attribute(anchor, 'href')));
+  function anchorsFor(scope, article, quoteRoot = quoteRootFor) {
+    return all(scope, 'a[href]').filter(anchor => ownedBy(anchor, scope, article, quoteRoot) && canonicalPostUrl(attribute(anchor, 'href')));
   }
 
-  function mainAnchorFor(scope, article) {
-    const anchors = anchorsFor(scope, article);
+  function mainAnchorFor(scope, article, quoteRoot = quoteRootFor) {
+    const anchors = anchorsFor(scope, article, quoteRoot);
     return anchors.find(anchor => all(anchor, 'time').length > 0) || anchors[0] || null;
   }
 
-  function imagesFor(scope, article) {
+  function imagesFor(scope, article, quoteRoot = quoteRootFor) {
     const images = [];
     const seen = new Set();
     for (const img of all(scope, 'img')) {
-      if (!ownedBy(img, scope, article)) continue;
+      if (!ownedBy(img, scope, article, quoteRoot)) continue;
       const src = attribute(img, 'src') || img.currentSrc || '';
       let url;
       try { url = new URL(src, 'https://x.com'); } catch (_) { continue; }
@@ -475,25 +493,25 @@
     return images;
   }
 
-  function scopePost(scope, article) {
-    const anchor = mainAnchorFor(scope, article);
+  function scopePost(scope, article, quoteRoot = quoteRootFor, anchorFor = mainAnchorFor) {
+    const anchor = anchorFor(scope, article, quoteRoot);
     const url = anchor ? canonicalPostUrl(attribute(anchor, 'href')) : null;
-    const timestamp = (anchor ? all(anchor, 'time') : []).find(element => ownedBy(element, scope, article)) ||
-      all(scope, 'time').find(element => ownedBy(element, scope, article));
-    const userName = all(scope, '[data-testid="User-Name"]').find(element => ownedBy(element, scope, article));
+    const timestamp = (anchor ? all(anchor, 'time') : []).find(element => ownedBy(element, scope, article, quoteRoot)) ||
+      all(scope, 'time').find(element => ownedBy(element, scope, article, quoteRoot));
+    const userName = all(scope, '[data-testid="User-Name"]').find(element => ownedBy(element, scope, article, quoteRoot));
     const visibility = new WeakMap();
-    const textNodes = all(scope, '[data-testid="tweetText"]').filter(element => ownedBy(element, scope, article) && displayed(element, scope, visibility));
+    const textNodes = all(scope, '[data-testid="tweetText"]').filter(element => ownedBy(element, scope, article, quoteRoot) && displayed(element, scope, visibility));
     const texts = textNodes.map(textOf).filter(Boolean);
     const language = textNodes.filter(element => textOf(element)).map(element => attribute(element, 'lang'))
       .find(value => value !== 'auto' && !/^(?:und|mul|zxx)(?:-|$)/i.test(value) && validLanguage(value)) || '';
-    const images = imagesFor(scope, article);
+    const images = imagesFor(scope, article, quoteRoot);
     const idMatch = url && url.match(/\/status\/(\d+)$/);
     const username = url && !url.includes('/i/web/status/') ? url.split('/')[3] : '';
     let author = textOf(userName);
     // The header often contains the timestamp after a middle-dot separator.
     if (author) author = author.split(/\n?\s*·\s*\n?/)[0].replace(/\n+/g, ' ').trim();
     if (!author && username) author = `@${username}`;
-    const hasVideo = all(scope, 'video, [data-testid="videoPlayer"], [data-testid="videoComponent"]').some(element => ownedBy(element, scope, article));
+    const hasVideo = all(scope, 'video, [data-testid="videoPlayer"], [data-testid="videoComponent"]').some(element => ownedBy(element, scope, article, quoteRoot));
     return {
       id: idMatch ? idMatch[1] : null,
       url,
@@ -518,6 +536,73 @@
     }
     const quotedContext = Array.from(roots).map(scope => scopePost(scope, article)).filter(quote => quote.id || quote.text || quote.hasMedia);
     return { ...post, quotedContext, isPromoted: isPromoted(article) };
+  }
+
+  // Composer previews can be native buttons and can omit a permalink entirely.
+  // Keep this wider recognition separate from ordinary feed-post extraction.
+  function contextQuoteRootFor(element, scope) {
+    let cursor = element && element.parentElement, result = null;
+    while (cursor && cursor !== scope) {
+      const testId = attribute(cursor, 'data-testid'),tag = String(cursor.tagName || '').toLowerCase();
+      const previewButton = (tag === 'button' || attribute(cursor, 'role') === 'button') &&
+        all(cursor, '[data-testid="User-Name"]').length && all(cursor, '[data-testid="tweetText"], time').length;
+      if (isArticle(cursor) || /^(?:quoteTweet|quotedTweet|quoted-post|card\.wrapper)$/i.test(testId) ||
+          (tag !== 'a' && attribute(cursor, 'role') === 'link') || previewButton) result = cursor;
+      cursor = cursor.parentElement;
+    }
+    return cursor === scope ? result : null;
+  }
+  function contextAnchorFor(scope, article, quoteRoot) {
+    const contains=(root,node)=>{for(let cursor=node;cursor;cursor=cursor.parentElement){if(cursor===root)return true;if(cursor===scope)break;}return false;};
+    const bodies=all(scope,'[data-testid="tweetText"]'),visibility=new WeakMap();
+    const anchors=anchorsFor(scope,article,quoteRoot).filter(anchor=>displayed(anchor,scope,visibility)&&!bodies.some(body=>contains(body,anchor)));
+    const timed=anchors.find(anchor=>all(anchor,'time').some(time=>ownedBy(time,scope,article,quoteRoot)));
+    if(timed)return timed;
+    const headers=all(scope,'[data-testid="User-Name"]').filter(name=>ownedBy(name,scope,article,quoteRoot));
+    // A linked citation in body/media is not the preview's own permalink.
+    return anchors.find(anchor=>headers.some(name=>contains(name,anchor)))||null;
+  }
+  function contextUsername(scope) {
+    const name = all(scope, '[data-testid="User-Name"]').find(element => ownedBy(element, scope, scope, contextQuoteRootFor));
+    if (!name) return '';
+    const handles = [...new Set(Array.from(textOf(name).matchAll(/(?:^|\s)@([A-Za-z0-9_]{1,15})(?=\s|·|$)/g),match => match[1].toLowerCase()))];
+    if (handles.length !== 1) return '';
+    const profiles = new Set();
+    for (const anchor of all(name, 'a[href]')) {
+      try {
+        const url = new URL(attribute(anchor, 'href'), 'https://x.com');
+        if (!/^https?:$/.test(url.protocol) || url.username || url.password || !/^(?:www\.)?(?:x\.com|twitter\.com)$/i.test(url.hostname)) continue;
+        const match = url.pathname.match(/^\/([A-Za-z0-9_]{1,15})\/?$/);
+        if (match) profiles.add(match[1].toLowerCase());
+      } catch { /* A malformed profile link cannot supply an identity. */ }
+    }
+    return profiles.size && (profiles.size !== 1 || !profiles.has(handles[0])) ? '' : handles[0];
+  }
+  function contextTextTruncated(scope) {
+    const visibility = new WeakMap(),owns = element => ownedBy(element, scope, scope, contextQuoteRootFor);
+    if (all(scope, '[data-testid="tweet-text-show-more-link"]').some(element => owns(element) && displayed(element,scope,visibility))) return true;
+    return all(scope, '[data-testid="tweetText"]').some(element => {
+      if (!owns(element) || !displayed(element,scope,visibility)) return false;
+      const style = element.ownerDocument?.defaultView?.getComputedStyle?.(element);
+      const inline = attribute(element,'style').match(/(?:^|;)\s*(?:-webkit-)?line-clamp\s*:\s*(\d+)/i)?.[1];
+      const clamp = Number(style?.webkitLineClamp || style?.getPropertyValue?.('-webkit-line-clamp') || style?.lineClamp || inline);
+      return clamp > 0 && Number.isFinite(clamp) && Number(element.clientHeight) > 0 && Number(element.scrollHeight) > Number(element.clientHeight) + 1;
+    });
+  }
+  function extractPostContext(scope, depth = 0) {
+    if (!scope || typeof scope.querySelectorAll !== 'function') return null;
+    const post = scopePost(scope,scope,contextQuoteRootFor,contextAnchorFor);
+    const roots = new Set();
+    for (const element of all(scope,'a[href], [data-testid="tweetText"], time')) {
+      const quote = contextQuoteRootFor(element,scope);if (quote) roots.add(quote);
+    }
+    // X sometimes wraps the actual preview button in a quoteTweet shell.
+    // An empty shell is not another post or another nesting level.
+    if (!post.id && !post.text && !post.hasMedia) return roots.size===1?extractPostContext(roots.values().next().value,depth):null;
+    if (!post.id) post.username = contextUsername(scope);
+    const quotedContext = depth<2?Array.from(roots).slice(0,2).map(root => extractPostContext(root,depth+1)).filter(Boolean):[];
+    return {...post,...(depth===0||quotedContext.length||!post.id?{quotedContext}:{}),...(depth===0?{isPromoted:isPromoted(scope)}:{}),
+      ...(!post.id?{snapshotOnly:true}:{}),...(contextTextTruncated(scope)?{textTruncated:true}:{})};
   }
 
   function isPromoted(article) {
@@ -638,5 +723,5 @@
     clear() { this.items.clear(); }
   }
 
-  return Object.freeze({ LANGUAGES, API_MODELS, modelProfile, isNonTextGenerationModel, reasoningEffort, buildReasoningEffort, oauthReasoningEffort, providerModel, providerEffort, apiFailureProviderCode, AUTO_RETRY_DELAY_MS, AUTO_RETRY_LIMIT, autoRetryDecision, sanitizedRequestDiagnostics, DEFAULT_SETTINGS, DEFAULT_PROMPTS, MAX_PROMPT_LENGTH, normalizePrompt, readerOutput, explanationMode, normalizeSettings, resolvePostLanguage, canonicalPostUrl, extractPost, postFingerprint, nativePostIdentity, apiPostIdentity, visibilityEligibility, BoundedPostQueue });
+  return Object.freeze({ LANGUAGES, API_MODELS, modelProfile, isNonTextGenerationModel, reasoningEffort, buildReasoningEffort, oauthReasoningEffort, providerModel, providerEffort, apiFailureProviderCode, AUTO_RETRY_DELAY_MS, AUTO_RETRY_LIMIT, autoRetryDecision, sanitizedRequestDiagnostics, DEFAULT_SETTINGS, DEFAULT_PROMPTS, MAX_PROMPT_LENGTH, normalizePrompt, readerOutput, explanationMode, normalizeSettings, resolvePostLanguage, canonicalPostUrl, extractPost, extractPostContext, postFingerprint, nativePostIdentity, apiPostIdentity, visibilityEligibility, BoundedPostQueue });
 });

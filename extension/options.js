@@ -5,8 +5,10 @@
   const ui = globalThis.GrokFirstUI;
   const $ = id => document.getElementById(id);
   const promptFields = [
-    {name:"verify",setting:"verifyPrompt"},
-    {name:"comments",setting:"commentsPrompt"},
+    {name:"verify",setting:"verifyPrompt",id:"verify-prompt"},
+    {name:"postDraft",setting:"postDraftPrompt",id:"post-draft-prompt"},
+    {name:"replyDraft",setting:"replyDraftPrompt",id:"reply-draft-prompt"},
+    {name:"comments",setting:"commentsPrompt",id:"comments-prompt"},
   ];
   const promptLimit = core.MAX_PROMPT_LENGTH || 12000;
   let currentSettings = core.normalizeSettings(core.DEFAULT_SETTINGS);
@@ -264,7 +266,7 @@
       || $("x-search").checked !== currentSettings.xSearch
       || $("language").value !== currentSettings.language
       || $("interface-language").value !== currentSettings.interfaceLanguage
-      || promptFields.some(field => $(field.name + "-prompt").value !== currentSettings[field.setting]);
+      || promptFields.some(field => $(field.id).value !== currentSettings[field.setting]);
     if (changed) setStatus("options.unsavedChanges");
     else if (statusMessage?.key === "options.unsavedChanges") {
       statusMessage = null;$("status").textContent = "";delete $("status").dataset.state;
@@ -435,7 +437,7 @@
     $("analysis-dwell").value = settings.dwellMs / 1000;
     $("web-search").checked = settings.webSearch;
     $("x-search").checked = settings.xSearch;
-    for (const field of promptFields) $(field.name + "-prompt").value = settings[field.setting];
+    for (const field of promptFields) $(field.id).value = settings[field.setting];
     populateLanguages(settings.language);
     populateInterfaceLanguages(settings.interfaceLanguage);
     showExplanationMode();
@@ -534,17 +536,17 @@
   });
   $("interface-language").addEventListener("change",() => { renderLanguage();markDraft(); });
   $("api-model").addEventListener("change",() => { populateReasoning($("api-model").value,$("api-reasoning-effort").value);markDraft(); });
-  for (const id of ["enabled","build-reasoning-effort","api-reasoning-effort","api-concurrency","analysis-dwell","web-search","x-search","language",...promptFields.map(field => field.name + "-prompt")]) {
+  for (const id of ["enabled","build-reasoning-effort","api-reasoning-effort","api-concurrency","analysis-dwell","web-search","x-search","language",...promptFields.map(field => field.id)]) {
     $(id).addEventListener("input",markDraft);
     $(id).addEventListener("change",markDraft);
   }
   for(const id of ["api-key","api-model","api-reasoning-effort","oauth-model","oauth-reasoning-effort","build-model","build-reasoning-effort","build-port","build-secret"]){for(const event of ["input","change"])$(id).addEventListener(event,()=>clearFieldError(id));}
   for(const id of ["web-search","x-search"]){for(const event of ["input","change"])$(id).addEventListener(event,renderSearchFeedback);}
   function restorePrompt(field) {
-    $(field.name + "-prompt").value = core.DEFAULT_PROMPTS[field.name];
+    $(field.id).value = core.DEFAULT_PROMPTS[field.name];
   }
   for (const field of promptFields) {
-    $("reset-" + field.name + "-prompt").addEventListener("click",() => {
+    $("reset-" + field.id).addEventListener("click",() => {
       if (busy) return;
       restorePrompt(field);setStatus("options.promptsReset");
     });
@@ -597,10 +599,10 @@
     const ignored=!strict?[modelId,effortId,...(isBuild()?["build-port"]:[])]:[],disabled=ignored.map(id=>[$(id),$(id).disabled]);
     let valid;try{for(const [input]of disabled)input.disabled=true;valid=event.currentTarget.reportValidity();}finally{for(const [input,value]of disabled)input.disabled=value;}
     if(!valid)return;
-    const oversized = promptFields.find(field => $(field.name + "-prompt").value.length > promptLimit);
+    const oversized = promptFields.find(field => $(field.id).value.length > promptLimit);
     if (oversized) {
       setStatus("options.promptTooLong","error",{limit:promptLimit});
-      $(oversized.name + "-prompt").focus();return;
+      $(oversized.id).focus();return;
     }
     const settings = core.normalizeSettings({
       ...currentSettings,
@@ -625,6 +627,8 @@
       language:$("language").value,
       interfaceLanguage:$("interface-language").value,
       verifyPrompt:$("verify-prompt").value,
+      postDraftPrompt:$("post-draft-prompt").value,
+      replyDraftPrompt:$("reply-draft-prompt").value,
       commentsPrompt:$("comments-prompt").value,
     });
     const apiKey = $("api-key").value.trim();

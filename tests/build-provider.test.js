@@ -7,6 +7,68 @@ const settings={...Core.DEFAULT_SETTINGS,provider:'build',language:'en'};
 function fixture(behavior={}){const mock=wsFixture(behavior),provider=Build.create({connection,webSocketFactory:mock.factory,requestTimeoutMs:50,openTimeoutMs:50});return {...mock,provider};}
 const prompts=f=>f.messages.filter(message=>message.method==='session/prompt');
 
+test('local Build checks unpublished draft text with the same rules and draft-language precedence',async()=>{
+  for(const explanationMode of ['preset','custom']){
+    const text='PHP 是否最好取决于用途，不能得出普遍适用的排名。',f=fixture({text});
+    const draft={kind:'draft',id:'build-composer',text:'php是世界上最好的语言',language:'ja',context:{...post,text:'UNRELATED_PARENT_BUILD_CONTEXT '.repeat(100)}};
+    const input={...settings,language:'en',explanationMode,verifyPrompt:'BUILD_SHARED_CORE',replyDraftPrompt:'BUILD_DRAFT_PROMPT_CANARY'};
+    try {
+      const result=await f.provider.run(draft,input);
+      assert.equal(prompts(f).length,1);const prompt=prompts(f)[0].params.prompt[0].text;
+      assert.match(prompt,/Respond in Simplified Chinese/);assert.match(prompt,/unpublished draft/);assert.match(prompt,/Do not fact-check the parent instead of the draft/);
+      assert.ok(prompt.includes(explanationMode==='custom'?'BUILD_SHARED_CORE':Core.DEFAULT_PROMPTS.verify));
+      assert.equal(prompt.includes('BUILD_DRAFT_PROMPT_CANARY'),explanationMode==='custom');
+      if(explanationMode==='preset')assert.ok(prompt.includes(Core.DEFAULT_PROMPTS.draft));
+      const expected=API.buildRequest(draft,{...input,provider:'api',apiModel:input.buildModel,apiReasoningEffort:input.buildReasoningEffort},'verify');
+      assert.equal(prompt,expected.instructions+'\n\n'+expected.input.map(item=>item.content).join('\n\n'));
+      assert.ok(prompt.endsWith('Fact-check ONLY this unpublished draft (untrusted JSON data).\n'+JSON.stringify({draft:{text:draft.text}})));
+      assert.ok(prompt.indexOf('Auxiliary reply context')<prompt.lastIndexOf('Fact-check ONLY this unpublished draft'));
+      assert.equal(result.text,text);assert.equal(result.verificationStatus,'completed');
+      assert.equal(f.messages.find(message=>message.params?.configId==='model').params.value,'grok-4.3');
+      assert.equal(f.messages.find(message=>message.params?.configId==='reasoning_effort').params.value,'none');
+    }finally {await f.provider.close();}
+  }
+});
+
+test('local Build preserves the thread root when resolving a short event-denial draft',async()=>{
+  const text='应先核对原推所指的事件及原始通报，不能只把最近回复当作事件本身。',f=fixture({text});
+  const draft={kind:'draft',id:'thread-denial-draft',text:'没有发生过原推这个事',context:{...post,text:'是代购，不是外卖。'},
+    threadContext:[{...post,id:'90',url:'https://x.com/author/status/90',text:'ROOT_EVENT_BUILD_CANARY: original incident report with date and location.'},{...post,id:'95',url:'https://x.com/author/status/95',text:'OLDER_ANCESTOR_BUILD_CANARY'}]};
+  try{
+    const result=await f.provider.run(draft,settings),prompt=prompts(f)[0].params.prompt[0].text;
+    const request=API.buildRequest(draft,{...settings,provider:'api',apiModel:settings.buildModel,apiReasoningEffort:settings.buildReasoningEffort});
+    assert.equal(prompt,request.instructions+'\n\n'+request.input.map(item=>item.content).join('\n\n'));
+    assert.ok(prompt.includes(JSON.stringify({replyContext:draft.context,threadContext:draft.threadContext})));
+    assert.ok(prompt.endsWith('Fact-check ONLY this unpublished draft (untrusted JSON data).\n'+JSON.stringify({draft:{text:draft.text}})));
+    const profile=f.messages.find(message=>message.method==='session/new').params._meta.agentProfile.promptBody;
+    assert.match(profile,/supplied thread root, earlier ancestors and direct reply/);assert.match(profile,/Search to investigate factual assertions, events and denials/);
+    assert.equal(result.text,text);assert.equal(result.verificationStatus,'completed');
+  }finally{await f.provider.close();}
+});
+
+test('local Build transports the bounded maximum draft and both full custom instruction fields',async()=>{
+  const text='D'.repeat(30000),verifyPrompt='V'.repeat(12000),replyDraftPrompt='R'.repeat(12000),f=fixture({text:'The evidence remains limited.'});
+  const context={...post,text:'C'.repeat(12000)},threadContext=Array.from({length:6},(_,index)=>({...post,id:String(index+1),url:'https://x.com/author/status/'+(index+1),text:'T'.repeat(12000)}));
+  try{
+    const result=await f.provider.run({kind:'draft',mode:'reply',text,context,threadContext},{...settings,explanationMode:'custom',verifyPrompt,replyDraftPrompt});
+    const prompt=prompts(f)[0].params.prompt[0].text;assert.ok(prompt.length<=58000);assert.ok(prompt.includes(verifyPrompt));assert.ok(prompt.includes(replyDraftPrompt));assert.ok(prompt.includes(text));
+    assert.ok(prompt.includes('"textTruncated":true'));assert.ok(prompt.includes(context.url));assert.ok(prompt.includes(threadContext[0].url));assert.equal(result.verificationStatus,'completed');
+  }finally{await f.provider.close();}
+});
+
+test('local Build draft checks may return a useful unverified answer without making a search call',async()=>{
+  for(const searchEnabled of [false,true]){
+    const text='PHP 是否最好取决于用途和评价标准。',f=fixture({text,noSearch:true});
+    try{
+      const result=await f.provider.run({kind:'draft',id:'no-search-draft',text:'php是世界上最好的语言'},
+        {...settings,webSearch:searchEnabled,xSearch:searchEnabled});
+      assert.equal(result.text,text);assert.equal(result.provider,'build');assert.equal(result.searched,false);assert.equal(result.verificationStatus,'unverified');
+      assert.equal(prompts(f).length,1);assert.equal(f.messages.find(message=>message.method==='session/new').params._meta.agentProfile.promptBody.includes('only fact-check target'),true);
+      assert.equal(f.messages.some(message=>message.method==='session/cancel'),false);
+    }finally{await f.provider.close();}
+  }
+});
+
 test('official local Fact Check shares API business rules with independent Build model and no API credential',async()=>{
   const f=fixture({actualModel:'grok-4.7-resolved'}),input={...settings,apiModel:'grok-4.3',apiReasoningEffort:'none',buildModel:'grok-4.7',buildReasoningEffort:'high',explanationMode:'custom',verifyPrompt:'Check the exact date.'},updates=[];
   try{const output=await f.provider.run(post,input,{onUpdate:value=>updates.push(value)});assert.equal(f.urls.length,1);assert.match(f.urls[0],/^ws:\/\/127\.0\.0\.1:2419\/ws\?server-key=/);

@@ -1747,6 +1747,226 @@
     ru:['Проверьте отмеченные настройки.'],
     hi:['चिह्नित सेटिंग जाँचें।']
   });
+  section([
+    'draft.check','draft.checking','draft.title','draft.collapse','draft.expand','draft.more','draft.less',
+    'draft.stale','draft.recheck','draft.empty','draft.tooLong','draft.context','draft.failed',
+    'draft.settings','draft.privacy','draft.detached','draft.details','draft.connectionChanged','draft.incomplete'
+  ], {
+    en:[
+      'Check draft','Checking…','SuperX · Draft fact-check','Collapse','Show check','Show full answer','Show less',
+      'Draft changed. Check again to update.','Check again','Enter a draft to fact-check.','Draft is too long to check.',
+      'Reply context included','Could not complete this check.','Open Settings',
+      'Only sent when you click Check draft.','The editor closed. Your check is kept on this page.',
+      'Model & tokens','Connection changed. Check this draft again.','This check is incomplete.'
+    ],
+    'zh-CN':[
+      '核查草稿','核查中…','SuperX · 草稿核查','收起','查看核查','展开全文','收起全文',
+      '草稿已修改，重新核查以更新。','重新核查','输入内容后核查。','草稿过长，无法核查。',
+      '已包含回复上下文','未能完成本次核查。','打开设置',
+      '点击核查草稿时才会发送内容。','编辑器已关闭，本页保留核查结果。',
+      '模型与 Token','连接已更改，请重新核查草稿。','本次核查尚未完成。'
+    ],
+    'zh-TW':[
+      '查核草稿','查核中…','SuperX · 草稿查核','收合','查看查核','展開全文','收合全文',
+      '草稿已修改，請重新查核以更新。','重新查核','輸入內容後查核。','草稿過長，無法查核。',
+      '已包含回覆上下文','未能完成本次查核。','開啟設定',
+      '點選查核草稿時才會傳送內容。','編輯器已關閉，本頁保留查核結果。',
+      '模型與 Token','連線已變更，請重新查核草稿。','本次查核尚未完成。'
+    ],
+    ja:[
+      '下書きを確認','確認中…','SuperX · 下書きの事実確認','折りたたむ','確認結果を表示','全文を表示','表示を減らす',
+      '下書きが変更されました。再確認して更新してください。','再確認','確認する内容を入力してください。','下書きが長すぎるため確認できません。',
+      '返信元の内容を含む','確認を完了できませんでした。','設定を開く',
+      '「下書きを確認」を押したときだけ送信します。','編集欄を閉じました。確認結果はこのページに保持されます。',
+      'モデルとトークン','接続が変更されました。下書きを再確認してください。','この確認は未完了です。'
+    ],
+    ko:[
+      '초안 확인','확인 중…','SuperX · 초안 사실 확인','접기','확인 결과 보기','전체 답변 보기','간략히 보기',
+      '초안이 변경되었습니다. 다시 확인해 갱신하세요.','다시 확인','확인할 내용을 입력하세요.','초안이 너무 길어 확인할 수 없습니다.',
+      '답글의 원문 맥락 포함','확인을 완료하지 못했습니다.','설정 열기',
+      '초안 확인을 누를 때만 내용을 전송합니다.','편집기가 닫혔습니다. 확인 결과는 이 페이지에 유지됩니다.',
+      '모델 및 토큰','연결이 변경되었습니다. 초안을 다시 확인하세요.','이번 확인은 완료되지 않았습니다.'
+    ],
+    es:[
+      'Verificar borrador','Verificando…','SuperX · Verificación del borrador','Contraer','Ver verificación','Ver respuesta completa','Ver menos',
+      'El borrador cambió. Vuelve a verificarlo para actualizar.','Verificar de nuevo','Escribe un borrador para verificarlo.','El borrador es demasiado largo para verificarlo.',
+      'Incluye el contexto de la respuesta','No se pudo completar la verificación.','Abrir ajustes',
+      'Solo se envía al pulsar Verificar borrador.','El editor se cerró. La verificación se conserva en esta página.',
+      'Modelo y tokens','La conexión cambió. Vuelve a verificar el borrador.','Esta verificación está incompleta.'
+    ],
+    fr:[
+      'Vérifier le brouillon','Vérification…','SuperX · Vérification du brouillon','Réduire','Voir la vérification','Voir la réponse complète','Voir moins',
+      'Le brouillon a changé. Relancez la vérification pour actualiser.','Vérifier à nouveau','Saisissez un brouillon à vérifier.','Le brouillon est trop long pour être vérifié.',
+      'Contexte de la réponse inclus','La vérification n’a pas pu aboutir.','Ouvrir les paramètres',
+      'Envoyé uniquement en cliquant sur Vérifier le brouillon.','L’éditeur est fermé. La vérification reste sur cette page.',
+      'Modèle et tokens','La connexion a changé. Vérifiez à nouveau le brouillon.','Cette vérification est incomplète.'
+    ],
+    de:[
+      'Entwurf prüfen','Wird geprüft…','SuperX · Entwurfsprüfung','Einklappen','Prüfung anzeigen','Ganze Antwort anzeigen','Weniger anzeigen',
+      'Entwurf geändert. Zum Aktualisieren erneut prüfen.','Erneut prüfen','Entwurf zum Prüfen eingeben.','Der Entwurf ist zu lang zum Prüfen.',
+      'Antwortkontext enthalten','Die Prüfung konnte nicht abgeschlossen werden.','Einstellungen öffnen',
+      'Wird erst beim Klick auf Entwurf prüfen gesendet.','Der Editor wurde geschlossen. Die Prüfung bleibt auf dieser Seite.',
+      'Modell und Tokens','Verbindung geändert. Den Entwurf erneut prüfen.','Diese Prüfung ist unvollständig.'
+    ],
+    pt:[
+      'Verificar rascunho','Verificando…','SuperX · Verificação do rascunho','Recolher','Ver verificação','Ver resposta completa','Ver menos',
+      'O rascunho mudou. Verifique novamente para atualizar.','Verificar novamente','Digite um rascunho para verificar.','O rascunho é longo demais para verificar.',
+      'Contexto da resposta incluído','Não foi possível concluir a verificação.','Abrir configurações',
+      'Enviado apenas ao clicar em Verificar rascunho.','O editor foi fechado. A verificação permanece nesta página.',
+      'Modelo e tokens','A conexão mudou. Verifique o rascunho novamente.','Esta verificação está incompleta.'
+    ],
+    ar:[
+      'تحقّق من المسودة','جارٍ التحقق…','SuperX · التحقق من المسودة','طي','عرض التحقق','عرض الإجابة كاملة','عرض أقل',
+      'تغيّرت المسودة. تحقّق مجددًا لتحديث النتيجة.','تحقّق مجددًا','أدخل مسودة للتحقق منها.','المسودة أطول من أن يتم التحقق منها.',
+      'يشمل سياق الرد','تعذّر إكمال التحقق.','فتح الإعدادات',
+      'لا يُرسل المحتوى إلا عند الضغط على تحقّق من المسودة.','أُغلق المحرر. تبقى نتيجة التحقق في هذه الصفحة.',
+      'النموذج والرموز','تغيّر الاتصال. تحقّق من المسودة مجددًا.','هذا التحقق غير مكتمل.'
+    ],
+    ru:[
+      'Проверить черновик','Проверка…','SuperX · Проверка черновика','Свернуть','Показать проверку','Показать весь ответ','Показать меньше',
+      'Черновик изменён. Повторите проверку для обновления.','Проверить снова','Введите черновик для проверки.','Черновик слишком длинный для проверки.',
+      'Контекст ответа включён','Не удалось завершить проверку.','Открыть настройки',
+      'Отправляется только после нажатия «Проверить черновик».','Редактор закрыт. Проверка сохранена на этой странице.',
+      'Модель и токены','Подключение изменилось. Проверьте черновик снова.','Эта проверка не завершена.'
+    ],
+    hi:[
+      'ड्राफ़्ट जाँचें','जाँच जारी…','SuperX · ड्राफ़्ट की तथ्य जाँच','समेटें','जाँच देखें','पूरा जवाब देखें','कम दिखाएँ',
+      'ड्राफ़्ट बदल गया है। अपडेट करने के लिए फिर जाँचें।','फिर जाँचें','जाँचने के लिए ड्राफ़्ट लिखें।','ड्राफ़्ट जाँचने के लिए बहुत लंबा है।',
+      'जवाब का संदर्भ शामिल है','जाँच पूरी नहीं हो सकी।','सेटिंग खोलें',
+      'ड्राफ़्ट जाँचें दबाने पर ही सामग्री भेजी जाती है।','एडिटर बंद है। जाँच का नतीजा इस पेज पर बना रहता है।',
+      'मॉडल और टोकन','कनेक्शन बदल गया है। ड्राफ़्ट फिर जाँचें।','यह जाँच अधूरी है।'
+    ]
+  });
+  section(['draft.textOnly'], {
+    en:['Checks draft text only; attachments are not included.'],
+    'zh-CN':['本次仅核查草稿文字，不包含附件。'],
+    'zh-TW':['本次僅查核草稿文字，不包含附件。'],
+    ja:['下書きのテキストのみを確認します。添付ファイルは含まれません。'],
+    ko:['초안의 텍스트만 확인하며 첨부 파일은 포함하지 않습니다.'],
+    es:['Solo verifica el texto del borrador; no incluye los archivos adjuntos.'],
+    fr:['Vérifie uniquement le texte du brouillon, sans les pièces jointes.'],
+    de:['Prüft nur den Entwurfstext; Anhänge sind nicht enthalten.'],
+    pt:['Verifica apenas o texto do rascunho; os anexos não são incluídos.'],
+    ar:['يتحقق من نص المسودة فقط؛ لا يشمل المرفقات.'],
+    ru:['Проверяется только текст черновика; вложения не включены.'],
+    hi:['केवल ड्राफ़्ट के पाठ की जाँच होती है; अटैचमेंट शामिल नहीं हैं।']
+  });
+  section(['draft.actionCheck','draft.actionShow','draft.actionHide'], {
+    en:['Check','Show','Hide'],
+    'zh-CN':['核查','查看','收起'],
+    'zh-TW':['查核','查看','收合'],
+    ja:['確認','表示','隠す'],
+    ko:['확인','보기','숨기기'],
+    es:['Verificar','Mostrar','Ocultar'],
+    fr:['Vérifier','Afficher','Masquer'],
+    de:['Prüfen','Anzeigen','Ausblenden'],
+    pt:['Verificar','Mostrar','Ocultar'],
+    ar:['تحقّق','عرض','إخفاء'],
+    ru:['Проверить','Показать','Скрыть'],
+    hi:['जाँचें','दिखाएँ','छिपाएँ']
+  });
+  section(['options.verifyPrompt','options.draftPrompt','options.draftPromptHelp','options.promptsHelp','options.promptFixedRules','options.customModeHelp'], {
+    en:[
+      'Shared fact-check prompt','Draft fact-check prompt','Check what you are writing; the original post is supporting context only.',
+      'Write instructions in any language. Up to {limit} characters per field; blank uses the default. Save applies to new requests.',
+      'Language, enabled search tools and source requirements are applied automatically.',
+      'Use separate instructions for posts and your drafts. Switching styles keeps your custom prompts.'
+    ],
+    'zh-CN':[
+      '通用核查提示词','草稿核查提示词','核查自己正在写的内容，原帖仅作辅助上下文。',
+      '可用任意语言编写指令，每项最多 {limit} 个字符；留空使用默认值。保存后用于新请求。',
+      '语言、已启用的搜索工具和来源要求会自动补充。',
+      '分别设置帖子和自己草稿的核查指令。切换方式会保留自定义提示词。'
+    ],
+    'zh-TW':[
+      '通用查核提示詞','草稿查核提示詞','查核自己正在寫的內容，原文僅作輔助脈絡。',
+      '可用任意語言編寫指令，每項最多 {limit} 個字元；留空使用預設值。儲存後用於新請求。',
+      '語言、已啟用的搜尋工具和來源要求會自動補充。',
+      '分別設定貼文和自己草稿的查核指令。切換方式會保留自訂提示詞。'
+    ],
+    ja:[
+      '共通の事実確認プロンプト','下書きの事実確認プロンプト','書いている内容を確認します。元の投稿は補足情報としてのみ使います。',
+      '任意の言語で指示を書けます。各欄は最大 {limit} 文字で、空欄は既定値を使います。保存は新しいリクエストに適用されます。',
+      '言語、有効な検索ツール、情報源の要件は自動で適用されます。',
+      '投稿と自分の下書きの指示を別々に設定できます。方法を切り替えてもカスタムプロンプトは保持されます。'
+    ],
+    ko:[
+      '공통 사실 확인 프롬프트','초안 사실 확인 프롬프트','작성 중인 내용을 확인하며 원본 게시물은 보조 맥락으로만 사용합니다.',
+      '원하는 언어로 지시를 작성하세요. 각 필드는 최대 {limit}자이며 비워 두면 기본값을 사용합니다. 저장 후 새 요청에 적용됩니다.',
+      '언어, 활성 검색 도구와 출처 요건은 자동으로 적용됩니다.',
+      '게시물과 내 초안의 지시를 따로 설정합니다. 방식을 바꿔도 사용자 지정 프롬프트는 유지됩니다.'
+    ],
+    es:[
+      'Instrucciones compartidas de verificación','Instrucciones para verificar borradores','Verifica lo que escribes; la publicación original solo aporta contexto.',
+      'Escribe instrucciones en cualquier idioma. Máximo {limit} caracteres por campo; vacío usa el valor predeterminado. Guardar se aplica a nuevas solicitudes.',
+      'El idioma, las herramientas de búsqueda activadas y los requisitos de fuentes se aplican automáticamente.',
+      'Usa instrucciones distintas para publicaciones y tus borradores. Cambiar de estilo conserva tus instrucciones.'
+    ],
+    fr:[
+      'Instructions de vérification communes','Instructions de vérification des brouillons','Vérifie ce que vous écrivez ; la publication originale sert uniquement de contexte.',
+      'Rédigez les instructions dans toute langue. Maximum {limit} caractères par champ ; vide utilise la valeur par défaut. Enregistrer concerne les nouvelles requêtes.',
+      'La langue, les outils de recherche activés et les exigences de sources s’appliquent automatiquement.',
+      'Utilisez des instructions distinctes pour les publications et vos brouillons. Changer de style conserve vos instructions.'
+    ],
+    de:[
+      'Gemeinsame Prüfanweisungen','Prüfanweisungen für Entwürfe','Prüft deinen Text; der Originalbeitrag dient nur als ergänzender Kontext.',
+      'Schreibe Anweisungen in beliebiger Sprache. Maximal {limit} Zeichen pro Feld; leer nutzt den Standard. Speichern gilt für neue Anfragen.',
+      'Sprache, aktivierte Suchwerkzeuge und Quellenanforderungen werden automatisch angewendet.',
+      'Nutze getrennte Anweisungen für Beiträge und eigene Entwürfe. Beim Stilwechsel bleiben eigene Anweisungen erhalten.'
+    ],
+    pt:[
+      'Instruções de verificação compartilhadas','Instruções para verificar rascunhos','Verifica o que você escreve; a publicação original serve apenas de contexto.',
+      'Escreva instruções em qualquer idioma. Até {limit} caracteres por campo; vazio usa o padrão. Salvar vale para novas solicitações.',
+      'O idioma, as ferramentas de busca ativadas e os requisitos de fontes são aplicados automaticamente.',
+      'Use instruções separadas para publicações e seus rascunhos. Trocar de estilo mantém suas instruções.'
+    ],
+    ar:[
+      'تعليمات التحقق المشتركة','تعليمات التحقق من المسودات','يتحقق مما تكتبه؛ ويُستخدم المنشور الأصلي كسياق مساعد فقط.',
+      'اكتب التعليمات بأي لغة. حتى {limit} حرفًا لكل حقل؛ اتركه فارغًا لاستخدام الافتراضي. يسري الحفظ على الطلبات الجديدة.',
+      'تُطبّق اللغة وأدوات البحث المفعّلة ومتطلبات المصادر تلقائيًا.',
+      'استخدم تعليمات منفصلة للمنشورات ومسوداتك. يحتفظ تبديل الأسلوب بتعليماتك المخصصة.'
+    ],
+    ru:[
+      'Общие инструкции проверки','Инструкции проверки черновиков','Проверяется ваш текст; исходная публикация служит только дополнительным контекстом.',
+      'Пишите инструкции на любом языке. До {limit} символов на поле; пустое использует значение по умолчанию. Сохранение применяется к новым запросам.',
+      'Язык, включённые инструменты поиска и требования к источникам применяются автоматически.',
+      'Задайте отдельные инструкции для публикаций и своих черновиков. При смене стиля ваши инструкции сохраняются.'
+    ],
+    hi:[
+      'साझा तथ्य जाँच के निर्देश','ड्राफ़्ट की तथ्य जाँच के निर्देश','आप जो लिख रहे हैं उसकी जाँच करता है; मूल पोस्ट केवल सहायक संदर्भ है।',
+      'किसी भी भाषा में निर्देश लिखें। हर फ़ील्ड में अधिकतम {limit} अक्षर; खाली रखने पर डिफ़ॉल्ट लागू होता है। सहेजना नए अनुरोधों पर लागू होता है।',
+      'भाषा, चालू खोज टूल और स्रोत की आवश्यकताएँ अपने आप लागू होती हैं।',
+      'पोस्ट और अपने ड्राफ़्ट के लिए अलग निर्देश रखें। तरीका बदलने पर कस्टम निर्देश बने रहते हैं।'
+    ]
+  });
+  section(['options.verifyPromptHelp','options.postDraftPrompt','options.postDraftPromptHelp','options.replyDraftPrompt','options.replyDraftPromptHelp','options.customModeHelp'], {
+    en:['Posts, new drafts and replies use the same fact-checking standard.','New post context instructions','Adds new-post context; quoted posts are supporting material. Uses the shared fact-checking standard above.','Reply context instructions','Adds context from the thread’s original post and reply chain. Uses the shared fact-checking standard above.','Set shared fact-checking rules and separate context instructions for new posts and replies.'],
+    'zh-CN':['帖子、新帖草稿和回复共用同一核查标准。','新帖上下文提示词','补充新帖语境，引用帖仅作辅助；共用上方核查标准。','回复上下文提示词','补充楼顶原帖和回复链语境；共用上方核查标准。','设置通用核查标准，并分别补充新帖和回复的上下文说明。'],
+    'zh-TW':['貼文、新貼文草稿和回覆共用同一查核標準。','新貼文脈絡提示詞','補充新貼文情境，引用貼文僅作輔助；共用上方查核標準。','回覆脈絡提示詞','補充討論串原文和回覆鏈的脈絡；共用上方查核標準。','設定通用查核標準，並分別補充新貼文和回覆的脈絡說明。'],
+    ja:['投稿、新規下書き、返信には同じ事実確認基準を使います。','新規投稿の文脈指示','新規投稿の文脈を補足し、引用投稿は参考にします。上の共通確認基準を使います。','返信の文脈指示','スレッドの元の投稿と返信の流れを文脈として補足します。上の共通確認基準を使います。','共通の確認基準を設定し、新規投稿と返信の文脈指示を個別に補足します。'],
+    ko:['게시물, 새 초안과 답글은 같은 사실 확인 기준을 사용합니다.','새 게시물 맥락 지시','새 게시물 맥락을 추가하고 인용 게시물은 참고합니다. 위의 공통 확인 기준을 사용합니다.','답글 맥락 지시','스레드의 원본 게시물과 답글 흐름을 맥락으로 추가합니다. 위의 공통 확인 기준을 사용합니다.','공통 확인 기준을 정하고 새 게시물과 답글의 맥락 지시를 별도로 추가합니다.'],
+    es:['Las publicaciones, los borradores nuevos y las respuestas usan el mismo criterio de verificación.','Contexto de nuevas publicaciones','Añade contexto; las publicaciones citadas sirven de apoyo. Usa los criterios de verificación comunes de arriba.','Contexto de respuestas','Añade la publicación inicial y la cadena de respuestas como contexto. Usa los criterios comunes de arriba.','Define criterios de verificación comunes y contexto separado para nuevas publicaciones y respuestas.'],
+    fr:['Les publications, nouveaux brouillons et réponses partagent les mêmes critères de vérification.','Contexte des nouvelles publications','Ajoute du contexte ; les publications citées servent de complément. Utilise les critères communs ci-dessus.','Contexte des réponses','Ajoute le contexte de la publication initiale et des réponses. Utilise les critères communs ci-dessus.','Définissez des critères communs et des instructions de contexte distinctes pour les publications et les réponses.'],
+    de:['Beiträge, neue Entwürfe und Antworten nutzen denselben Prüfmaßstab.','Kontext für neue Beiträge','Ergänzt Kontext; zitierte Beiträge dienen als Referenz. Verwendet die gemeinsamen Prüfkriterien oben.','Kontext für Antworten','Ergänzt den ursprünglichen Thread-Beitrag und den Antwortverlauf als Kontext. Verwendet die gemeinsamen Prüfkriterien oben.','Lege gemeinsame Prüfkriterien und getrennte Kontextanweisungen für neue Beiträge und Antworten fest.'],
+    pt:['Publicações, novos rascunhos e respostas usam os mesmos critérios de verificação.','Contexto de novas publicações','Adiciona contexto; publicações citadas servem de apoio. Usa os critérios de verificação comuns acima.','Contexto de respostas','Adiciona a publicação inicial e a sequência de respostas como contexto. Usa os critérios comuns acima.','Defina critérios de verificação comuns e instruções de contexto separadas para novas publicações e respostas.'],
+    ar:['تستخدم المنشورات والمسودات الجديدة والردود معايير التحقق نفسها.','تعليمات سياق المنشور الجديد','تضيف سياق المنشور؛ والمنشورات المقتبسة مرجع مساعد. تستخدم معايير التحقق المشتركة أعلاه.','تعليمات سياق الرد','تضيف سياق المنشور الأصلي وسلسلة الردود. تستخدم معايير التحقق المشتركة أعلاه.','حدّد معايير تحقق مشتركة وتعليمات سياق منفصلة للمنشورات الجديدة والردود.'],
+    ru:['Публикации, новые черновики и ответы используют общие критерии проверки.','Контекст новых публикаций','Дополняет контекст; цитируемые публикации служат справкой. Использует общие критерии проверки выше.','Контекст ответов','Дополняет контекст исходной публикацией и цепочкой ответов. Использует общие критерии проверки выше.','Задайте общие критерии проверки и отдельные инструкции контекста для новых публикаций и ответов.'],
+    hi:['पोस्ट, नए ड्राफ़्ट और जवाब एक ही तथ्य जाँच मानक का उपयोग करते हैं।','नई पोस्ट के संदर्भ निर्देश','नई पोस्ट का संदर्भ जोड़ता है; उद्धृत पोस्ट सहायक सामग्री है। ऊपर के साझा जाँच मानक लागू होते हैं।','जवाब के संदर्भ निर्देश','थ्रेड की मूल पोस्ट और जवाबों के क्रम का संदर्भ जोड़ता है। ऊपर के साझा जाँच मानक लागू होते हैं।','साझा जाँच मानक और नई पोस्ट व जवाबों के अलग संदर्भ निर्देश तय करें।']
+  });
+  section(['draft.searchRecorded','draft.searchUnconfirmed','draft.searchPending','draft.searchEvidenceNote'], {
+    en:['Search calls: recorded','Search calls: not confirmed','Search calls: awaiting report','Recorded calls do not guarantee valid evidence or a correct answer.'],
+    'zh-CN':['检索调用：有记录','检索调用：未确认','检索调用：等待报告','有调用记录不代表已取得有效证据或结论一定正确。'],
+    'zh-TW':['檢索呼叫：有紀錄','檢索呼叫：未確認','檢索呼叫：等待回報','有呼叫紀錄不代表已取得有效證據或結論一定正確。'],
+    ja:['検索呼び出し：記録あり','検索呼び出し：未確認','検索呼び出し：報告待ち','呼び出し記録は、有効な証拠の取得や回答の正しさを保証しません。'],
+    ko:['검색 호출: 기록 있음','검색 호출: 확인되지 않음','검색 호출: 보고 대기 중','호출 기록이 있어도 유효한 근거나 정확한 답변이 보장되지는 않습니다.'],
+    es:['Llamadas de búsqueda: registradas','Llamadas de búsqueda: sin confirmar','Llamadas de búsqueda: esperando informe','Las llamadas registradas no garantizan pruebas válidas ni una respuesta correcta.'],
+    fr:['Appels de recherche : enregistrés','Appels de recherche : non confirmés','Appels de recherche : en attente','Les appels enregistrés ne garantissent ni des preuves valides ni une réponse correcte.'],
+    de:['Suchaufrufe: erfasst','Suchaufrufe: unbestätigt','Suchaufrufe: Bericht ausstehend','Erfasste Aufrufe garantieren weder gültige Belege noch eine richtige Antwort.'],
+    pt:['Chamadas de busca: registradas','Chamadas de busca: não confirmadas','Chamadas de busca: aguardando relatório','Chamadas registradas não garantem evidências válidas nem uma resposta correta.'],
+    ar:['طلبات البحث: مسجّلة','طلبات البحث: غير مؤكّدة','طلبات البحث: بانتظار التقرير','الطلبات المسجّلة لا تضمن أدلة صالحة أو إجابة صحيحة.'],
+    ru:['Вызовы поиска: зафиксированы','Вызовы поиска: не подтверждены','Вызовы поиска: ожидается отчёт','Зафиксированные вызовы не гарантируют достоверные доказательства или правильный ответ.'],
+    hi:['खोज कॉल: दर्ज हैं','खोज कॉल: पुष्टि नहीं हुई','खोज कॉल: रिपोर्ट की प्रतीक्षा','दर्ज कॉल मान्य प्रमाण या सही जवाब की गारंटी नहीं देते।']
+  });
   const aliases = {'common.auto':'lang.auto','common.failed':'status.failed','tooltip.collapse':'common.collapse','tooltip.expand':'common.expand'};
   for (const language of SUPPORTED_LANGUAGES) {
     for (const [key, source] of Object.entries(aliases)) catalog[language][key] = catalog[language][source];

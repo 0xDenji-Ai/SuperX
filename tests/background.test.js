@@ -204,6 +204,341 @@ function createBackground(options = {}) {
 const post = id => ({ id: String(id), url: `https://x.com/author/status/${id}`, text: `Claim ${id}`, quotedContext: [], images: [] });
 const OAUTH_ACCOUNT_A='11111111-1111-4111-8111-111111111111',OAUTH_ACCOUNT_B='22222222-2222-4222-8222-222222222222';
 const oauthConnected=(credentialId=OAUTH_ACCOUNT_A)=>({state:'connected',connected:true,remember:true,credentialId,catalogModels:['grok-4.3','grok-4.7']});
+
+async function checkPrivateDraft(bg,port,requestId,draft,extra={}) {
+  port.send({type:'ANALYZE_DRAFT',requestId,draft,...extra});
+  await until(()=>port.messages.some(value=>value.requestId===requestId&&['RESULT','ERROR'].includes(value.type)),requestId);
+  return port.messages.findLast(value=>value.requestId===requestId&&['RESULT','ERROR'].includes(value.type));
+}
+
+test('manual unpublished drafts work across all three sources while automatic analysis and the rail are paused',async()=>{
+  for(const source of ['api','oauth','build']) {
+    const bg=createBackground({settings:{provider:source,enabled:false,language:'ja'},oauthState:oauthConnected(),session:{apiKey:'available-key',railStates:{7:true}}});
+    await bg.ready();if(source==='build'){await bg.configureBuild();await bg.message({type:'GET_CONFIG'});}
+    const port=bg.connect();await until(()=>port.messages.some(value=>value.type==='CONFIG'&&value.ready));
+    const draft={id:'composer-source-'+source,text:'PRIVATE_DRAFT_TEXT_'+source,context:post(100)};
+    const result=await checkPrivateDraft(bg,port,'draft:'+source,draft);
+    assert.equal(result.type,'RESULT');assert.equal(result.cached,false);
+    const calls=source==='build'?bg.buildCalls:bg.apiCalls;assert.equal(calls.length,1);
+    assert.equal(calls[0].post.kind,'draft');assert.equal(calls[0].post.text,draft.text);assert.equal(calls[0].post.url,undefined);
+    assert.equal(calls[0].settings.task,'draft');assert.equal(calls[0].settings.language,'auto');assert.equal(calls[0].settings.provider,source);
+    assert.equal(calls[0].post.context.url,post(100).url);assert.equal(bg.commentCalls.length,0);
+    assert.equal(source==='build'?bg.apiCalls.length:bg.buildCalls.length,0);
+    assert.equal(bg.session.data.quotas?.[7],undefined);
+  }
+});
+
+test('draft text and results never enter answer cache, browsing history or diagnostic storage',async()=>{
+  const bg=createBackground({retryLimit:0,apiRun:async call=>({text:'PRIVATE_DRAFT_FINDING '+call.post.text,provider:'api',searched:true,verificationStatus:'completed'})});
+  await bg.ready();const port=bg.connect();await until(()=>port.messages.some(value=>value.type==='CONFIG'));
+  await visitHistory(bg,port,[100]);
+  const draft={id:'private-composer',text:'PRIVATE_DRAFT_CANARY',context:post(100)};
+  for(const id of ['draft:first','draft:again'])assert.equal((await checkPrivateDraft(bg,port,id,draft)).type,'RESULT');
+  assert.equal(bg.apiCalls.length,2,'The worker never reuses an unpublished draft from persistent/session answer cache');
+  await tick();const stored=JSON.stringify({local:bg.local.data,session:bg.session.data});assert.doesNotMatch(stored,/PRIVATE_DRAFT/);
+  assert.equal(bg.local.data.superxHistory[0].analysis,undefined);assert.equal((await bg.message({type:'GET_API_DIAGNOSTICS'})).entries.length,0);
+  const failed=createBackground({retryLimit:0,apiRun:async()=>{throw Object.assign(new Error('upstream private echo'),{code:'API_ERROR',requestDiagnostics:{failureOrigin:'http',transportStatus:500,providerMessage:'PRIVATE_DRAFT_CANARY'}});}});
+  await failed.ready();const failedPort=failed.connect();const result=await checkPrivateDraft(failed,failedPort,'draft:failed',draft);assert.equal(result.type,'ERROR');
+  assert.equal((await failed.message({type:'GET_API_DIAGNOSTICS'})).entries.length,0);assert.doesNotMatch(JSON.stringify({local:failed.local.data,session:failed.session.data}),/PRIVATE_DRAFT/);
+});
+
+test('draft validation rejects empty, oversized, malformed or forged reply context before any provider call',async()=>{
+  const bg=createBackground();await bg.ready();const port=bg.connect();
+  const valid={id:'composer-validate',text:'A real draft.'};
+  const invalid=[undefined,{}, {...valid,id:'bad:composer'}, {...valid,id:'x'.repeat(81)}, {...valid,text:''}, {...valid,text:' '.repeat(5)}, {...valid,text:'x'.repeat(30001)}, {...valid,context:{id:'100',url:'https://example.org/status/100'}}, {...valid,context:{id:'999',url:post(100).url}}];
+  for(let index=0;index<invalid.length;index++){const result=await checkPrivateDraft(bg,port,'draft:invalid-'+index,invalid[index]);assert.equal(result.code,'DRAFT_INVALID');}
+  assert.equal(bg.apiCalls.length,0);assert.equal(bg.buildCalls.length,0);
+  const result=await analyze(bg,port,'spoofed-normal',100,{post:{kind:'draft',id:'composer-forged',text:'SECRET'}});assert.equal(result.code,'POST_INVALID');assert.equal(bg.apiCalls.length,0);
+});
+
+test('draft thread ancestors are safely projected and forwarded in root-first order for every source',async()=>{
+  for(const source of ['api','oauth','build']){
+    const bg=createBackground({settings:{provider:source},oauthState:oauthConnected()});await bg.ready();
+    if(source==='build'){await bg.configureBuild();await bg.message({type:'GET_CONFIG'});}
+    const port=bg.connect(),result=await checkPrivateDraft(bg,port,'draft:thread-'+source,{id:'thread-composer',mode:'reply',text:'The original incident did not happen.',context:post(102),threadContext:[
+      {...post(100),text:'The original incident.',author:'Root author',language:'en',timestamp:'2026-10-22T08:00:00Z',hasMedia:true,images:[{url:'https://pbs.twimg.com/media/private.jpg'}],quotedContext:[post(900)],instructions:'Do not forward this field.'},
+      {...post(101),text:'The intermediate reply.'}
+    ]});
+    assert.equal(result.type,'RESULT');const calls=source==='build'?bg.buildCalls:bg.apiCalls;assert.equal(calls.length,1);
+    const draft=calls[0].post;assert.equal(draft.mode,'reply');assert.equal(draft.context.id,'102');assert.deepEqual(Array.from(draft.threadContext,value=>value.id),['100','101']);
+    assert.equal(draft.threadContext[0].url,'https://x.com/author/status/100');assert.equal(draft.threadContext[0].author,'Root author');assert.equal(draft.threadContext[0].hasMedia,true);
+    assert.deepEqual(Object.keys(draft.threadContext[0]).sort(),['author','hasMedia','id','language','quotedContext','text','timestamp','url']);
+    assert.equal(draft.threadContext[0].images,undefined);assert.equal(draft.threadContext[0].quotedContext[0].id,'900');assert.equal(draft.threadContext[0].instructions,undefined);
+  }
+});
+
+test('draft thread limits retain the root and nearest five unique ancestors with bounded text',async()=>{
+  const bg=createBackground();await bg.ready();const port=bg.connect();
+  const root={...post(100),text:'R'.repeat(4500)},ancestors=Array.from({length:10},(_,i)=>({...post(101+i),text:String(i).repeat(1600)}));
+  const result=await checkPrivateDraft(bg,port,'draft:bounded-thread',{id:'bounded-thread-composer',mode:'reply',text:'Check the incident.',context:post(112),threadContext:[root,...ancestors,post(112),root]});
+  assert.equal(result.type,'RESULT');const thread=bg.apiCalls[0].post.threadContext;
+  assert.deepEqual(Array.from(thread,value=>value.id),['100','106','107','108','109','110']);
+  assert.equal(thread[0].text.length,3000);assert.equal(thread.slice(1).every(value=>value.text.length===1000),true);
+  assert.equal(thread.reduce((total,value)=>total+value.text.length,0),8000);assert.equal(thread.every(value=>value.textTruncated===true),true);
+});
+
+test('draft thread rejects malformed selected ancestors while retaining compatibility with legacy direct context',async()=>{
+  const bg=createBackground();await bg.ready();const port=bg.connect();
+  const draft={id:'thread-validation-composer',text:'Check this incident.',context:post(102)};
+  const invalid=[{},'not an array',null,[{...post(100),url:'https://example.org/status/100'}],[{...post(100),url:'javascript:alert(1)'}],[{...post(100),id:'999'}],[null]];
+  for(let i=0;i<invalid.length;i++){
+    const result=await checkPrivateDraft(bg,port,'draft:bad-thread-'+i,{...draft,threadContext:invalid[i]});
+    assert.equal(result.type,'ERROR');assert.equal(result.code,'DRAFT_INVALID');
+  }
+  assert.equal(bg.apiCalls.length,0);
+  const legacy=await checkPrivateDraft(bg,port,'draft:legacy-context',draft);
+  assert.equal(legacy.type,'RESULT');assert.equal(bg.apiCalls[0].post.mode,'reply');assert.equal(bg.apiCalls[0].post.context.id,'102');assert.equal(bg.apiCalls[0].post.threadContext,undefined);
+});
+
+test('new-post quotes stay separate from reply context and use bounded nested projections',async()=>{
+  const bg=createBackground();await bg.ready();const port=bg.connect();
+  const quote={...post(300),text:'Q'.repeat(4000),hasMedia:true,images:[{url:'https://pbs.twimg.com/media/quote.jpg'}],quotedContext:[post(900)],instructions:'Do not forward this field.'};
+  const result=await checkPrivateDraft(bg,port,'draft:post-quotes',{id:'post-with-quote',mode:'post',text:'A new post checks the quoted claim.',hasMedia:true,context:{id:'bad'},threadContext:'Ignored stale reply fields',quotedContext:[quote,quote,post(301),post(302)]});
+  assert.equal(result.type,'RESULT');const draft=bg.apiCalls[0].post;
+  assert.equal(draft.mode,'post');assert.equal(draft.context,undefined);assert.equal(draft.threadContext,undefined);assert.equal(draft.hasMedia,true);
+  assert.deepEqual(Array.from(draft.quotedContext,value=>value.id),['300','301']);assert.equal(draft.quotedContext[0].text.length,3000);assert.equal(draft.quotedContext[0].textTruncated,true);
+  for(const value of draft.quotedContext){assert.equal(value.images,undefined);assert.equal(value.instructions,undefined);}
+  assert.equal(draft.quotedContext[0].quotedContext[0].id,'900');
+  const reply=await checkPrivateDraft(bg,port,'draft:reply-with-stale-quotes',{id:'reply-with-context',mode:'reply',text:'Check the original incident.',context:post(102),quotedContext:'Ignored stale new-post fields'});
+  assert.equal(reply.type,'RESULT');assert.equal(bg.apiCalls[1].post.mode,'reply');assert.equal(bg.apiCalls[1].post.quotedContext,undefined);assert.equal(bg.apiCalls[1].post.context.id,'102');
+  for(const [index,quotedContext] of ['not an array',[{...post(300),url:'https://example.org/status/300'}]].entries()){
+    const invalid=await checkPrivateDraft(bg,port,'draft:bad-quote-'+index,{id:'invalid-post-quote',mode:'post',text:'Check this quotation.',quotedContext});
+    assert.equal(invalid.type,'ERROR');assert.equal(invalid.code,'DRAFT_INVALID');
+  }
+  assert.equal(bg.apiCalls.length,2);
+});
+
+test('native permalink-free context is accepted only as an explicit bounded draft snapshot across sources',async()=>{
+  for(const source of ['api','oauth','build']){
+    const bg=createBackground({settings:{provider:source},oauthState:oauthConnected()});await bg.ready();
+    if(source==='build'){await bg.configureBuild();await bg.message({type:'GET_CONFIG'});}
+    const port=bg.connect(),context={id:null,url:null,snapshotOnly:true,text:'Visible native preview.',author:'Writer @writer',timestamp:'2026-10-23T10:00:00Z',language:'en',hasMedia:true,
+      images:[{url:'https://pbs.twimg.com/media/not-forwarded.jpg'}],instructions:'Do not forward unknown fields.',apiKey:'DO_NOT_FORWARD_KEY',username:'writer'};
+    const result=await checkPrivateDraft(bg,port,'draft:native-snapshot-'+source,{id:'snapshot-composer',mode:'reply',text:'That did not happen.',context});
+    assert.equal(result.type,'RESULT');const calls=source==='build'?bg.buildCalls:bg.apiCalls,clean=calls[0].post.context;
+    assert.deepEqual(clone(clean),{id:null,url:null,snapshotOnly:true,text:'Visible native preview.',author:'Writer @writer',timestamp:'2026-10-23T10:00:00Z',language:'en',hasMedia:true});
+    assert.equal(JSON.stringify(clean).includes('DO_NOT_FORWARD'),false);assert.equal(clean.images,undefined);
+    const ordinary=await analyze(bg,port,'native-is-not-post-'+source,100,{post:context});assert.equal(ordinary.code,'POST_INVALID');
+  }
+});
+
+test('snapshot flags cannot bypass malformed or mismatched supplied post identities',async()=>{
+  const bg=createBackground();await bg.ready();const port=bg.connect();
+  const bare={snapshotOnly:true,text:'Visible preview.',author:'Writer @writer'};
+  const invalid=[{text:'Unmarked preview.'},{id:null,url:null,text:'Unmarked null preview.'},{...bare,id:'100'},
+    {...bare,url:post(100).url},{...bare,id:'100',url:'https://example.org/status/100'},{...bare,id:'999',url:post(100).url},
+    {...bare,id:'',url:''},{...bare,id:null,url:'/writer'},{...bare,text:''},{...bare,text:'',hasMedia:'yes'}];
+  for(const [index,context]of invalid.entries()){
+    const result=await checkPrivateDraft(bg,port,'draft:invalid-native-'+index,{id:'invalid-native',mode:'reply',text:'Check it.',context});
+    assert.equal(result.code,'DRAFT_INVALID',String(index));
+  }
+  assert.equal(bg.apiCalls.length,0);
+  const result=await checkPrivateDraft(bg,port,'draft:valid-native-identity',{id:'valid-native',mode:'reply',text:'Check it.',context:{...post(100),snapshotOnly:true,textTruncated:true}});
+  assert.equal(result.type,'RESULT');const clean=bg.apiCalls[0].post.context;
+  assert.equal(clean.id,'100');assert.equal(clean.url,post(100).url);assert.equal(clean.snapshotOnly,undefined);assert.equal(clean.textTruncated,true);
+});
+
+test('snapshot thread identity keeps distinct bodies authors and times instead of merging missing IDs',async()=>{
+  const bg=createBackground();await bg.ready();const port=bg.connect();
+  const base={id:null,url:null,snapshotOnly:true,text:'A statement.',author:'Writer @writer',timestamp:'2026-10-23T10:00:00Z'};
+  const result=await checkPrivateDraft(bg,port,'draft:snapshot-thread',{id:'snapshot-thread',mode:'reply',text:'That is incorrect.',context:{...base,text:'Direct parent.'},threadContext:[base,{...base},{...base,text:'A different statement.'},{...base,author:'Other @other'},{...base,timestamp:'2026-10-23T11:00:00Z'}]});
+  assert.equal(result.type,'RESULT');const thread=bg.apiCalls[0].post.threadContext;
+  assert.equal(thread.length,4);assert.equal(thread.every(value=>value.snapshotOnly===true&&value.id===null&&value.url===null),true);
+  assert.equal(thread[1].text,'A different statement.');assert.equal(thread[2].author,'Other @other');assert.equal(thread[3].timestamp,'2026-10-23T11:00:00Z');
+});
+
+test('snapshot deduplication preserves different nested quotes language and media flags',async()=>{
+  const bg=createBackground();await bg.ready();const port=bg.connect();
+  const base={id:null,url:null,snapshotOnly:true,text:'This.',author:'Same',timestamp:'',language:'en',quotedContext:[{...post(901),text:'Quote A'}]};
+  const distinct={...base,quotedContext:[{...post(902),text:'Quote B'}]};
+  const result=await checkPrivateDraft(bg,port,'draft:snapshot-quote-identity',{id:'snapshot-quote-identity',mode:'reply',text:'This is inaccurate.',threadContext:[base,distinct,{...base,language:'ja'},{...base,hasMedia:true}]});
+  assert.equal(result.type,'RESULT');const thread=bg.apiCalls[0].post.threadContext;
+  assert.equal(thread.length,4);assert.equal(thread[0].quotedContext[0].text,'Quote A');assert.equal(thread[1].quotedContext[0].text,'Quote B');
+  assert.equal(thread[2].language,'ja');assert.equal(thread[3].hasMedia,true);
+  const quoteResult=await checkPrivateDraft(bg,port,'draft:quoted-snapshot-identity',{id:'quoted-snapshot-identity',mode:'post',text:'These are different quotations.',quotedContext:[base,distinct]});
+  assert.equal(quoteResult.type,'RESULT');assert.equal(bg.apiCalls[1].post.quotedContext.length,2);
+});
+
+test('snapshot deduplication merges identical projected quotes and ignores unknown raw fields',async()=>{
+  const bg=createBackground();await bg.ready();const port=bg.connect();
+  const base={id:null,url:null,snapshotOnly:true,text:'This.',author:'Same',timestamp:'',quotedContext:[{...post(901),text:'Quote A',quotedContext:[post(903)]}]};
+  const same={...clone(base),unknown:'RAW_FIELD_MUST_NOT_AFFECT_IDENTITY'};
+  const result=await checkPrivateDraft(bg,port,'draft:identical-snapshot-quotes',{id:'identical-snapshot-quotes',mode:'reply',text:'Check the quoted claim.',threadContext:[base,same,clone(base),post(900),{...post(900),text:'Different body for same verified ID.'}]});
+  assert.equal(result.type,'RESULT');const thread=bg.apiCalls[0].post.threadContext;
+  assert.equal(thread.length,2);assert.equal(thread[0].quotedContext[0].id,'901');assert.equal(thread[0].quotedContext[0].quotedContext[0].id,'903');
+  assert.equal(thread[1].id,'900','Verified post IDs retain their existing deduplication behavior');assert.equal(JSON.stringify(thread).includes('RAW_FIELD_MUST_NOT_AFFECT_IDENTITY'),false);
+});
+
+test('reply ancestors keep their own nested native quotations through both projection passes',async()=>{
+  for(const source of ['api','oauth','build']){
+    const bg=createBackground({settings:{provider:source},oauthState:oauthConnected()});await bg.ready();
+    if(source==='build'){await bg.configureBuild();await bg.message({type:'GET_CONFIG'});}
+    const port=bg.connect();
+    const snapshot=(text,quotedContext=[])=>({id:null,url:null,snapshotOnly:true,text,author:'Quote @quoted',timestamp:'2026-10-23T10:00:00.000Z',quotedContext});
+    const root={...post(100),text:'Root refers to this quotation.',quotedContext:[snapshot('Q'.repeat(4000),[snapshot('Nested evidence.'),snapshot('Second nested.'),snapshot('Too many.')])]};
+    const result=await checkPrivateDraft(bg,port,'draft:ancestor-quotes-'+source,{id:'ancestor-quotes',mode:'reply',text:'This quoted incident did not happen.',context:post(102),threadContext:[root]});
+    assert.equal(result.type,'RESULT');const calls=source==='build'?bg.buildCalls:bg.apiCalls,ancestor=calls[0].post.threadContext[0];
+    assert.equal(ancestor.id,'100');assert.equal(ancestor.quotedContext[0].text.length,3000);assert.equal(ancestor.quotedContext[0].textTruncated,true);
+    assert.equal(ancestor.quotedContext[0].snapshotOnly,true);assert.equal(ancestor.quotedContext[0].quotedContext.length,2);
+    assert.equal(ancestor.quotedContext[0].quotedContext[0].text,'Nested evidence.');
+    assert.equal(ancestor.quotedContext[0].quotedContext[0].quotedContext,undefined);
+    assert.equal(ancestor.quotedContext[0].timestamp,'2026-10-23T10:00:00.000Z');
+  }
+});
+
+test('snapshot text and nested quotations retain truncation and bounded per-role budgets',async()=>{
+  const bg=createBackground();await bg.ready();const port=bg.connect();
+  const make=(text,quotedContext=[])=>({id:null,url:null,snapshotOnly:true,text,author:'A'.repeat(220),timestamp:'T'.repeat(80),language:'en\ninjected',quotedContext,unknown:'DROP'});
+  const deep=make('Deepest should be excluded.'),inner=make('I'.repeat(4000),[deep]),outer=make('O'.repeat(4000),[inner,make('Second inner.'),make('Third inner.')]);
+  const result=await checkPrivateDraft(bg,port,'draft:nested-native-budget',{id:'nested-native-budget',mode:'reply',text:'Check this.',context:make('C'.repeat(13000),[outer,make('Second outer.'),make('Third outer.')]),threadContext:[make('R'.repeat(3500)),make('A'.repeat(1500))]});
+  assert.equal(result.type,'RESULT');const draft=bg.apiCalls[0].post,context=draft.context;
+  assert.equal(context.text.length,12000);assert.equal(context.textTruncated,true);assert.equal(context.author.length,200);assert.equal(context.timestamp.length,60);assert.equal(context.language,'');
+  assert.equal(context.quotedContext.length,2);assert.equal(context.quotedContext[0].text.length,3000);assert.equal(context.quotedContext[0].textTruncated,true);
+  assert.equal(context.quotedContext[0].quotedContext.length,2);assert.equal(context.quotedContext[0].quotedContext[0].text.length,3000);
+  assert.equal(context.quotedContext[0].quotedContext[0].quotedContext,undefined);
+  assert.equal(draft.threadContext[0].text.length,3000);assert.equal(draft.threadContext[1].text.length,1000);assert.equal(draft.threadContext.every(value=>value.textTruncated===true),true);
+  assert.equal(JSON.stringify(draft).includes('Deepest should be excluded.'),false);assert.equal(JSON.stringify(draft).includes('DROP'),false);
+  const quoteResult=await checkPrivateDraft(bg,port,'draft:native-quote',{id:'native-quote',mode:'post',text:'New post.',quotedContext:[make('Q'.repeat(4000),[make('Nested quote.')]),make('Another quote.'),make('Discarded quote.')]});
+  assert.equal(quoteResult.type,'RESULT');const quotes=bg.apiCalls[1].post.quotedContext;
+  assert.equal(quotes.length,2);assert.equal(quotes[0].text.length,3000);assert.equal(quotes[0].quotedContext[0].text,'Nested quote.');
+});
+
+test('rail collapse preserves queued manual drafts and every draft shares the global provider concurrency limit',async()=>{
+  const first=deferred(),second=deferred(),bg=createBackground({settings:{apiConcurrency:1},apiRun:call=>call.post.kind==='draft'?second.promise:first.promise});
+  await bg.ready();const port=bg.connect();port.send({type:'ANALYZE',requestId:'feed-first',post:post(100)});await until(()=>bg.apiCalls.length===1);
+  port.send({type:'ANALYZE_DRAFT',requestId:'draft:queued',draft:{id:'queued-composer',text:'The draft must wait for its slot.'}});await until(()=>port.messages.some(value=>value.type==='QUEUED'&&value.requestId==='draft:queued'));
+  assert.equal(bg.apiCalls.length,1);port.send({type:'SET_RAIL_COLLAPSED',collapsed:true});await until(()=>bg.session.data.railStates?.[7]===true);
+  assert.equal(port.messages.some(value=>value.requestId==='draft:queued'&&value.type==='ERROR'),false);
+  first.resolve({text:'Feed evidence.',provider:'api'});await until(()=>bg.apiCalls.length===2);assert.equal(bg.apiCalls[1].post.kind,'draft');
+  assert.equal(bg.apiCalls[1].signal.aborted,false);second.resolve({text:'Draft evidence.',provider:'api'});await until(()=>port.messages.some(value=>value.requestId==='draft:queued'&&value.type==='RESULT'));
+});
+
+test('a collapsed rail does not discard an already accepted private draft retry',async()=>{
+  const bg=createBackground({manualRetryTimers:true,session:{apiKey:'fixture-key',railStates:{7:true}},apiRun:async(_,harness)=>{
+    if(harness.apiCalls.length===1)throw Object.assign(new Error('Temporary API error'),{code:'API_ERROR'});
+    return {text:'Recovered draft finding.',provider:'api',verificationStatus:'completed'};
+  }});
+  await bg.ready();const port=bg.connect();port.send({type:'ANALYZE_DRAFT',requestId:'draft:retry',draft:{id:'retry-composer',text:'PRIVATE_RETRY_DRAFT'}});
+  await until(()=>port.messages.some(value=>value.requestId==='draft:retry'&&value.type==='RETRY_WAIT'));assert.equal(bg.apiCalls.length,1);
+  bg.advanceRetryTimers(3000);await until(()=>port.messages.some(value=>value.requestId==='draft:retry'&&value.type==='RESULT'));assert.equal(bg.apiCalls.length,2);
+  await tick();assert.doesNotMatch(JSON.stringify({local:bg.local.data,session:bg.session.data}),/PRIVATE_RETRY_DRAFT|Recovered draft finding/);
+});
+
+test('source changes cancel private draft work and discard late output without fallback or persistence',async()=>{
+  const pending=deferred(),bg=createBackground({apiRun:()=>pending.promise,oauthState:oauthConnected()});await bg.ready();const port=bg.connect();
+  port.send({type:'ANALYZE_DRAFT',requestId:'draft:old-source',draft:{id:'source-composer',text:'PRIVATE_OLD_DRAFT'}});await until(()=>bg.apiCalls.length===1);
+  await bg.message({type:'SAVE_SETTINGS',settings:{...bg.local.data.settings,provider:'oauth'}});assert.equal(bg.apiCalls[0].signal.aborted,true);
+  pending.resolve({text:'PRIVATE_LATE_FINDING',provider:'api'});await tick();await tick();assert.equal(port.messages.some(value=>value.type==='RESULT'&&value.requestId==='draft:old-source'),false);
+  assert.doesNotMatch(JSON.stringify({local:bg.local.data,session:bg.session.data}),/PRIVATE_OLD_DRAFT|PRIVATE_LATE_FINDING/);assert.equal(bg.buildCalls.length,0);
+});
+test('CONFIG exposes the task cancellation revision for enabled, answer-language and concurrency changes',async()=>{
+  for(const change of [{enabled:false},{language:'fr'},{apiConcurrency:2}]){
+    const pending=deferred(),bg=createBackground({apiRun:()=>pending.promise});await bg.ready();
+    const before=await bg.message({type:'GET_CONFIG'});assert.equal(Number.isInteger(before.taskRevision),true);
+    const port=bg.connect();await until(()=>port.messages.some(value=>value.type==='CONFIG'));
+    assert.equal(port.messages.findLast(value=>value.type==='CONFIG').taskRevision,before.taskRevision);
+    port.send({type:'ANALYZE_DRAFT',requestId:'draft:cancel-revision',draft:{id:'revision-composer',text:'PRIVATE_REVISION_DRAFT'}});await until(()=>bg.apiCalls.length===1);
+    assert.equal((await bg.message({type:'SAVE_SETTINGS',settings:{...bg.local.data.settings,...change}})).ok,true);
+    assert.equal(bg.apiCalls[0].signal.aborted,true);
+    const after=await bg.message({type:'GET_CONFIG'});assert.equal(after.taskRevision,before.taskRevision+1);
+    assert.equal(port.messages.findLast(value=>value.type==='CONFIG').taskRevision,after.taskRevision);
+    assert.equal(bg.runtimeMessages.findLast(value=>value.type==='CONFIG').taskRevision,after.taskRevision);
+    pending.resolve({text:'PRIVATE_LATE_REVISION_RESULT',provider:'api'});await tick();await tick();
+    assert.equal(port.messages.some(value=>value.requestId==='draft:cancel-revision'&&value.type==='RESULT'),false);
+    assert.doesNotMatch(JSON.stringify({local:bg.local.data,session:bg.session.data}),/PRIVATE_REVISION_DRAFT|PRIVATE_LATE_REVISION_RESULT/);
+  }
+});
+
+test('accepted private drafts retain their task revision through prompt, UI-language and dwell changes',async()=>{
+  const pending=deferred(),bg=createBackground({apiRun:()=>pending.promise});await bg.ready();const port=bg.connect();
+  const before=await bg.message({type:'GET_CONFIG'});
+  port.send({type:'ANALYZE_DRAFT',requestId:'draft:preserve-revision',draft:{id:'preserved-composer',text:'PRIVATE_PRESERVED_DRAFT'}});await until(()=>bg.apiCalls.length===1);
+  assert.equal((await bg.message({type:'SAVE_SETTINGS',settings:{...bg.local.data.settings,verifyPrompt:'Future published posts use this prompt.',postDraftPrompt:'Future new posts use this draft prompt.',replyDraftPrompt:'Future replies use this draft prompt.',draftPrompt:'Retained legacy draft preference.',interfaceLanguage:'ja',dwellMs:2500}})).ok,true);
+  const after=await bg.message({type:'GET_CONFIG'});assert.equal(after.taskRevision,before.taskRevision);assert.equal(bg.apiCalls[0].signal.aborted,false);
+  pending.resolve({text:'Private check completed.',provider:'api',verificationStatus:'completed'});await until(()=>port.messages.some(value=>value.requestId==='draft:preserve-revision'&&value.type==='RESULT'));
+});
+
+test('independent post and reply prompt updates preserve accepted snapshots and apply to the next request for every source',async()=>{
+  for(const source of ['api','oauth','build']){
+    const pending=deferred(),oldPrompt='LEGACY_DRAFT_BEFORE_SAVE',newPrompt='LEGACY_DRAFT_AFTER_SAVE',oldPost='POST_DRAFT_BEFORE_SAVE',newPost='POST_DRAFT_AFTER_SAVE',oldReply='REPLY_DRAFT_BEFORE_SAVE',newReply='REPLY_DRAFT_AFTER_SAVE',postPrompt='PUBLISHED_POST_PROMPT_ONLY';
+    const run=call=>call.post.id==='accepted-draft'?pending.promise:{text:'Fixture completed.',provider:source,verificationStatus:'completed'};
+    const bg=createBackground({settings:{provider:source,apiConcurrency:1,draftPrompt:oldPrompt,postDraftPrompt:oldPost,replyDraftPrompt:oldReply,verifyPrompt:postPrompt},oauthState:oauthConnected(),apiRun:run,buildRun:run});
+    await bg.ready();if(source==='build'){await bg.configureBuild();await bg.message({type:'GET_CONFIG'});}
+    const port=bg.connect(),before=await bg.message({type:'GET_CONFIG'}),calls=source==='build'?bg.buildCalls:bg.apiCalls;
+    port.send({type:'ANALYZE_DRAFT',requestId:'draft:accepted',draft:{id:'accepted-draft',mode:'post',text:'Accepted before saving.'}});
+    await until(()=>calls.length===1);
+    port.send({type:'ANALYZE_DRAFT',requestId:'draft:waiting',draft:{id:'queued-draft',mode:'reply',text:'Queued before saving.',context:post(102)}});
+    await until(()=>port.messages.some(value=>value.requestId==='draft:waiting'&&value.type==='QUEUED'));
+    assert.equal(calls.length,1);
+    assert.equal((await bg.message({type:'SAVE_SETTINGS',settings:{...bg.local.data.settings,draftPrompt:newPrompt,postDraftPrompt:newPost,replyDraftPrompt:newReply}})).ok,true);
+    const after=await bg.message({type:'GET_CONFIG'});
+    assert.equal(after.taskRevision,before.taskRevision,'Prompt edits do not retire accepted tasks');
+    assert.equal(after.settings.draftPrompt,newPrompt);
+    assert.equal(after.settings.postDraftPrompt,newPost);assert.equal(after.settings.replyDraftPrompt,newReply);
+    assert.equal(calls[0].signal.aborted,false);
+    assert.equal(calls[0].settings.draftPrompt,oldPrompt);
+    assert.equal(calls[0].settings.postDraftPrompt,oldPost);assert.equal(calls[0].settings.replyDraftPrompt,oldReply);
+    pending.resolve({text:'Accepted fixture completed.',provider:source,verificationStatus:'completed'});
+    await until(()=>port.messages.some(value=>value.requestId==='draft:waiting'&&value.type==='RESULT'));
+    assert.equal(calls.length,2);
+    assert.equal(calls[1].settings.draftPrompt,oldPrompt,'A queued request retains the prompt present when accepted');
+    assert.equal(calls[1].settings.postDraftPrompt,oldPost);assert.equal(calls[1].settings.replyDraftPrompt,oldReply);
+    const next=await checkPrivateDraft(bg,port,'draft:next',{id:'next-draft',mode:'post',text:'Requested after saving.'});
+    assert.equal(next.type,'RESULT');assert.equal(calls.length,3);
+    assert.equal(calls[2].settings.draftPrompt,newPrompt);
+    assert.equal(calls[2].settings.postDraftPrompt,newPost);assert.equal(calls[2].post.mode,'post');
+    const nextReply=await checkPrivateDraft(bg,port,'draft:next-reply',{id:'next-reply-draft',mode:'reply',text:'Reply requested after saving.',context:post(102)});
+    assert.equal(nextReply.type,'RESULT');assert.equal(calls.length,4);assert.equal(calls[3].settings.replyDraftPrompt,newReply);assert.equal(calls[3].post.mode,'reply');
+    for(const call of calls){assert.equal(call.settings.verifyPrompt,postPrompt);assert.equal(call.settings.task,'draft');}
+    assert.equal(port.messages.some(value=>value.type==='ERROR'),false);
+  }
+});
+
+test('independent draft prompt edits do not invalidate published-post answers in either prompt mode',async()=>{
+  for(const explanationMode of ['preset','custom']){
+    const bg=createBackground({settings:{explanationMode,verifyPrompt:'Keep the published-post prompt.',draftPrompt:'Draft prompt before saving.',postDraftPrompt:'Post draft before saving.',replyDraftPrompt:'Reply draft before saving.'}});
+    await bg.ready();const port=bg.connect(),before=await bg.message({type:'GET_CONFIG'});
+    const original=await analyze(bg,port,'published-before-draft-edit');assert.equal(original.type,'RESULT');assert.equal(original.cached,false);
+    assert.equal((await bg.message({type:'SAVE_SETTINGS',settings:{...bg.local.data.settings,draftPrompt:'New legacy draft preference.',postDraftPrompt:'New independent post prompt.',replyDraftPrompt:'New independent reply prompt.'}})).ok,true);
+    assert.equal((await bg.message({type:'GET_CONFIG'})).taskRevision,before.taskRevision);
+    const cached=await analyze(bg,port,'published-after-draft-edit');
+    assert.equal(cached.type,'RESULT');assert.equal(cached.cached,true);assert.deepEqual(cached.result,original.result);
+    assert.equal(bg.apiCalls.length,1,'Changing only the draft prompt cannot trigger another published-post request');
+    assert.equal(bg.local.data.settings.verifyPrompt,'Keep the published-post prompt.');
+  }
+});
+
+test('a saved legacy draft prompt remains compatible when the two newer fields were absent',async()=>{
+  const legacy='SAVED_LEGACY_DRAFT_PROMPT',bg=createBackground({local:{settings:{provider:'api',draftPrompt:legacy}}});await bg.ready();
+  const config=await bg.message({type:'GET_CONFIG'});assert.equal(config.settings.draftPrompt,legacy);assert.equal(config.settings.postDraftPrompt,legacy);assert.equal(config.settings.replyDraftPrompt,legacy);
+  const port=bg.connect();assert.equal((await checkPrivateDraft(bg,port,'draft:legacy-post',{id:'legacy-post',mode:'post',text:'A new post.'})).type,'RESULT');
+  assert.equal((await checkPrivateDraft(bg,port,'draft:legacy-reply',{id:'legacy-reply',mode:'reply',text:'A short reply.',context:post(100)})).type,'RESULT');
+  assert.equal(bg.apiCalls[0].settings.postDraftPrompt,legacy);assert.equal(bg.apiCalls[1].settings.replyDraftPrompt,legacy);
+});
+
+test('active-source credential replacements publish a new task revision even without settings changes',async()=>{
+  for(const source of ['api','build']){
+    const pending=deferred(),bg=createBackground({settings:{provider:source},apiRun:()=>pending.promise,buildRun:()=>pending.promise});await bg.ready();
+    if(source==='build'){await bg.configureBuild();await bg.message({type:'GET_CONFIG'});}
+    const before=await bg.message({type:'GET_CONFIG'}),saved=clone(before.settings),port=bg.connect();
+    port.send({type:'ANALYZE_DRAFT',requestId:'draft:credential-revision',draft:{id:'credential-composer',text:'PRIVATE_CREDENTIAL_DRAFT'}});
+    const calls=source==='api'?bg.apiCalls:bg.buildCalls;await until(()=>calls.length===1);
+    const result=await bg.message(source==='api'?{type:'SAVE_KEY',apiKey:'replacement-session-fixture',remember:false}:{type:'SAVE_BUILD_CONNECTION',secret:'superx_'+'f'.repeat(64),port:2419});assert.equal(result.ok,true);
+    const after=await bg.message({type:'GET_CONFIG'});assert.equal(after.taskRevision,before.taskRevision+1);assert.deepEqual(after.settings,saved);assert.equal(calls[0].signal.aborted,true);
+    assert.equal(port.messages.findLast(value=>value.type==='CONFIG').taskRevision,after.taskRevision);
+    pending.resolve({text:'PRIVATE_LATE_CREDENTIAL_RESULT',provider:source});await tick();await tick();
+    assert.equal(port.messages.some(value=>value.requestId==='draft:credential-revision'&&value.type==='RESULT'),false);
+  }
+});
+
+test('updating an inactive API Key does not change the OAuth draft task revision or cancel its accepted work',async()=>{
+  const pending=deferred(),bg=createBackground({settings:{provider:'oauth'},oauthState:oauthConnected(),apiRun:()=>pending.promise});await bg.ready();const port=bg.connect();
+  const before=await bg.message({type:'GET_CONFIG'});port.send({type:'ANALYZE_DRAFT',requestId:'draft:inactive-credential',draft:{id:'inactive-credential-composer',text:'PRIVATE_OAUTH_DRAFT'}});await until(()=>bg.apiCalls.length===1);
+  assert.equal((await bg.message({type:'SAVE_KEY',apiKey:'inactive-api-key-fixture',remember:false})).ok,true);
+  assert.equal((await bg.message({type:'GET_CONFIG'})).taskRevision,before.taskRevision);assert.equal(bg.apiCalls[0].signal.aborted,false);
+  pending.resolve({text:'Subscription finding preserved.',provider:'oauth',verificationStatus:'completed'});await until(()=>port.messages.some(value=>value.requestId==='draft:inactive-credential'&&value.type==='RESULT'));
+});
+
 test('fresh installations persist the versioned three-request and one-second defaults without provider calls',async()=>{
   const bg=createBackground({local:{settings:undefined},session:null});await bg.ready();const config=await bg.message({type:'GET_CONFIG'});assert.equal(config.settings.analysisDefaultsVersion,1);assert.equal(config.settings.apiConcurrency,3);assert.equal(config.settings.dwellMs,1000);assert.deepEqual(bg.local.data.settings,core.DEFAULT_SETTINGS);assert.equal(bg.apiCalls.length,0);assert.equal(bg.commentCalls.length,0);assert.equal(bg.buildCalls.length,0);
   assert.equal(config.settings.provider,'oauth');assert.equal(config.ready,false);assert.equal(bg.oauthCalls.some(value=>value.type==='startLogin'||value.type==='token'),false);

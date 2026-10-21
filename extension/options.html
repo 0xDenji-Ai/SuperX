@@ -225,15 +225,32 @@
           </div>
           <div id="prompt-editing-help" hidden>
             <p class="prompt-description" data-i18n="options.promptsHelp" data-i18n-vars='{"limit":12000}'>Save applies to new requests. Leave a field blank to use the default.</p>
-            <p id="prompt-rules-help" class="help" data-i18n="options.promptFixedRules">Answer language and enabled search tools are applied automatically.</p>
+            <p id="prompt-rules-help" class="help" data-i18n="options.promptFixedRules">Language, enabled search tools and source requirements are applied automatically.</p>
           </div>
           <div id="analysis-prompts">
             <div class="field prompt-field">
               <div class="prompt-label">
-                <label for="verify-prompt" data-i18n="options.verifyPrompt">Fact-check prompt</label>
+                <label for="verify-prompt" data-i18n="options.verifyPrompt">Shared fact-check prompt</label>
                 <button id="reset-verify-prompt" class="text-button" type="button" data-i18n="options.restorePrompt">Restore default</button>
               </div>
-              <textarea id="verify-prompt" rows="4" maxlength="12000" spellcheck="false" dir="auto" aria-describedby="prompt-rules-help"></textarea>
+              <p id="verify-prompt-help" class="help" data-i18n="options.verifyPromptHelp">Posts, new drafts and replies use the same fact-checking standard.</p>
+              <textarea id="verify-prompt" rows="4" maxlength="12000" spellcheck="false" dir="auto" aria-describedby="verify-prompt-help prompt-rules-help"></textarea>
+            </div>
+            <div class="field prompt-field">
+              <div class="prompt-label">
+                <label for="post-draft-prompt" data-i18n="options.postDraftPrompt">New post context instructions</label>
+                <button id="reset-post-draft-prompt" class="text-button" type="button" data-i18n="options.restorePrompt">Restore default</button>
+              </div>
+              <p id="post-draft-prompt-help" class="help" data-i18n="options.postDraftPromptHelp">Adds new-post context; quoted posts are supporting material. Uses the shared fact-checking standard above.</p>
+              <textarea id="post-draft-prompt" rows="4" maxlength="12000" spellcheck="false" dir="auto" aria-describedby="post-draft-prompt-help prompt-rules-help"></textarea>
+            </div>
+            <div class="field prompt-field">
+              <div class="prompt-label">
+                <label for="reply-draft-prompt" data-i18n="options.replyDraftPrompt">Reply context instructions</label>
+                <button id="reset-reply-draft-prompt" class="text-button" type="button" data-i18n="options.restorePrompt">Restore default</button>
+              </div>
+              <p id="reply-draft-prompt-help" class="help" data-i18n="options.replyDraftPromptHelp">Adds context from the thread's original post and reply chain. Uses the shared fact-checking standard above.</p>
+              <textarea id="reply-draft-prompt" rows="4" maxlength="12000" spellcheck="false" dir="auto" aria-describedby="reply-draft-prompt-help prompt-rules-help"></textarea>
             </div>
           </div>
           <details id="comments-customization" class="prompt-customization">

@@ -27,6 +27,7 @@
     RATE_LIMIT:'Grok Build reached a usage limit. Try again later.',
     CANCELED:'The Grok Build request was canceled.',
     POST_INVALID:'Provide a valid original X post URL.',
+    DRAFT_INVALID:'Enter a draft of up to 30000 characters.',
     URL_SEARCH_REQUIRED:'Enable X search or web search to retrieve the full original post.',
     COMMENTS_INVALID_RESPONSE:'Grok Build did not return three valid comment drafts.'
   });
@@ -74,13 +75,13 @@
     const request=API.buildRequest(post,{...settings,provider:'api',apiModel:settings.buildModel,apiReasoningEffort:settings.buildReasoningEffort},task,analysis);
     const prompt=request.instructions+'\n\n'+request.input.map(input=>input.content).join('\n\n');
     if(prompt.length>MAX_TEXT)throw errorFor('BUILD_OUTPUT_INVALID');
-    return {type:'RUN',task,transport:settings.buildTransport,model:settings.buildModel,effort:settings.buildReasoningEffort,
+    return {type:'RUN',task,...(post?.kind==='draft'&&task==='verify'?{target:'draft'}:{}),transport:settings.buildTransport,model:settings.buildModel,effort:settings.buildReasoningEffort,
       webSearch:task==='verify'&&settings.webSearch,xSearch:task==='verify'&&settings.xSearch,prompt,
       ...(task==='comments'?{outputSchema:request.text.format.schema}:{})};
   }
   function normalizedSettings(settings,post) {
     const normalized=Core.normalizeSettings(settings);
-    return {...normalized,provider:'build',language:API.resolveLanguage(normalized.language,post)};
+    return {...normalized,provider:'build',language:API.resolveLanguage(post?.kind==='draft'?'auto':normalized.language,post?.kind==='draft'?{text:post.text}:post)};
   }
   function failureFor(error) {
     const codes={BUILD_TIMEOUT:'CONNECTION',BUILD_DISCONNECTED:'CONNECTION',BUILD_PROTOCOL_ERROR:'CONNECTION',BUILD_OUTPUT_INVALID:'INCOMPLETE',BUILD_LANGUAGE_MISMATCH:'LANGUAGE_MISMATCH',RATE_LIMIT:'RATE_LIMIT',BUILD_LOGIN_REQUIRED:'ACCESS',BUILD_MODEL_UNSUPPORTED:'ACCESS',BUILD_EFFORT_UNSUPPORTED:'ACCESS',BUILD_SEARCH_NOT_PERFORMED:'INCOMPLETE'};

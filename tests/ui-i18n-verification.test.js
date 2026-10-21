@@ -81,7 +81,7 @@ test('English UI consistently names the feature fact check while internal locali
   assert.equal(ui.t('status.explaining','en'),'Fact-checking…');
   assert.equal(ui.t('status.unverified','en'),'Not fact-checked');
   assert.equal(ui.t('options.verification','en'),'Fact check');
-  assert.equal(ui.t('options.verifyPrompt','en'),'Fact-check prompt');
+  assert.equal(ui.t('options.verifyPrompt','en'),'Shared fact-check prompt');
   assert.equal(ui.t('options.explanationMode','en'),'Fact-check style');
   assert.match(ui.t('options.verificationHelp','en'),/Fact checks read the full linked post/);
   for (const key of ['options.background','options.inline','options.off','options.explainPrompt']) assert.equal(ui.catalog.en[key],undefined);
@@ -89,7 +89,7 @@ test('English UI consistently names the feature fact check while internal locali
     assert.doesNotMatch(value,/\b(?:verify|verifies|verified|verifying|verification|unverified)\b/i,`${key}: English UI should use fact check`);
   }
   assert.equal(ui.t('status.verifying','zh-CN'),'正在求证…');
-  assert.equal(ui.t('options.verifyPrompt','zh-CN'),'事实求证');
+  assert.equal(ui.t('options.verifyPrompt','zh-CN'),'通用核查提示词');
 });
 
 test('incomplete verification describes the unfinished fact check without claiming an explanation was retained', () => {
@@ -320,4 +320,24 @@ test('Build model help explains independent settings and connection-time choices
   assert.equal(ui.t('options.buildModelHelp','zh-CN'),'此模式的模型设置与 API 模式独立保存；连接后确认可用模型和推理档位。');
   assert.equal(core.DEFAULT_SETTINGS.apiModel,'grok-4.3');assert.equal(core.DEFAULT_SETTINGS.apiReasoningEffort,'none');
   assert.equal(core.DEFAULT_SETTINGS.buildModel,'grok-4.3');assert.equal(core.DEFAULT_SETTINGS.buildReasoningEffort,'none');
+});
+
+test('draft search tooltip describes call records without claiming retrieval success in every language',()=>{
+  const states=['draft.searchRecorded','draft.searchUnconfirmed','draft.searchPending'];
+  for(const language of ui.SUPPORTED_LANGUAGES){
+    assert.equal(new Set(states.map(key=>ui.t(key,language))).size,3,`${language}: distinct search states`);
+    for(const key of [...states,'draft.searchEvidenceNote']){
+      const value=ui.catalog[language][key];assert.ok(value?.trim(),`${language}: ${key}`);
+      if(language!=='en')assert.notEqual(value,ui.catalog.en[key],`${language}: ${key}`);
+      assert.ok(Array.from(value).length<120,`${language}: concise tooltip`);
+      assert.doesNotMatch(value,/\{\w+\}/,`${language}: no inferred count`);
+    }
+  }
+  assert.equal(ui.t('draft.searchRecorded','en'),'Search calls: recorded');
+  assert.equal(ui.t('draft.searchUnconfirmed','en'),'Search calls: not confirmed');
+  assert.equal(ui.t('draft.searchPending','en'),'Search calls: awaiting report');
+  assert.equal(ui.t('draft.searchUnconfirmed','zh-CN'),'检索调用：未确认');
+  assert.equal(ui.t('draft.searchPending','zh-CN'),'检索调用：等待报告');
+  assert.equal(ui.t('draft.searchEvidenceNote','zh-CN'),'有调用记录不代表已取得有效证据或结论一定正确。');
+  for(const retired of ['draft.searchConfirmed','draft.searchNotObserved','draft.searchUnknown'])assert.equal(Object.hasOwn(ui.catalog.en,retired),false);
 });
