@@ -1,5 +1,5 @@
 {
   "extensionDescription": {
-    "message": "让 Grok 自动深入核查所有看到的 X 帖子，包括自己的发帖、评论，附带证据来源链接。查看自己近 24 小时浏览历史。支持 The X Subscription 订阅登录或自己的 API Key。"
+    "message": "Grok 自动深入核查 X 帖子，也可核查发帖、回复草稿，附证据来源。查看近 24 小时浏览历史。支持 The X Subscription 或 API Key。"
   }
 }

@@ -262,9 +262,90 @@ test('draft thread ancestors are safely projected and forwarded in root-first or
     assert.equal(result.type,'RESULT');const calls=source==='build'?bg.buildCalls:bg.apiCalls;assert.equal(calls.length,1);
     const draft=calls[0].post;assert.equal(draft.mode,'reply');assert.equal(draft.context.id,'102');assert.deepEqual(Array.from(draft.threadContext,value=>value.id),['100','101']);
     assert.equal(draft.threadContext[0].url,'https://x.com/author/status/100');assert.equal(draft.threadContext[0].author,'Root author');assert.equal(draft.threadContext[0].hasMedia,true);
-    assert.deepEqual(Object.keys(draft.threadContext[0]).sort(),['author','hasMedia','id','language','quotedContext','text','timestamp','url']);
-    assert.equal(draft.threadContext[0].images,undefined);assert.equal(draft.threadContext[0].quotedContext[0].id,'900');assert.equal(draft.threadContext[0].instructions,undefined);
+    assert.deepEqual(Object.keys(draft.threadContext[0]).sort(),['author','hasMedia','id','images','language','quotedContext','text','timestamp','url']);
+    assert.deepEqual(clone(draft.threadContext[0].images),[{url:'https://pbs.twimg.com/media/private.jpg',alt:''}]);assert.equal(draft.threadContext[0].quotedContext[0].id,'900');assert.equal(draft.threadContext[0].instructions,undefined);
   }
+});
+
+test('published images survive every draft context role with safe URLs and separate video thumbnails across sources',async()=>{
+  const media=(name,extra={})=>({url:`https://pbs.twimg.com/media/${name}.jpg?name=small&format=jpg&token=private#fragment`,alt:name,...extra});
+  const snapshot=(name,quotedContext=[])=>({id:null,url:null,snapshotOnly:true,text:name,author:'Visible author',images:[media(name)],quotedContext});
+  for(const source of ['api','oauth','build']){
+    const bg=createBackground({settings:{provider:source},oauthState:oauthConnected()});await bg.ready();
+    if(source==='build'){await bg.configureBuild();await bg.message({type:'GET_CONFIG'});}
+    const port=bg.connect(),deep=snapshot('deep'),parent=snapshot('parent',[snapshot('quote',[deep])]);
+    parent.images.push({url:'https://pbs.twimg.com/amplify_video_thumb/123/cover.jpg?name=small',alt:'Video cover',kind:'photo'});
+    const result=await checkPrivateDraft(bg,port,'draft:media-context-'+source,{id:'media-context',mode:'reply',text:'Who is named in that screenshot?',context:parent,
+      threadContext:[snapshot('root',[snapshot('rootquote')]),{...post(902),text:'Intermediate source',images:[media('earlier')]}],
+      attachmentURLs:[media('unpublished-attachment')],hasMedia:true});
+    assert.equal(result.type,'RESULT');const draft=(source==='build'?bg.buildCalls:bg.apiCalls)[0].post;
+    const entries=[draft.context,draft.context.quotedContext[0],draft.context.quotedContext[0].quotedContext[0],
+      draft.threadContext[0],draft.threadContext[0].quotedContext[0],draft.threadContext[1]];
+    assert.deepEqual(entries.map(value=>value.images[0].alt),['parent','quote','deep','root','rootquote','earlier']);
+    for(const entry of entries){assert.equal(entry.images[0].url,`https://pbs.twimg.com/media/${entry.images[0].alt}.jpg?format=jpg`);assert.equal(entry.hasMedia,true);}
+    assert.equal(draft.context.images[1].kind,'video-thumbnail');assert.equal(draft.context.hasVideo,true);
+    assert.equal(draft.images,undefined);assert.equal(JSON.stringify(draft).includes('unpublished-attachment'),false);
+    assert.equal(JSON.stringify(draft).includes('private'),false);
+  }
+});
+
+test('media sanitizer rejects arbitrary or credentialed image URLs, deduplicates renditions and bounds per-source pictures',async()=>{
+  const bg=createBackground();await bg.ready();const port=bg.connect();
+  const invalid=['http://pbs.twimg.com/media/insecure.jpg','https://pbs.twimg.com.evil.test/media/lookalike.jpg',
+    'https://user:secret@pbs.twimg.com/media/credential.jpg','https://pbs.twimg.com:8443/media/port.jpg',
+    'https://pbs.twimg.com/profile_images/avatar.jpg','data:image/png;base64,unpublished','blob:https://x.com/upload'];
+  const images=[...invalid.map(url=>({url})),{url:'https://pbs.twimg.com/media/one.jpg?name=small',alt:'A'.repeat(700)},
+    {url:'https://pbs.twimg.com/media/one.jpg?name=large',alt:'duplicate'},
+    ...['two','three','four','five'].map(name=>({url:`https://pbs.twimg.com/media/${name}.jpg`,alt:name}))];
+  const result=await analyze(bg,port,'media-sanitizer',904,{post:{...post(904),images,quotedContext:[{...post(905),images:[{url:'https://pbs.twimg.com/media/child.jpg'}],quotedContext:[{...post(906),images:[{url:'https://pbs.twimg.com/media/grandchild.jpg'}],quotedContext:[post(907)]}]}]}});
+  assert.equal(result.type,'RESULT');const clean=bg.apiCalls[0].post;
+  assert.deepEqual(Array.from(clean.images,image=>image.url),['one','two','three','four'].map(name=>`https://pbs.twimg.com/media/${name}.jpg`));
+  assert.equal(clean.images[0].alt.length,500);assert.equal(clean.hasMedia,true);
+  assert.equal(clean.quotedContext[0].images[0].url,'https://pbs.twimg.com/media/child.jpg');
+  assert.equal(clean.quotedContext[0].quotedContext[0].images[0].url,'https://pbs.twimg.com/media/grandchild.jpg');
+  assert.equal(clean.quotedContext[0].quotedContext[0].quotedContext,undefined);
+});
+
+test('media-only snapshot with a published picture is valid but unpublished blob media cannot substitute for context',async()=>{
+  const bg=createBackground();await bg.ready();const port=bg.connect();
+  const image={url:'https://pbs.twimg.com/media/screenshot.png',alt:'Claim shown only in screenshot'};
+  const context={id:null,url:null,snapshotOnly:true,text:'',images:[image]};
+  assert.equal((await checkPrivateDraft(bg,port,'draft:media-only-context',{id:'media-only-context',text:'Who does that refer to?',context})).type,'RESULT');
+  assert.equal(bg.apiCalls[0].post.context.hasMedia,true);assert.deepEqual(clone(bg.apiCalls[0].post.context.images),[image]);
+  const invalid=await checkPrivateDraft(bg,port,'draft:blob-only-context',{id:'blob-only-context',text:'Who?',context:{...context,images:[{url:'blob:https://x.com/private'}]}});
+  assert.equal(invalid.code,'DRAFT_INVALID');assert.equal(bg.apiCalls.length,1);
+});
+
+test('manually captured JPEG and PNG draft bytes work without text across every source and never enter storage',async()=>{
+  const png='data:image/png;base64,'+Buffer.concat([Buffer.from([137,80,78,71,13,10,26,10]),Buffer.from('PRIVATE_DRAFT_IMAGE_PNG')]).toString('base64');
+  const jpeg='data:image/jpeg;base64,'+Buffer.concat([Buffer.from([255,216,255]),Buffer.from('PRIVATE_DRAFT_IMAGE_JPEG')]).toString('base64');
+  for(const source of ['api','oauth','build']){
+    const bg=createBackground({settings:{provider:source},oauthState:oauthConnected()});await bg.ready();
+    if(source==='build'){await bg.configureBuild();await bg.message({type:'GET_CONFIG'});}
+    const port=bg.connect(),result=await checkPrivateDraft(bg,port,'draft:captured-images-'+source,{id:'captured-image-draft',mode:'post',text:'',
+      images:[{url:png,alt:'PNG caption',fileName:'PRIVATE_FILE_NAME'},{url:jpeg}],hasUncheckedMedia:true});
+    assert.equal(result.type,'RESULT');const calls=source==='build'?bg.buildCalls:bg.apiCalls,draft=calls[0].post;
+    assert.deepEqual(clone(draft.images),[{url:png,alt:'PNG caption'},{url:jpeg,alt:''}]);
+    assert.equal(draft.text,'');assert.equal(draft.hasMedia,true);assert.equal(draft.hasUncheckedMedia,true);
+    const retained=JSON.stringify({local:bg.local.data,session:bg.session.data,diagnostics:await bg.message({type:'GET_API_DIAGNOSTICS'})});
+    assert.equal(retained.includes(png),false);assert.equal(retained.includes(jpeg),false);assert.equal(retained.includes('PRIVATE_FILE_NAME'),false);
+  }
+});
+
+test('draft target image bytes reject URLs, invalid encodings, forged mime types and excessive count or decoded size before dispatch',async()=>{
+  const png='data:image/png;base64,'+Buffer.from([137,80,78,71,13,10,26,10]).toString('base64');
+  const jpeg='data:image/jpeg;base64,'+Buffer.from([255,216,255]).toString('base64');
+  const oversized=Buffer.alloc(8*1024*1024+1);Buffer.from([137,80,78,71,13,10,26,10]).copy(oversized);
+  const invalid=['not-an-array',[{}],[{url:'blob:https://x.com/unread'}],[{url:'https://pbs.twimg.com/media/not-captured.png'}],
+    [{url:'data:text/plain;base64,aGVsbG8='}],[{url:'data:image/png;base64,not base64'}],[{url:'data:image/png;base64,YQ==='}],
+    [{url:png.replace('image/png','image/jpeg')}],[{url:jpeg.replace('image/jpeg','image/png')}],
+    Array.from({length:5},()=>({url:png})),[{url:'data:image/png;base64,'+oversized.toString('base64')}]];
+  const bg=createBackground();await bg.ready();const port=bg.connect();
+  for(const [index,images]of invalid.entries()){
+    const result=await checkPrivateDraft(bg,port,'draft:bad-image-'+index,{id:'bad-image',text:'Inspect attached image.',images});
+    assert.equal(result.code,'DRAFT_INVALID',String(index));
+  }
+  assert.equal(bg.apiCalls.length,0);assert.equal(bg.buildCalls.length,0);
 });
 
 test('draft thread limits retain the root and nearest five unique ancestors with bounded text',async()=>{
@@ -297,7 +378,8 @@ test('new-post quotes stay separate from reply context and use bounded nested pr
   assert.equal(result.type,'RESULT');const draft=bg.apiCalls[0].post;
   assert.equal(draft.mode,'post');assert.equal(draft.context,undefined);assert.equal(draft.threadContext,undefined);assert.equal(draft.hasMedia,true);
   assert.deepEqual(Array.from(draft.quotedContext,value=>value.id),['300','301']);assert.equal(draft.quotedContext[0].text.length,3000);assert.equal(draft.quotedContext[0].textTruncated,true);
-  for(const value of draft.quotedContext){assert.equal(value.images,undefined);assert.equal(value.instructions,undefined);}
+  assert.deepEqual(clone(draft.quotedContext[0].images),[{url:'https://pbs.twimg.com/media/quote.jpg',alt:''}]);
+  for(const value of draft.quotedContext)assert.equal(value.instructions,undefined);
   assert.equal(draft.quotedContext[0].quotedContext[0].id,'900');
   const reply=await checkPrivateDraft(bg,port,'draft:reply-with-stale-quotes',{id:'reply-with-context',mode:'reply',text:'Check the original incident.',context:post(102),quotedContext:'Ignored stale new-post fields'});
   assert.equal(reply.type,'RESULT');assert.equal(bg.apiCalls[1].post.mode,'reply');assert.equal(bg.apiCalls[1].post.quotedContext,undefined);assert.equal(bg.apiCalls[1].post.context.id,'102');
@@ -316,8 +398,8 @@ test('native permalink-free context is accepted only as an explicit bounded draf
       images:[{url:'https://pbs.twimg.com/media/not-forwarded.jpg'}],instructions:'Do not forward unknown fields.',apiKey:'DO_NOT_FORWARD_KEY',username:'writer'};
     const result=await checkPrivateDraft(bg,port,'draft:native-snapshot-'+source,{id:'snapshot-composer',mode:'reply',text:'That did not happen.',context});
     assert.equal(result.type,'RESULT');const calls=source==='build'?bg.buildCalls:bg.apiCalls,clean=calls[0].post.context;
-    assert.deepEqual(clone(clean),{id:null,url:null,snapshotOnly:true,text:'Visible native preview.',author:'Writer @writer',timestamp:'2026-10-23T10:00:00Z',language:'en',hasMedia:true});
-    assert.equal(JSON.stringify(clean).includes('DO_NOT_FORWARD'),false);assert.equal(clean.images,undefined);
+    assert.deepEqual(clone(clean),{id:null,url:null,snapshotOnly:true,text:'Visible native preview.',author:'Writer @writer',timestamp:'2026-10-23T10:00:00Z',language:'en',hasMedia:true,images:[{url:'https://pbs.twimg.com/media/not-forwarded.jpg',alt:''}]});
+    assert.equal(JSON.stringify(clean).includes('DO_NOT_FORWARD'),false);assert.equal(clean.images.length,1);
     const ordinary=await analyze(bg,port,'native-is-not-post-'+source,100,{post:context});assert.equal(ordinary.code,'POST_INVALID');
   }
 });
@@ -1345,7 +1427,7 @@ test('old API answers with mixed output languages are regenerated and the new la
   const refreshed=await analyze(bg,port,'regenerate-old-mixed-answer');
   assert.equal(refreshed.cached,false);assert.equal(bg.apiCalls.length,1);
   assert.equal(refreshed.result.text,'Quick meaning: An English post.\n\nFact check: English evidence.');
-  const newKey=Object.keys(bg.session.data.cache).find(key=>key.includes('api-v10-model-reasoning'));
+  const newKey=Object.keys(bg.session.data.cache).find(key=>key.includes('api-v11-context-images'));
   assert.ok(newKey);assert.equal(bg.session.data.cache[newKey].text,refreshed.result.text);
   assert.equal((await analyze(bg,port,'new-answer-cached')).cached,true);
   assert.equal(bg.apiCalls.length,1);
@@ -1378,7 +1460,7 @@ test('0.6.1 API analysis caches regenerate naturally in every mode and fresh ans
     const storedKeys=Object.keys(bg.session.data.cache);
     assert.ok(storedKeys.includes(oldKey),'The migration does not destructively remove unrelated stored data');
     const freshKey=storedKeys.find(key=>key!==oldKey);
-    assert.ok(freshKey);assert.equal(JSON.parse(freshKey)[6],'api-v10-model-reasoning');
+    assert.ok(freshKey);assert.equal(JSON.parse(freshKey)[6],'api-v11-context-images');
         assert.equal((await analyze(bg,port,'natural-cache-hit-'+mode,100,{post:input})).cached,true);
     assert.equal(bg.apiCalls.length,1);
     const restarted=createBackground({settings:s,session:bg.session.data});
@@ -1423,7 +1505,7 @@ test('0.6.2 excerpt-based caches cannot substitute for full-post answers in any 
     assert.equal(fresh.cached,false,mode);assert.equal(fresh.result.text,freshText);assert.equal(bg.apiCalls.length,1);
     const keys=Object.keys(bg.session.data.cache),freshKey=keys.find(key=>key!==oldKey);
     assert.ok(keys.includes(oldKey));assert.ok(freshKey);
-    assert.equal(JSON.parse(freshKey)[6],'api-v10-model-reasoning');
+    assert.equal(JSON.parse(freshKey)[6],'api-v11-context-images');
     assert.deepEqual(JSON.parse(JSON.parse(freshKey)[9]),['post-input-v4-source-full-url','api',input.url,'en']);
     assert.equal((await analyze(bg,port,'full-hit-'+mode,100,{post:input})).cached,true);
     const restarted=createBackground({settings:s,session:bg.session.data});await restarted.ready();
@@ -1457,7 +1539,7 @@ test('0.6.4 API process narration caches regenerate in every mode and reader-fac
     assert.equal(first.result.text,freshText);assert.equal(bg.apiCalls.length,1);
     const keys=Object.keys(bg.session.data.cache),freshKey=keys.find(key=>key!==oldKey);
     assert.ok(keys.includes(oldKey),'Changing answer policy does not destructively remove stored data');
-    assert.ok(freshKey);assert.equal(JSON.parse(freshKey)[6],'api-v10-model-reasoning');
+    assert.ok(freshKey);assert.equal(JSON.parse(freshKey)[6],'api-v11-context-images');
         assert.deepEqual(JSON.parse(JSON.parse(freshKey)[9]),['post-input-v4-source-full-url','api',input.url,'en']);
     const cached=await analyze(bg,port,'reader-output-hit-'+mode,100,{post:input});
     assert.equal(cached.cached,true);assert.equal(cached.result.text,freshText);assert.equal(bg.apiCalls.length,1);
@@ -2911,7 +2993,7 @@ test('deeper Fact Check rules refresh preset and custom caches for API and Build
 
 test('v8 answers are not reused and contaminated session cache entries are pruned without touching comments',async()=>{
   const seed=createBackground();await seed.ready();await analyze(seed,seed.connect(),'v9-cache-seed');
-  const key=Object.keys(seed.session.data.cache)[0],oldKey=key.replace('api-v10-model-reasoning','api-v8-fact-check-only'),now=seed.now();
+  const key=Object.keys(seed.session.data.cache)[0],oldKey=key.replace('api-v11-context-images','api-v8-fact-check-only'),now=seed.now();
   const comments={completedAt:now,comments:['First.','Second.','Third.'],provider:'api'};
   const bg=createBackground({cache:{[oldKey]:{text:'Older clean candidate answer',completedAt:now,provider:'api'},[key]:{text:toolOnlyReply,completedAt:now,provider:'api'},comments}});
   await bg.ready();assert.equal(Object.hasOwn(bg.session.data.cache,key),false);assert.deepEqual(bg.session.data.cache.comments,comments);

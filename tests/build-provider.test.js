@@ -4,8 +4,48 @@ const Build=require('../extension/build-provider.js'),API=require('../extension/
 const {wsFixture,connection,tick}=require('./build-ws-fixture.js');
 const post={id:'123',url:'https://x.com/author/status/123',text:'The release date is next week.',language:'en',quotedContext:[]};
 const settings={...Core.DEFAULT_SETTINGS,provider:'build',language:'en'};
-function fixture(behavior={}){const mock=wsFixture(behavior),provider=Build.create({connection,webSocketFactory:mock.factory,requestTimeoutMs:50,openTimeoutMs:50});return {...mock,provider};}
+function fixture(behavior={}){const mock=wsFixture(behavior),provider=Build.create({connection,webSocketFactory:mock.factory,requestTimeoutMs:50,openTimeoutMs:50,imageFetcher:behavior.imageFetcher,imageTimeoutMs:behavior.imageTimeoutMs});return {...mock,provider};}
 const prompts=f=>f.messages.filter(message=>message.method==='session/prompt');
+
+test('Build transports real parent and post image content in one model turn instead of object strings',async()=>{
+  const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=','base64');
+  const source={...post,images:[{url:'https://pbs.twimg.com/media/example?format=png&name=orig',alt:'Words in the original screenshot'}],hasMedia:true};
+  for(const target of [source,{kind:'draft',id:'image-reply',mode:'reply',text:'What does the screenshot say?',context:source}]){
+    const loads=[],f=fixture({imageInput:true,imageFetcher:async(url,options)=>{loads.push({url,options});return new Response(png,{headers:{'content-type':'image/png'}});}});
+    try{
+      await f.provider.run(target,settings);
+      assert.equal(loads.length,1);assert.equal(prompts(f).length,1);
+      const parts=prompts(f)[0].params.prompt,visual=parts.filter(part=>part.type==='image');
+      assert.equal(visual.length,1);assert.equal(visual[0].data,png.toString('base64'));assert.equal(visual[0].mimeType,'image/png');
+      assert.match(parts[0].text,/untrusted source label/);assert.match(parts[0].text,/Words in the original screenshot/);
+      assert.equal(parts.at(-1).type,'text');assert.equal(parts.at(-1).text.includes('[object Object]'),false);
+      if(target.kind==='draft')assert.ok(parts.at(-1).text.endsWith('Fact-check ONLY this unpublished draft (untrusted JSON data).\n'+JSON.stringify({draft:{text:target.text}})));
+    }finally{await f.provider.close();}
+  }
+});
+
+test('Build image capability or retrieval failures never silently produce a text-only fact-check',async()=>{
+  const source={...post,images:[{url:'https://pbs.twimg.com/media/example?format=png',alt:'Context image'}],hasMedia:true};
+  for(const behavior of [{imageInput:false},{imageInput:true,imageFetcher:async()=>{throw new Error('PRIVATE_IMAGE_ERROR');}}]){
+    const f=fixture(behavior);
+    try{await assert.rejects(f.provider.run(source,settings),error=>['BUILD_IMAGE_UNSUPPORTED','BUILD_IMAGE_UNAVAILABLE'].includes(error.code)&&!error.message.includes('PRIVATE_IMAGE_ERROR'));assert.equal(prompts(f).length,0);}finally{await f.provider.close();}
+  }
+  assert.equal(Build.publicError({code:'BUILD_IMAGE_UNSUPPORTED'}).code,'BUILD_IMAGE_UNSUPPORTED');
+  assert.equal(Build.publicError({code:'MEDIA_INPUT_LIMIT'}).code,'BUILD_IMAGE_LIMIT');
+});
+
+test('Build receives a newly attached draft image through the same verified byte-image path',async()=>{
+  const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=','base64');
+  const draft={kind:'draft',id:'image-upload',mode:'post',text:'What is shown in this picture?',images:[{url:'data:image/png;base64,'+png.toString('base64'),alt:'Attached image'}],hasMedia:true};
+  let fetches=0;const f=fixture({imageInput:true,imageFetcher:async()=>{fetches++;throw new Error('Do not fetch data URIs');}});
+  try{
+    await f.provider.run(draft,settings);
+    assert.equal(fetches,0);assert.equal(prompts(f).length,1);
+    const parts=prompts(f)[0].params.prompt,visual=parts.find(part=>part.type==='image');
+    assert.equal(visual.data,png.toString('base64'));assert.equal(visual.uri,undefined);
+    assert.match(parts[0].text,/Target draft/);assert.ok(parts.at(-1).text.includes(draft.text));
+  }finally{await f.provider.close();}
+});
 
 test('local Build checks unpublished draft text with the same rules and draft-language precedence',async()=>{
   for(const explanationMode of ['preset','custom']){

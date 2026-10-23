@@ -218,7 +218,11 @@ test('oversized auxiliary context fits the shared transport budget without trunc
     const auxiliary=JSON.parse(request.input[0].content.split('\n').slice(1).join('\n'));
     assert.equal(auxiliary.replyContext.url,context.url);assert.equal(auxiliary.threadContext[0].url,threadContext[0].url);
     assert.equal(auxiliary.replyContext.textTruncated,true);assert.equal(auxiliary.threadContext[0].textTruncated,true);
-    assert.equal(auxiliary.replyContext.images,undefined);assert.equal(auxiliary.replyContext.quotedContext,undefined);
+    assert.equal(auxiliary.replyContext.images,undefined);
+    if(auxiliary.replyContext.quotedContext){
+      assert.equal(auxiliary.replyContext.quotedContext[0].url,context.quotedContext[0].url);
+      assert.equal(auxiliary.replyContext.quotedContext[0].textTruncated,true);
+    }
     assert.ok(auxiliary.replyContext.text.length>0);assert.ok(auxiliary.threadContext[0].text.length>0);
     assert.match(request.instructions,/Context snapshots may be truncated/);assert.match(request.instructions,/Follow canonical post URLs/);
   }

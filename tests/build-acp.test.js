@@ -20,7 +20,7 @@ function fixture(behavior={}){
     async cleanupSession(id,options){cleanups.push({id,...options});if(behavior.cleanupFalse)return {confirmed:false};if(options.cancel&&resolvePrompt)resolvePrompt({stopReason:'cancelled'});return {confirmed:true};},
     async request(method,params,options){
       messages.push({method,params,options});
-      if(method==='initialize')return {protocolVersion:behavior.protocolVersion??1,authMethods:behavior.noLogin?[{id:'grok.com'}]:[{id:'cached_token'}],_meta:{agentVersion:behavior.version??'1.0.60',currentWorkingDirectory:behavior.cwd??'C:\\SuperX\\isolated work'}};
+      if(method==='initialize')return {protocolVersion:behavior.protocolVersion??1,authMethods:behavior.noLogin?[{id:'grok.com'}]:[{id:'cached_token'}],...(behavior.imageInput?{agentCapabilities:{promptCapabilities:{image:true}}}:{}),_meta:{agentVersion:behavior.version??'1.0.60',currentWorkingDirectory:behavior.cwd??'C:\\SuperX\\isolated work'}};
       if(method==='authenticate'){if(behavior.authError)throw new Error(behavior.authError);return {};}
       if(method==='session/new'){activeSession='session-'+(++sid);return {sessionId:activeSession,configOptions:configs()};}
       if(method==='session/set_config_option'){if(params.configId==='model'&&!behavior.wrongModel)model=params.value;if(params.configId==='reasoning_effort'&&!behavior.wrongEffort)effort=params.value;return {configOptions:configs()};}
@@ -33,13 +33,14 @@ function fixture(behavior={}){
         if(!behavior.noSearch&&!behavior.structured){update({sessionUpdate:'tool_call',toolCallId:'search',rawInput:{variant:'XSearch',backend:true},status:'in_progress'});update({sessionUpdate:'tool_call_update',toolCallId:'search',status:'completed',rawOutput:{name:behavior.toolName??'x_thread_fetch',sources:[{url:'https://evidence.example/check?token=PRIVATE&ok=1',title:'Evidence'}]}});}
         update({sessionUpdate:'agent_thought_chunk',content:{type:'text',text:'PRIVATE_REASONING_CANARY'}});
         if(!behavior.structured)update({sessionUpdate:'agent_message_chunk',content:{type:'text',text:behavior.text??'The claim is supported.'}});
+        if(behavior.imageDropped)emit({jsonrpc:'2.0',method:'_x.ai/session/update',params:{sessionId:activeSession,update:{sessionUpdate:'image_dropped',notes:['PRIVATE_DROPPED_IMAGE_DETAIL']}}});
         if(behavior.holdPrompt)return new Promise(resolve=>{resolvePrompt=resolve;});
         return reply();
       }
       throw new Error('Unexpected mock method '+method);
     }
   };
-  return {client:ACP.create({transport,heartbeatMs:behavior.heartbeatMs??20000}),transport,messages,notifications,responses,cleanups,update,emit,finish:()=>resolvePrompt?.(reply())};
+  return {client:ACP.create({transport,heartbeatMs:behavior.heartbeatMs??20000,imageFetcher:behavior.imageFetcher,imageTimeoutMs:behavior.imageTimeoutMs}),transport,messages,notifications,responses,cleanups,update,emit,finish:()=>resolvePrompt?.(reply())};
 }
 
 test('inline profiles use a denied curated sentinel and disable local discovery for all search combinations',()=>{
@@ -77,6 +78,76 @@ test('drafts may complete without search while observed allowed searches retain 
     const sent=f.messages.find(message=>message.method==='session/prompt');assert.equal(sent.params._meta,undefined);
     assert.deepEqual(sent.params.prompt,[{type:'text',text:'Check only the unpublished PHP draft.'}]);
   }
+});
+
+const contextPNG=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=','base64');
+const contextImage=(suffix='a')=>({url:'https://pbs.twimg.com/media/'+suffix+'?format=png&name=orig',label:'Untrusted context image '+suffix});
+const pngResponse=()=>new Response(contextPNG,{headers:{'content-type':'image/png'}});
+
+test('image input is negotiated before loading or creating a paid model prompt',async()=>{
+  let fetched=0;const f=fixture({imageFetcher:async()=>{fetched++;return pngResponse();}});
+  await assert.rejects(f.client.run(request({images:[contextImage()]})),{code:'BUILD_IMAGE_UNSUPPORTED'});
+  assert.equal(fetched,0);assert.equal(f.messages.some(item=>item.method==='session/new'||item.method==='session/prompt'),false);
+  const ready=fixture({imageInput:true});assert.equal((await ready.client.status()).imageInputSupported,true);assert.equal((await f.client.status()).imageInputSupported,false);
+});
+
+test('actual image bytes enter one ACP prompt with source labels and duplicate images loaded once',async()=>{
+  const loads=[],f=fixture({imageInput:true,imageFetcher:async(url,options)=>{loads.push({url,options});return pngResponse();}});
+  await f.client.run(request({target:'draft',images:[contextImage(),contextImage(),contextImage('b')],prompt:'Check ONLY this final draft.'}));
+  assert.equal(loads.length,2);
+  for(const {options}of loads){assert.equal(options.credentials,'omit');assert.equal(options.mode,'cors');assert.equal(options.redirect,'error');assert.equal(options.referrerPolicy,'no-referrer');assert.equal(options.cache,'no-store');assert.equal(options.signal instanceof AbortSignal,true);}
+  const sent=f.messages.filter(item=>item.method==='session/prompt');assert.equal(sent.length,1);
+  assert.deepEqual(sent[0].params.prompt,[{type:'text',text:contextImage().label},{type:'image',mimeType:'image/png',data:contextPNG.toString('base64'),uri:contextImage().url},{type:'text',text:contextImage('b').label},{type:'image',mimeType:'image/png',data:contextPNG.toString('base64'),uri:contextImage('b').url},{type:'text',text:'Check ONLY this final draft.'}]);
+});
+
+test('uploaded draft image data is validated and embedded directly without a network fetch or duplicate URI',async()=>{
+  let fetched=0;const dataURL='data:image/png;base64,'+contextPNG.toString('base64'),f=fixture({imageInput:true,imageFetcher:async()=>{fetched++;throw new Error('Should not fetch a local image');}});
+  await f.client.run(request({target:'draft',images:[{url:dataURL,label:'Untrusted draft attachment'}]}));
+  assert.equal(fetched,0);const parts=f.messages.find(item=>item.method==='session/prompt').params.prompt;
+  assert.deepEqual(parts[1],{type:'image',mimeType:'image/png',data:contextPNG.toString('base64')});
+  assert.equal(JSON.stringify(parts).split(contextPNG.toString('base64')).length,2);
+  for(const url of ['data:image/svg+xml;base64,PHN2Zz4=','data:image/png;base64,a','data:image/png;base64,YQ=A','data:image/png;base64,YQ==\n','data:image/jpeg;base64,'+contextPNG.toString('base64')]){
+    const bad=fixture({imageInput:true});await assert.rejects(bad.client.run(request({images:[{url,label:'Image'}]})),{code:'BUILD_IMAGE_UNAVAILABLE'});assert.equal(bad.messages.some(item=>item.method==='session/prompt'),false);
+  }
+});
+
+test('native image-drop notifications discard unsupported text-only output and cancel the turn',async()=>{
+  const updates=[],f=fixture({imageInput:true,imageFetcher:async()=>pngResponse(),imageDropped:true});
+  await assert.rejects(f.client.run(request({images:[contextImage()]}),{onUpdate:message=>updates.push(message)}),error=>error.code==='BUILD_IMAGE_UNAVAILABLE'&&!error.message.includes('PRIVATE_DROPPED_IMAGE_DETAIL'));
+  assert.equal(f.messages.filter(item=>item.method==='session/prompt').length,1);
+  assert.deepEqual(f.cleanups,[{id:'session-1',cancel:true}]);
+  assert.equal(updates.at(-1).text,'');assert.deepEqual(updates.at(-1).sources,[]);
+});
+
+test('remote and credential-bearing URLs cannot become image fetches',async()=>{
+  for(const url of ['http://pbs.twimg.com/media/a','https://pbs.twimg.com:444/media/a','https://pbs.twimg.com.evil.example/media/a','https://secret@pbs.twimg.com/media/a','file:///media/a','https://pbs.twimg.com/profile_images/a','https://pbs.twimg.com/media/a?token=secret','https://pbs.twimg.com/media/a#private','https://pbs.twimg.com/media/a?format=svg']){
+    let fetched=0;const f=fixture({imageInput:true,imageFetcher:async()=>{fetched++;return pngResponse();}});
+    await assert.rejects(f.client.run(request({images:[{url,label:'Image'}]})),{code:'BUILD_IMAGE_UNAVAILABLE'});assert.equal(f.messages.length,0);assert.equal(fetched,0);
+  }
+  const tooMany=fixture({imageInput:true});await assert.rejects(tooMany.client.run(request({images:Array.from({length:25},(_,index)=>contextImage(String(index)))})),{code:'BUILD_IMAGE_LIMIT'});assert.equal(tooMany.messages.length,0);
+});
+
+test('unsupported image bodies, redirects and aggregate overflow fail without a text-only model prompt',async()=>{
+  for(const imageFetcher of [async()=>new Response('<html>not an image</html>',{headers:{'content-type':'text/html'}}),async()=>new Response(contextPNG,{headers:{'content-type':'image/jpeg'}}),async()=>new Response('',{status:404}),async()=>{throw new TypeError('redirect contains PRIVATE_CANARY');},async()=>new Response(contextPNG,{headers:{'content-type':'image/png','content-length':String(8*1024*1024+1)}})]){
+    const f=fixture({imageInput:true,imageFetcher});
+    await assert.rejects(f.client.run(request({images:[contextImage()]})),error=>['BUILD_IMAGE_UNAVAILABLE','BUILD_IMAGE_LIMIT'].includes(error.code)&&!error.message.includes('PRIVATE_CANARY'));
+    assert.equal(f.messages.some(item=>item.method==='session/new'||item.method==='session/prompt'),false);
+  }
+  const large=Buffer.alloc(4*1024*1024);contextPNG.copy(large);const f=fixture({imageInput:true,imageFetcher:async()=>new Response(large,{headers:{'content-type':'image/png'}})});
+  await assert.rejects(f.client.run(request({images:[contextImage('1'),contextImage('2'),contextImage('3')]})),{code:'BUILD_IMAGE_LIMIT'});assert.equal(f.messages.some(item=>item.method==='session/prompt'),false);
+});
+
+test('image reads are bounded to three concurrent requests and remain cancelable',async()=>{
+  let active=0,peak=0;const gates=[],f=fixture({imageInput:true,imageFetcher:async()=>{active++;peak=Math.max(peak,active);await new Promise(resolve=>gates.push(resolve));active--;return pngResponse();}});
+  const pending=f.client.run(request({images:Array.from({length:5},(_,index)=>contextImage(String(index)))}));
+  await tick();assert.equal(peak,3);gates.splice(0).forEach(resolve=>resolve());await tick();gates.splice(0).forEach(resolve=>resolve());await pending;assert.equal(peak,3);assert.equal(f.messages.filter(item=>item.method==='session/prompt').length,1);
+  const controller=new AbortController(),cancelled=fixture({imageInput:true,imageFetcher:async(url,{signal})=>new Promise((resolve,reject)=>signal.addEventListener('abort',()=>reject(new Error('aborted')),{once:true}))});
+  const stopping=cancelled.client.run(request({images:[contextImage()]}),{signal:controller.signal});await tick();controller.abort();await assert.rejects(stopping,{code:'BUILD_CANCELLED'});assert.equal(cancelled.messages.some(item=>item.method==='session/prompt'),false);
+});
+
+test('an unresponsive image loader has a finite deadline and cannot hold a queued model prompt',async()=>{
+  const keepAlive=setTimeout(()=>{},1000),f=fixture({imageInput:true,imageTimeoutMs:10,imageFetcher:async()=>new Promise(()=>{})});
+  try{await assert.rejects(f.client.run(request({images:[contextImage()]})),{code:'BUILD_IMAGE_UNAVAILABLE'});assert.equal(f.messages.some(item=>item.method==='session/prompt'),false);assert.equal(f.client.running,false);}finally{clearTimeout(keepAlive);}
 });
 
 test('draft target cannot turn a comment task or arbitrary target into a different permission profile',async()=>{

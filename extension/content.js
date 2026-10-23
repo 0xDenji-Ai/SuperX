@@ -348,6 +348,10 @@
   }
   function errorKey(code,failure) {
     if(code==='MODEL_UNSUPPORTED')return 'error.modelUnsupported';
+    if(code==='MEDIA_INPUT_LIMIT')return 'error.mediaLimit';
+    if(code==='BUILD_IMAGE_UNSUPPORTED')return 'build.imageUnsupported';
+    if(code==='BUILD_IMAGE_UNAVAILABLE')return 'build.imageUnavailable';
+    if(code==='BUILD_IMAGE_LIMIT')return 'build.imageLimit';
     if(typeof code==='string'&&code.startsWith('OAUTH_'))return ({
       OAUTH_LOGIN_REQUIRED:'oauth.needsLogin',OAUTH_REAUTH_REQUIRED:'oauth.reauthRequired',OAUTH_ACCOUNT_CHANGED:'oauth.reauthRequired',OAUTH_REFRESH_UNCERTAIN:'oauth.reauthRequired',
       OAUTH_ACCESS_DENIED:'oauth.denied',OAUTH_DEVICE_EXPIRED:'oauth.expired',OAUTH_CANCELLED:'oauth.canceled',

@@ -9,7 +9,7 @@
   const PUBLISH='[data-testid="tweetButton"], [data-testid="tweetButtonInline"]';
   const OWN='superx-draft-action, superx-draft-panel';
   const CONTEXT_NODES='[data-testid="tweet"], article[role="article"], [data-testid="quoteTweet"], [data-testid="quotedTweet"], [data-testid="quoted-post"], [data-testid="card.wrapper"], [role="link"], button';
-  const MAX_TEXT=30000,MAX_RETAINED=24;
+  const MAX_TEXT=30000,MAX_RETAINED=24,MAX_DRAFT_IMAGES=4,MAX_DRAFT_IMAGE_BYTES=8*1024*1024,IMAGE_CAPTURE_TIMEOUT_MS=20000;
   const ACTIVE=new Set(['waking','queued','running','retry-wait']);
   const RECEIPTS=new Set(['QUEUED','START','UPDATE','RESULT','ERROR','RETRY_WAIT']);
 
@@ -38,6 +38,7 @@
     const uuid=()=>view.crypto?.randomUUID?.()||root.crypto?.randomUUID?.()||'draft_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2);
     const own=node=>Boolean(node?.closest?.(OWN));
     const isActive=state=>ACTIVE.has(state.status);
+    const hasContent=value=>Boolean(value?.text||value?.imageSources?.length);
     function shown(node){
       if(!node?.isConnected||own(node))return false;
       for(let current=node;current&&current!==document;current=current.parentElement){
@@ -358,18 +359,56 @@
         !node.contains(editor)&&Boolean(editor.compareDocumentPosition(node)&4))).slice(0,2);
       return {mode:'post',quotedContext};
     }
+    function draftAttachments(binding){
+      const group=binding.location.group,quotes=previewNodes(group),images=[],seen=new Set(),unchecked=[];
+      const owned=node=>!binding.editor.contains(node)&&shown(node)&&!quotes.some(quote=>quote===node||quote.contains(node));
+      const wrappers=Array.from(group.querySelectorAll('[data-testid="attachments"], [data-testid="tweetPhoto"], [data-testid="mediaPreview"]')).filter(owned);
+      const video=node=>Boolean(node.closest('video, [data-testid="videoPlayer"], [data-testid="videoComponent"], [data-testid="postVideoRemove"], [data-testid="quoteVideoToggle"]'))||/\/(?:ext_tw_|amplify_|tweet_)?video_thumb\//.test(node.currentSrc||node.getAttribute('src')||'');
+      for(const wrapper of wrappers){
+        const candidates=wrapper.matches('img')?[wrapper]:Array.from(wrapper.querySelectorAll('img'));
+        for(const image of candidates){
+          if(!owned(image)||video(image))continue;
+          const url=image.currentSrc||image.getAttribute('src')||'';
+          // Profile pictures are never draft attachments, even if a future X
+          // layout places an avatar inside the same outer container.
+          if(/\/profile_images\//.test(url))continue;
+          const key=url||'pending:'+images.length;if(seen.has(key))continue;seen.add(key);
+          images.push({url,alt:(image.getAttribute('alt')||'').slice(0,500)});
+        }
+        if(!candidates.some(image=>owned(image)&&!video(image)&&!/\/profile_images\//.test(image.currentSrc||image.getAttribute('src')||''))&&
+          !quotes.some(quote=>wrapper.contains(quote)))unchecked.push(wrapper.getAttribute('data-testid')||'attachment');
+      }
+      for(const node of group.querySelectorAll('video, [data-testid="videoPlayer"], [data-testid="videoComponent"]'))if(owned(node))unchecked.push('video');
+      return {imageSources:images,hasUncheckedMedia:unchecked.length>0,attachments:images.length>0||unchecked.length>0};
+    }
     function snapshot(binding){
-      const draft=readDraft(binding.editor),contexts=contextFor(binding.editor,binding.location);
-      const quoteNodes=previewNodes(binding.location.group);
-      const attachments=Array.from(binding.location.group.querySelectorAll('[data-testid="attachments"], [data-testid="tweetPhoto"], [data-testid="mediaPreview"]')).some(node=>{
-        if(binding.editor.contains(node)||!shown(node)||quoteNodes.some(quote=>quote===node||quote.contains(node)))return false;
-        if(!quoteNodes.some(quote=>node.contains(quote)))return true;
-        // X also puts quoted post cards in its attachments wrapper. Only
-        // separate media outside those cards is an unchecked draft attachment.
-        return Array.from(node.querySelectorAll('[data-testid="tweetPhoto"], [data-testid="mediaPreview"], img[src^="blob:"], video[src^="blob:"]')).some(media=>
-          shown(media)&&!quoteNodes.some(quote=>quote.contains(media))&&!media.closest('[data-testid="postVideoRemove"], [data-testid="quoteVideoToggle"]'));
-      });
-      return {text:draft,...contexts,attachments,signature:JSON.stringify([draft,contexts.mode,contexts.context?draftContextFingerprint(contexts.context):'',(contexts.threadContext||[]).map(post=>draftContextFingerprint(post)),(contexts.quotedContext||[]).map(post=>draftContextFingerprint(post))])};
+      const draft=readDraft(binding.editor),contexts=contextFor(binding.editor,binding.location),attachments=draftAttachments(binding);
+      return {text:draft,...contexts,...attachments,signature:JSON.stringify([draft,contexts.mode,contexts.context?draftContextFingerprint(contexts.context):'',(contexts.threadContext||[]).map(post=>draftContextFingerprint(post)),(contexts.quotedContext||[]).map(post=>draftContextFingerprint(post)),attachments.imageSources.map(image=>[image.url,image.alt]),attachments.hasUncheckedMedia])};
+    }
+    function captureFailure(key){return Object.assign(new Error(key),{captureKey:key});}
+    async function captureDraftImages(sources,signal){
+      if(sources.length>MAX_DRAFT_IMAGES)throw captureFailure('draft.imageTooLarge');
+      let total=0;
+      return Promise.all(sources.map(async image=>{
+        let url;try{url=new URL(image.url,view.location.href);}catch{throw captureFailure('draft.imageUnavailable');}
+        const blob=url.protocol==='blob:'&&url.origin===view.location.origin;
+        const cdn=url.protocol==='https:'&&url.hostname==='pbs.twimg.com'&&!url.port&&!url.username&&!url.password&&/^\/media\//.test(url.pathname);
+        if(!blob&&!cdn)throw captureFailure('draft.imageUnsupported');
+        let response;try{response=await view.fetch(url.href,{credentials:'omit',signal});}catch(error){if(signal.aborted)throw error;throw captureFailure('draft.imageUnavailable');}
+        if(!response.ok)throw captureFailure('draft.imageUnavailable');
+        const declared=Number(response.headers.get('content-length'));if(declared>MAX_DRAFT_IMAGE_BYTES)throw captureFailure('draft.imageTooLarge');
+        const chunks=[];let size=0,reader=response.body?.getReader();
+        if(reader){
+          try{for(;;){const {done,value}=await reader.read();if(done)break;size+=value.byteLength;total+=value.byteLength;if(total>MAX_DRAFT_IMAGE_BYTES){await reader.cancel();throw captureFailure('draft.imageTooLarge');}chunks.push(value);}}
+          finally{reader.releaseLock();}
+        }else{const bytes=new Uint8Array(await response.arrayBuffer());size=bytes.length;total+=size;if(total>MAX_DRAFT_IMAGE_BYTES)throw captureFailure('draft.imageTooLarge');chunks.push(bytes);}
+        const bytes=new Uint8Array(size);let offset=0;for(const chunk of chunks){bytes.set(chunk,offset);offset+=chunk.length;}
+        const png=bytes.length>=8&&[137,80,78,71,13,10,26,10].every((value,index)=>bytes[index]===value);
+        const jpeg=bytes.length>=3&&bytes[0]===255&&bytes[1]===216&&bytes[2]===255;
+        if(!png&&!jpeg)throw captureFailure('draft.imageUnsupported');
+        let encoded='';for(let start=0;start<bytes.length;start+=32768)encoded+=String.fromCharCode(...bytes.subarray(start,start+32768));
+        return {url:`data:image/${png?'png':'jpeg'};base64,${view.btoa(encoded)}`,alt:image.alt};
+      }));
     }
     function safeURL(value){
       try{const url=new URL(value);return /^https?:$/.test(url.protocol)&&!url.username&&!url.password?url:null;}catch{return null;}
@@ -527,23 +566,23 @@
     function render(state){
       const binding=state.binding,ui=state.ui;
       const live=binding?snapshot(binding):null;
-      if(binding&&!live?.text)state.open=false;
+      if(binding&&!hasContent(live))state.open=false;
       state.panel.hidden=!state.open||!binding;
       state.stale=Boolean(state.input&&(!live||state.input.signature!==live.signature));
       const active=isActive(state),existing=state.status!=='idle';
       if(binding){
         binding.action.hidden=false;
-        const actionKey=live?.text&&existing?(state.open?'draft.actionHide':'draft.actionShow'):'draft.actionCheck';
+        const actionKey=hasContent(live)&&existing?(state.open?'draft.actionHide':'draft.actionShow'):'draft.actionCheck';
         binding.trigger.setAttribute('aria-label',text(actionKey));binding.trigger.setAttribute('aria-expanded',String(state.open));
         binding.trigger.setAttribute('aria-controls',state.panel.id);
-        binding.trigger.title=text(!live?.text?'draft.empty':live.text.length>MAX_TEXT?'draft.tooLong':existing?actionKey:'draft.check');
-        binding.trigger.disabled=!live?.text||live.text.length>MAX_TEXT||Boolean(config.refreshRequired);
+        binding.trigger.title=text(!hasContent(live)?'draft.empty':live.text.length>MAX_TEXT?'draft.tooLong':existing?actionKey:'draft.check');
+        binding.trigger.disabled=!hasContent(live)||live.text.length>MAX_TEXT||Boolean(config.refreshRequired);
         theme(binding);
       }
       ui.box.setAttribute('aria-label',text('draft.title'));ui.box.setAttribute('aria-busy',String(active));
       ui.spinner.hidden=!active;
       ui.stale.hidden=!state.stale;setText(ui.stale,text('draft.stale'));
-      ui.textOnly.hidden=!state.input?.attachments&&!live?.attachments;ui.textOnly.textContent=text('draft.textOnly');
+      ui.textOnly.hidden=!state.input?.hasUncheckedMedia&&!live?.hasUncheckedMedia;ui.textOnly.textContent=text('draft.textOnly');
       if(state.renderedText!==state.text){
         if(options.render)options.render(ui.answer,state.text);else ui.answer.textContent=state.text;
         state.renderedText=state.text;renderSources(state);
@@ -554,7 +593,7 @@
       const long=ui.answer.scrollHeight>370||state.text.length>1000;
       ui.answer.classList.toggle('folded',long&&!state.expanded);
       ui.more.hidden=!long;ui.more.textContent=text(state.expanded?'draft.less':'draft.more');ui.more.setAttribute('aria-expanded',String(state.expanded));
-      ui.retry.textContent=text('draft.recheck');ui.retry.disabled=active||!binding||!live?.text||live.text.length>MAX_TEXT;ui.retry.hidden=!existing||Boolean(state.needsSettings);
+      ui.retry.textContent=text('draft.recheck');ui.retry.disabled=active||!binding||!hasContent(live)||live.text.length>MAX_TEXT;ui.retry.hidden=!existing||Boolean(state.needsSettings);
       ui.settings.hidden=!state.needsSettings;ui.settings.textContent=text('draft.settings');
       const metadata=[];if(state.model)metadata.push(text('usage.model',{model:state.model}));
       for(const [field,key]of [['total_tokens','usage.total'],['input_tokens','usage.input'],['output_tokens','usage.output']])if(Number.isSafeInteger(state.usage?.[field])&&state.usage[field]>=0)metadata.push(text(key,{count:state.usage[field].toLocaleString()}));
@@ -640,15 +679,17 @@
       state.status='queued';const requestId='draft:'+uuid();state.requestId=requestId;
       requests.set(requestId,state);
       const draft={id:state.id,text:state.input.text,mode:state.input.mode,...(state.input.context?{context:state.input.context}:{}),
-        ...(state.input.threadContext?.length?{threadContext:state.input.threadContext}:{}),...(state.input.quotedContext?.length?{quotedContext:state.input.quotedContext}:{}),...(state.input.attachments?{hasMedia:true}:{})};
+        ...(state.input.threadContext?.length?{threadContext:state.input.threadContext}:{}),...(state.input.quotedContext?.length?{quotedContext:state.input.quotedContext}:{}),
+        ...(state.preparedImages?.length?{images:state.preparedImages}:{}),...(state.input.attachments?{hasMedia:true}:{}),...(state.input.hasUncheckedMedia?{hasUncheckedMedia:true}:{})};
       if(options.send?.({type:'ANALYZE_DRAFT',requestId,draft,force:false})!==true){requests.delete(requestId);state.requestId=null;state.status='error';state.errorKey='status.connectionLost';}
+      state.preparedImages=null;
       render(state);
     }
-    function start(binding,force){
+    async function start(binding,force){
       if(disposed||!binding?.state)return;
       const state=binding.state,live=snapshot(binding);state.open=true;state.lastUsed=Date.now();
       if(isActive(state)||!force&&state.status==='done'&&state.input?.signature===live.signature){render(state);return;}
-      if(!live.text||live.text.length>MAX_TEXT){state.status='error';state.errorKey=live.text?'draft.tooLong':'draft.empty';render(state);return;}
+      if(!hasContent(live)||live.text.length>MAX_TEXT){state.status='error';state.errorKey=hasContent(live)?'draft.tooLong':'draft.empty';render(state);return;}
       if(config.refreshRequired){state.status='error';state.errorKey='status.refreshRequired';render(state);return;}
       if(config.hasConfig&&!config.awaitingConfig&&!config.restoring&&!config.ready){
         // A setup failure has not started a new check. Keep any existing answer
@@ -657,6 +698,24 @@
         state.input||=live;state.intent=false;state.status='error';state.errorKey=config.needsProvider||'status.needsKey';state.needsSettings=true;state.availabilityInterrupted=true;render(state);return;
       }
       state.input=live;state.text='';state.renderedText=null;state.sources=[];state.usage=null;state.usageComplete=undefined;state.model='';state.searchRecorded=false;state.expanded=false;state.errorKey='';state.needsSettings=false;state.availabilityInterrupted=false;state.recoveryStatus=undefined;state.status='waking';
+      state.intent=false;state.preparedImages=null;
+      if(live.imageSources.length){
+        const capture=new view.AbortController();state.capture=capture;render(state);
+        let timedOut=false,captureTimer,onAbort;
+        const interrupted=new Promise((_,reject)=>{
+          onAbort=()=>reject(captureFailure('draft.imageUnavailable'));
+          capture.signal.addEventListener('abort',onAbort,{once:true});
+          captureTimer=view.setTimeout(()=>{timedOut=true;capture.abort();},IMAGE_CAPTURE_TIMEOUT_MS);
+        });
+        try{state.preparedImages=await Promise.race([captureDraftImages(live.imageSources,capture.signal),interrupted]);}
+        catch(error){
+          if(state.capture!==capture||capture.signal.aborted&&!timedOut||disposed)return;
+          capture.abort();state.capture=null;state.status='error';state.errorKey=error.captureKey||'draft.imageUnavailable';render(state);return;
+        }
+        finally{view.clearTimeout(captureTimer);capture.signal.removeEventListener('abort',onAbort);}
+        if(state.capture!==capture||capture.signal.aborted||disposed){state.preparedImages=null;return;}
+        state.capture=null;
+      }
       state.intent=true;render(state);
       if(!config.connected||config.awaitingConfig||!config.hasConfig)options.wake?.();
       else dispatch(state);
@@ -700,6 +759,7 @@
     function invalidate(key){
       for(const [requestId]of requests)options.send?.({type:'CANCEL',requestId});requests.clear();
       for(const state of states){
+        state.capture?.abort();state.capture=null;state.preparedImages=null;
         state.intent=false;state.requestId=null;state.availabilityInterrupted=false;state.recoveryStatus=undefined;
         if(state.status!=='idle'){state.status='error';state.errorKey=key;state.text='';state.sources=[];state.usage=null;state.model='';state.searchRecorded=false;state.renderedText=null;state.needsSettings=false;render(state);}
       }
@@ -718,6 +778,7 @@
           // but a completed answer still belongs to the same source/account.
           for(const [requestId]of requests)options.send?.({type:'CANCEL',requestId});requests.clear();
           for(const state of states)if(isActive(state)){
+            state.capture?.abort();state.capture=null;state.preparedImages=null;
             state.status='error';state.intent=false;state.requestId=null;
             state.errorKey=config.needsProvider||'status.connectionLost';state.needsSettings=true;state.availabilityInterrupted=true;state.recoveryStatus='error';
           }
@@ -737,11 +798,12 @@
       // A sleeping worker may restart its in-memory revision. Keep completed
       // output across that wake, while still comparing its credential identity.
       if(acceptedConfig)acceptedConfig={...acceptedConfig,taskRevision:undefined};
-      for(const state of states){if(isActive(state)){state.status='error';state.intent=false;state.requestId=null;state.errorKey=key;}render(state);}
+      for(const state of states){if(isActive(state)){state.capture?.abort();state.capture=null;state.preparedImages=null;state.status='error';state.intent=false;state.requestId=null;state.errorKey=key;}render(state);}
     }
     function refresh(){for(const state of states)render(state);scheduleScan();}
     function reset(){
       capturedThread=null;
+      for(const state of states){state.capture?.abort();state.capture=null;state.preparedImages=null;}
       requests.clear();for(const binding of Array.from(bindings.values()))detach(binding);
       for(const state of states)state.panel.remove();states.clear();byEditor=new WeakMap();scheduleScan();
     }
@@ -751,15 +813,16 @@
         Array.from(change.addedNodes||[]).every(node=>node.nodeType!==1||node.matches?.(OWN))&&
         Array.from(change.removedNodes||[]).every(node=>node.nodeType!==1||node.matches?.(OWN)&&node.isConnected))))scheduleScan();
     }):null;
-    observer?.observe(document.body,{childList:true,subtree:true,characterData:true,attributes:true,attributeFilter:['data-testid','contenteditable','aria-hidden','hidden','style','class','lang']});
+    observer?.observe(document.body,{childList:true,subtree:true,characterData:true,attributes:true,attributeFilter:['data-testid','contenteditable','aria-hidden','hidden','style','class','lang','src','srcset']});
     const onInput=event=>{if(own(event.target))return;const editor=event.target?.closest?.(EDITOR);if(editor){const state=byEditor.get(editor);if(state)render(state);scheduleScan();}};
     const onFocus=event=>{if(!own(event.target))scheduleScan();};
-    document.addEventListener('input',onInput,true);document.addEventListener('focusin',onFocus,true);
+    const onMediaLoad=event=>{if(!own(event.target)&&['IMG','VIDEO'].includes(event.target?.tagName))scheduleScan();};
+    document.addEventListener('input',onInput,true);document.addEventListener('focusin',onFocus,true);document.addEventListener('load',onMediaLoad,true);
     view.addEventListener('resize',scheduleScan,{passive:true});
     scan();
     return {configure,handleMessage,connectionLost,scan,refresh,reset,
       get activeCount(){return Array.from(states).filter(isActive).length;},
-      destroy(){disposed=true;observer?.disconnect();view.clearTimeout(scanTimer);document.removeEventListener('input',onInput,true);document.removeEventListener('focusin',onFocus,true);view.removeEventListener('resize',scheduleScan);reset();}
+      destroy(){disposed=true;observer?.disconnect();view.clearTimeout(scanTimer);document.removeEventListener('input',onInput,true);document.removeEventListener('focusin',onFocus,true);document.removeEventListener('load',onMediaLoad,true);view.removeEventListener('resize',scheduleScan);reset();}
     };
   }
   return Object.freeze({create,MAX_TEXT});

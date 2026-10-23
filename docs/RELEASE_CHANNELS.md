@@ -1,6 +1,6 @@
 # Release channels
 
-SuperX uses one source tree and one version sequence, with two distribution channels. GitHub is the project home for code, downloads, documentation and support. The Chrome Web Store provides the stable installation channel with Chrome-managed updates; acceptance results and remaining checks are recorded separately.
+SuperX uses one source tree and one version sequence, with two distribution channels. GitHub is the project home for code, downloads, documentation and support. The Chrome Web Store provides Chrome-managed installation and updates. GitHub Stable and the store may have different current versions; acceptance results and remaining checks are recorded separately.
 
 ## Choose a channel
 
@@ -8,13 +8,13 @@ SuperX uses one source tree and one version sequence, with two distribution chan
 | --- | --- | --- |
 | Chrome Web Store — Stable | Chrome users who want store installation and automatic updates | Install from the verified store listing; Chrome manages updates |
 | GitHub Releases — Preview | People who want the newest changes and can report problems | Download the attached extension ZIP, load it unpacked and update it manually |
-| GitHub Releases — Stable archive | People who need a particular tested release or its source | Download the same installation ZIP used for that store release, plus source and checksums |
+| GitHub Releases — Stable | People who want the current maintainer-approved release or a specific archived version | Download the extension ZIP, load it unpacked and update it manually; source and checksums are included |
 
-Preview is a release status, not a second product or a second source repository. A store version can lag behind newer GitHub previews. For example, Stable may be 0.8.0 while Preview is 0.8.3. The `main` branch and CI artifacts are development outputs, not a promise of an installable public release.
+Preview is a release status, not a second product or a second source repository. The store can lag behind either a newer GitHub Stable release or a Preview. Always show each channel’s actual version instead of implying they update together. The `main` branch and CI artifacts are development outputs, not a promise of an installable public release.
 
 ## Versions and downloads
 
-Keep `package.json`, `extension/manifest.json` and the Git tag in agreement: `0.8.3` and `v0.8.3`, for example. Batch related fixes into one reviewable installation candidate; individual development commits and local checks do not require a version bump. Increment the patch version when handing off a distinct candidate or publishing a release, and reserve a minor-version change for a substantial feature milestone. Once a candidate has been distributed for acceptance or published, changed packaged code needs a new increasing version. Do not put a `-beta` suffix in the Chrome `version` field or move a published tag to different code. GitHub's **Pre-release** flag identifies a preview.
+Keep `package.json`, `extension/manifest.json` and the Git tag in agreement: `0.8.3` and `v0.8.3`, for example. Batch related fixes into one reviewable installation candidate; individual development commits and local checks do not require a version bump. Increment the patch version when handing off a distinct candidate or publishing a release, and reserve minor or major version changes for a substantial product milestone. Once a candidate has been distributed for acceptance or published, changed packaged code needs a new increasing version. Do not put a `-beta` suffix in the Chrome `version` field or move a published tag to different code. GitHub's **Pre-release** flag identifies a preview.
 
 Each release provides:
 
@@ -29,13 +29,13 @@ Use these destinations on the README, website and store support entry:
 
 | Entry | Destination |
 | --- | --- |
-| Install stable | `https://chromewebstore.google.com/detail/superx/clcflilaihhnnglfamdblhopokpnlioo` |
+| Install from Chrome Web Store | `https://chromewebstore.google.com/detail/superx/clcflilaihhnnglfamdblhopokpnlioo` |
 | Website | `https://superx.vip/` |
 | Source | `https://github.com/bwjoke/SuperX` |
-| Preview 0.9.13 release | `https://github.com/bwjoke/SuperX/releases/tag/v0.9.13` |
-| Download Preview 0.9.13 ZIP | `https://github.com/bwjoke/SuperX/releases/download/v0.9.13/SuperX.zip` |
-| Stable 0.9.12 release | `https://github.com/bwjoke/SuperX/releases/tag/v0.9.12` |
-| Download Stable 0.9.12 ZIP | `https://github.com/bwjoke/SuperX/releases/download/v0.9.12/SuperX.zip` |
+| Archived Preview 0.9.13 release | `https://github.com/bwjoke/SuperX/releases/tag/v0.9.13` |
+| Archived Preview 0.9.13 ZIP | `https://github.com/bwjoke/SuperX/releases/download/v0.9.13/SuperX.zip` |
+| Stable 1.0.0 release | `https://github.com/bwjoke/SuperX/releases/tag/v1.0.0` |
+| Download Stable 1.0.0 ZIP | `https://github.com/bwjoke/SuperX/releases/download/v1.0.0/SuperX.zip` |
 | All versions | `https://github.com/bwjoke/SuperX/releases` |
 | Download the latest stable ZIP | `https://github.com/bwjoke/SuperX/releases/latest/download/SuperX.zip` |
 | Browse releases and changelogs | `https://github.com/bwjoke/SuperX/releases` and `CHANGELOG.md` |
@@ -55,13 +55,13 @@ GitHub's `/releases/latest` excludes previews and drafts. Until the first stable
 
 The workflow refuses to overwrite a published release. CI also produces reviewable build artifacts; they are not the main download entry for users.
 
-## Promote the same candidate to stable
+## Publish or promote a stable release
 
-1. Select an existing candidate version, complete its Chrome core installation and upgrade acceptance, and record the evidence. Track Edge acceptance, session-only expiry, credential migration, clear/replacement cancellation and other advanced checks separately; record any untested scope rather than inferring it passed. Test the candidate that will actually be uploaded.
-2. Download its versioned installation ZIP from the release and verify its SHA-256 against the published checksum. Upload that exact ZIP to create the first Chrome Web Store item, or update the existing item on later releases. Do not upload the source ZIP or rebuild a different package under the same tag.
-3. Keep the GitHub release labelled Preview while the store reviews it. Record the status as submitted, approved or published; these are different states. The dashboard can defer publication after approval if a coordinated release is wanted.
-4. Once the same version is actually available from the store, verify the installed version and listing, then change that GitHub release from Pre-release to Stable and mark it Latest. Preserve its tag, installation files and hashes. This is a deliberate maintainer action, not an automatic result of merging a PR.
-5. Update the README's stable/preview entries, release notes and public privacy/support links together. Continue developing newer previews without replacing the stable download.
+1. Select a reviewed candidate and record its installation, upgrade and functional acceptance, including remaining limitations. Test the actual package being released. A Stable designation does not certify every browser, connection or model response.
+2. Build or download the versioned installation ZIP and verify its SHA-256, source bundle and inventories. Preserve the same tag, installation files and hashes after publication.
+3. With explicit maintainer authorization, publish the GitHub release as **Stable** and mark it **Latest**. GitHub Stable may be released before the Chrome Web Store version catches up. The tag workflow still creates a draft preview by default; a successful workflow alone does not approve or publish a Stable release.
+4. Upload that exact installation ZIP to the Chrome Web Store when ready. Do not upload the source ZIP or rebuild different code under the same tag. Record store status separately as not submitted, submitted, approved or published; these states are not interchangeable.
+5. Update the README, release notes and public policy/support links with each channel's actual version. When the store publishes the new version, verify its public listing and package without replacing the GitHub artifacts.
 
 If a rejected or failed candidate needs packaged changes, create a new version and repeat acceptance. A production hotfix follows the same process with a smaller change. Store updates require increasing versions and review; the store should not receive every development commit.
 
@@ -81,7 +81,7 @@ For each promotion, record this information in its release notes or release repo
 
 An unpacked GitHub installation does not become a store installation automatically. Its development ID can differ from the published store ID, `clcflilaihhnnglfamdblhopokpnlioo`. Settings and remembered Keys belong to the extension's storage and are not automatically migrated between different IDs or browser profiles. Removing an extension clears its local storage.
 
-When switching channels, keep any custom prompt text you need, disable the old installation to avoid duplicate paid analysis, install the desired channel and configure its supported connection. Stable 0.9.12 offers direct subscription sign-in, API Key and local Grok Build / CLI / ACP. New installations default to subscription sign-in and Grok 4.3 / None; saved connection choices are retained. Do not promise a seamless migration until it has been tested with the real store item. A future explicit settings export should exclude credentials; it is not currently implemented.
+When switching channels, keep any custom prompt text you need, disable the old installation to avoid duplicate paid analysis, install the desired channel and configure its supported connection. Stable 1.0.0 offers direct subscription sign-in, API Key and local Grok Build / CLI / ACP. New installations default to subscription sign-in and Grok 4.3 / None; saved connection choices are retained. Do not promise a seamless migration until it has been tested with the real store item. A future explicit settings export should exclude credentials; it is not currently implemented.
 
 ## Shared project home and support
 
@@ -91,13 +91,21 @@ Until Discussions is enabled, the **Usage question** issue form provides a suppo
 
 [superx.vip](https://superx.vip/) provides the product website, with **Install stable**, **Try preview**, **Source**, **Support** and **Privacy** entries as each destination becomes available. Downloads come from GitHub and the Chrome Web Store. Keep [privacy/](https://superx.vip/privacy/) as a permanent public policy path. The website is deployed and maintained separately; its source and deployment configuration are excluded from the extension repository and source release. Do not deploy the extension repository over the existing website.
 
-## Current release status — 2026-10-22
+## Current release status — 2026-10-24
 
-Version **[0.9.12](https://github.com/bwjoke/SuperX/releases/tag/v0.9.12)** is available from the [Chrome Web Store](https://chromewebstore.google.com/detail/superx/clcflilaihhnnglfamdblhopokpnlioo) and GitHub **Stable/Latest**. The maintainer confirmed publication and a direct request to the public store listing returned version 0.9.12 on October 20. Use its [installation ZIP](https://github.com/bwjoke/SuperX/releases/download/v0.9.12/SuperX.zip) or the [latest stable ZIP](https://github.com/bwjoke/SuperX/releases/latest/download/SuperX.zip).
+**GitHub Stable/Latest is [1.0.0](https://github.com/bwjoke/SuperX/releases/tag/v1.0.0)**, the maintainer-authorized milestone release. Download the [1.0.0 installation ZIP](https://github.com/bwjoke/SuperX/releases/download/v1.0.0/SuperX.zip), or use the [latest stable ZIP](https://github.com/bwjoke/SuperX/releases/latest/download/SuperX.zip). Unpacked installations update manually.
 
-**[0.9.13 Preview](https://github.com/bwjoke/SuperX/releases/tag/v0.9.13)** adds explicit draft fact-checking before posting or replying, contextual reply/quote support, and updated localized summaries. Use its separate [installation ZIP](https://github.com/bwjoke/SuperX/releases/download/v0.9.13/SuperX.zip); unpacked installations update manually. Windows Chrome contextual reply and quote checks passed on the earlier functional candidate, followed by isolated validation of the final visual refinements. Installed Edge/macOS, fresh API Key/local Build draft runs and the remaining scenarios in [the checklist](RELEASE_CHECKLIST.md#0913-draft-check-preview--2026-10-22) are not claimed as live passes. Publishing this Preview does not promote it to Stable or submit it to the Chrome Web Store.
+Version 1.0.0 combines automatic post fact-checking with explicit checks of your own post and reply drafts. It accepts published-post, parent/ancestor and quoted-post images, plus up to four newly attached draft PNG/JPEG images (8 MiB total), including image-only drafts. Drafts are sent only on request, with bounded supporting context; unpublished video attachments remain excluded, and supplied video thumbnails represent still frames. It retains three independent connections, recommends Grok 4.3 with no reasoning for browsing, and provides thirteen concise localized summaries.
 
-Promotion changes release status, notes and current documentation only. The original 0.9.12 tag and all seven release attachments remain unchanged; installation ZIP SHA-256 is `c34d378b2eb37660a0d029c0e2c36b2dd4077a3548413a5a9b35ca55d293c885`. The 0.9.12 layout acceptance below and earlier connection acceptance retain their original scope. Store publication is not a new store-installed functional test.
+The Chrome Web Store's last verified public version remains **0.9.12**. Version 1.0.0 has not been submitted or verified there as part of this GitHub release. Store availability will be updated only after separate publication and verification.
+
+See [the acceptance record](RELEASE_CHECKLIST.md) for exact automated, isolated-browser and live test scope. Earlier Windows Chrome reply/quote checks and image transport fixtures do not establish every provider's live image interpretation, installed Edge/macOS behavior or the remaining OAuth restart/expiry scenarios.
+
+**[0.9.13 Preview](https://github.com/bwjoke/SuperX/releases/tag/v0.9.13)** remains an unchanged archive of the earlier draft-check release, with its [original installation ZIP](https://github.com/bwjoke/SuperX/releases/download/v0.9.13/SuperX.zip). Historical versions and their acceptance records remain available.
+
+## 0.9.12 store package record
+
+Version 0.9.12 became GitHub Stable/Latest after its Chrome Web Store publication on October 20, 2026. Its original tag and all seven attachments remain unchanged; installation ZIP SHA-256 is `c34d378b2eb37660a0d029c0e2c36b2dd4077a3548413a5a9b35ca55d293c885`. The 0.9.12 layout acceptance below and earlier connection acceptance retain their original scope. Store publication is not a new store-installed functional test.
 
 The Google-delivered 0.9.12 CRX has 51 files against the accepted ZIP's 50: all 49 ordinary files are byte-identical; only Google's `update_url` is added to the manifest, and `_metadata/verified_contents.json` is the sole added file. CRX SHA-256 is `2b96c5b4ff1b4043d7f4cc236e7d0230ce1ba5748ef30b724ba367a186ba1386`. This comparison did not install or independently signature-verify the CRX.
 
@@ -139,19 +147,21 @@ Edge installed-extension acceptance and advanced manual credential, storage, del
 
 ## 简体中文
 
-一套源码，两条渠道：GitHub 是代码、文档、预览下载与 Issues 支持的项目主页；Chrome 商店提供稳定安装与自动更新。GitHub 同时保留稳定版的原始安装包与源码存档，验收结果及待测范围单独记录。
+一套源码，两条渠道：GitHub 是代码、文档、稳定／预览下载与 Issues 支持的项目主页；Chrome 商店提供安装与自动更新。两条渠道可以处于不同版本。GitHub 保留原始安装包与源码存档，验收结果及待测范围单独记录。
 
-所有安装候选都使用递增的数字版本及匹配 tag，预览身份用 GitHub 的 Pre-release 标记表示。新 tag 只生成预览草稿，审核附件后再主动公开；通过验收的同一份 ZIP 原样上传商店，商店实际发布后再将对应 GitHub Release 晋升为 Stable/Latest，保留附件和 SHA-256。GitHub `latest` 不含预览版；最新预览版使用独立发布页与安装 ZIP 直链，Releases 列表保留所有版本。
+所有安装候选使用递增的数字版本及匹配 tag，预览身份用 GitHub 的 Pre-release 标记表示。新 tag 的工作流默认只生成预览草稿。审核附件及验收记录后，维护者可明确授权公开为 Preview，或选择作为 Stable/Latest 发布；GitHub 稳定版可以先于商店发布。准备上传商店时使用同一份安装 ZIP，保留标签、附件和 SHA-256，并单独记录未提交、审核中、已批准或已公开状态。GitHub `latest` 不含预览版；Releases 列表保留所有版本。
 
-相关修正先合并成一批再验收、递增版本号，不为每次开发提交或本地检查单独加号。一般修复只递增末位；较大的功能阶段才调整次版本号。已交付验收或公开发布的包不覆盖，后续改动使用新版本，以便追溯。
+相关修正先合并成一批再验收、递增版本号，不为每次开发提交或本地检查单独加号。一般修复递增末位；重大产品阶段可调整次版本或主版本号。已交付验收或公开发布的包不覆盖，后续改动使用新版本，以便追溯。
 
 GitHub 解压版需要手动更新，商店版由 Chrome 更新。当前不同安装 ID 之间不自动迁移 Key 和设置，切换渠道时先停用旧版，避免重复分析。官网 [superx.vip](https://superx.vip/) 独立维护，源码不纳入扩展开源；隐私路径保持为 `/privacy/`。仓库、下载、Issues 及商店入口以实际公开状态为准，最终安装验收需单独完成。
 
 2026-10-08 已核验 Chrome 商店公开版本为 0.7.26，商品 ID 为 `clcflilaihhnnglfamdblhopokpnlioo`。Google CRX 与 GitHub ZIP 的非 manifest 文件逐字节相同，仅多出商店验证元数据，manifest 仅增加 `update_url`。用户已确认商店安装后的解释、Fact Check、Key 保存及重启恢复正常；GitHub 同一版本已晋升 Stable/Latest，标签及附件保持不变。这是 10 月 8 日晋升时的历史状态，当时没有更新的预览版。
 
-**当前稳定版：[0.9.12](https://github.com/bwjoke/SuperX/releases/tag/v0.9.12) 已在 Chrome 商店公开，并保持 GitHub Stable/Latest。** 用户确认上架后，直接获取商店公开页面也返回 0.9.12；可通过[商店安装](https://chromewebstore.google.com/detail/superx/clcflilaihhnnglfamdblhopokpnlioo)或[下载稳定版 ZIP](https://github.com/bwjoke/SuperX/releases/download/v0.9.12/SuperX.zip)。晋升保留原 tag、全部附件及校验值，0.9.11 留作历史版本；本次未新增商店实装功能验收。
+**当前 GitHub 稳定版：[1.0.0](https://github.com/bwjoke/SuperX/releases/tag/v1.0.0)，已按维护者授权作为 Stable/Latest 发布。** 可[下载安装 ZIP](https://github.com/bwjoke/SuperX/releases/download/v1.0.0/SuperX.zip)，解压安装后手动更新。Chrome 商店最后核验的公开版本仍为 **0.9.12**，本次 GitHub 发布不代表已向商店提交或商店已更新。
 
-**最新预览版：2026-10-22，[0.9.13 Preview](https://github.com/bwjoke/SuperX/releases/tag/v0.9.13)。** 新增发帖／回复前主动核查草稿、引用帖与回复链辅助上下文，更新全部语言概要。[预览安装 ZIP](https://github.com/bwjoke/SuperX/releases/download/v0.9.13/SuperX.zip)需解压安装及手动更新。较早功能候选的 Windows Chrome 回复与引用实测通过；最终按钮视觉修改另经隔离浏览器验证。Edge／macOS 实装、新的 API Key／本机 Build 草稿推理及[清单中的其余场景](RELEASE_CHECKLIST.md#0913-draft-check-preview--2026-10-22)仍不声称实测通过。此次发布未向 Chrome 商店提交，也不改变稳定版。
+1.0.0 整合浏览时自动核查、发帖／回复草稿主动核查及图片输入。草稿支持最多四张 PNG／JPEG（合计 8 MiB）及纯图片输入，仅在明确点击后发送，未发布的视频附件不包含在内，视频缩略图仅为静态画面。三种独立连接保留，推荐 Grok 4.3／无推理，并提供十三份简短本地化概要。[验收记录](RELEASE_CHECKLIST.md)仍区分自动检查、隔离浏览器与实机／真实提供方测试；发布稳定版不会扩大已建立的实测范围。
+
+**[0.9.13 Preview](https://github.com/bwjoke/SuperX/releases/tag/v0.9.13)** 作为较早草稿核查版本归档，原始[安装 ZIP](https://github.com/bwjoke/SuperX/releases/download/v0.9.13/SuperX.zip)、源码和校验值不变。0.9.12 及更早版本的发布、商店文件比对和验收记录保留在上文。
 
 **2026-10-19：[0.9.11](https://github.com/bwjoke/SuperX/releases/tag/v0.9.11) 当日成为 Chrome 商店及 GitHub Stable/Latest 版本，原[安装 ZIP](https://github.com/bwjoke/SuperX/releases/download/v0.9.11/SuperX.zip)保留。** 当时官方商店公开页显示版本 0.9.11、更新日期 2026-10-19。此版本此前于 10 月 18 日作为 Preview 发布；晋升只改变状态及 Latest 指向，保留原 tag、安装／源码附件及校验值。0.9.12 当日为独立 Preview，随后于 10 月 20 日成为新的 Stable/Latest；0.9.11 和 0.7.26 均保留为历史归档。
 

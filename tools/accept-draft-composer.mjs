@@ -18,7 +18,7 @@ catch{
   playwright=await import(pathToFileURL(bundled));
 }
 const {chromium}=playwright;
-const focus=['thread','metadata','recovery','sticky','modalcontext','controls'].includes(process.env.SUPERX_QA_FOCUS)?process.env.SUPERX_QA_FOCUS:'full';
+const focus=['thread','metadata','recovery','sticky','modalcontext','controls','images'].includes(process.env.SUPERX_QA_FOCUS)?process.env.SUPERX_QA_FOCUS:'full';
 const reportFile=focus==='full'?'report.json':focus+'-report.json';
 const report={scope:focus,environment:'Fresh isolated headless browser; local HTTP fixtures only; no credentials, account, provider requests or X publishing',checks:[],pageErrors:[],externalRequests:[],screenshots:[]};
 const check=(name,value,details)=>{report.checks.push({name,passed:Boolean(value),...(details===undefined?{}:{details})});};
@@ -176,8 +176,116 @@ async function startIntegrated(page,{config=true,oauth=false}={}){
   },{config,oauth,base});
   await page.addScriptTag({url:base+'/extension/content.js'});await page.waitForSelector('superx-draft-action',{state:'attached'});await settle(page);
 }
+async function installImageFixture(page,options={}){
+  await page.evaluate(options=>{
+    const png='iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aM4sAAAAASUVORK5CYII=';
+    const bytes=Uint8Array.from(atob(png),letter=>letter.charCodeAt(0));
+    const nativeFetch=window.fetch.bind(window);
+    Object.assign(qa,{imageFetches:[],imageAborts:0,deferImages:Boolean(options.defer),releaseImages:[],imageBytes:bytes});
+    if(options.fastTimeout){
+      const nativeTimeout=window.setTimeout.bind(window),nativeClear=window.clearTimeout.bind(window);qa.captureTimers=[];
+      window.setTimeout=(callback,delay,...args)=>{
+        if(delay!==20000)return nativeTimeout(callback,delay,...args);
+        const timer={cleared:false,fired:false};timer.id=nativeTimeout(()=>{timer.fired=true;callback(...args);},60);qa.captureTimers.push(timer);return timer.id;
+      };
+      window.clearTimeout=id=>{const timer=qa.captureTimers.find(timer=>timer.id===id);if(timer)timer.cleared=true;return nativeClear(id);};
+    }
+    window.fetch=async(url,init={})=>{
+      if(!String(url).startsWith('blob:'))return nativeFetch(url,init);
+      qa.imageFetches.push({url:String(url),credentials:init.credentials,hadSignal:Boolean(init.signal)});
+      if(qa.deferImages)await new Promise((resolve,reject)=>{
+        const abort=()=>{qa.imageAborts++;reject(new DOMException('Fixture cancelled','AbortError'));};
+        init.signal?.addEventListener('abort',abort,{once:true});
+        qa.releaseImages.push(()=>{init.signal?.removeEventListener('abort',abort);resolve();});
+      });
+      if(options.failFetch)throw new TypeError('Fixture image unavailable');
+      if(options.oversize)return new Response(bytes,{headers:{'content-length':String(8*1024*1024+1)}});
+      return nativeFetch(url,init);
+    };
+    const attachments=document.createElement('div');attachments.dataset.testid='attachments';attachments.className='fixture-draft-images';
+    attachments.style.cssText='display:flex;gap:4px;margin:8px 52px;min-height:64px';
+    const toolbar=document.querySelector('.native-toolbar');toolbar.before(attachments);
+    qa.newImage=(index=0)=>{
+      const wrapper=document.createElement('div');wrapper.dataset.testid='tweetPhoto';
+      const img=document.createElement('img');img.alt='User attachment '+index;img.style.cssText='display:block;width:64px;height:64px;object-fit:contain';
+      img.src=URL.createObjectURL(new Blob([options.unsupported?Uint8Array.of(71,73,70,56,57,97):bytes],{type:options.unsupported?'image/gif':'image/png'}));
+      wrapper.append(img);attachments.append(wrapper);return img;
+    };
+    for(let index=0;index<(options.count??1);index++)qa.newImage(index);
+    if(options.quote){
+      const quote=document.createElement('article');quote.dataset.testid='tweet';quote.innerHTML='<div data-testid="User-Name"><span>Source @source</span></div><div data-testid="tweetText">An independently quoted source</div>';
+      const picture=document.createElement('img');picture.src=URL.createObjectURL(new Blob([bytes],{type:'image/png'}));picture.style.cssText='display:block;width:64px;height:64px';
+      const photo=document.createElement('div');photo.dataset.testid='tweetPhoto';photo.append(picture);quote.append(photo);attachments.append(quote);
+      qa.quoteBlobURL=picture.src;
+    }
+  },options);
+}
 try{
   try{browser=await chromium.launch({channel:'msedge',headless:true});}catch{browser=await chromium.launch({headless:true});}
+  if(focus==='full'||focus==='images'){
+    const imageContext=await browser.newContext({viewport:{width:1100,height:1000},reducedMotion:'reduce'});
+    await imageContext.route('**/*',route=>{const url=new URL(route.request().url());if(url.origin===base||['data:','blob:'].includes(url.protocol))return route.continue();report.externalRequests.push({label:'draft-images',url:url.href});return route.abort();});
+    const page=await imageContext.newPage();page.on('pageerror',error=>report.pageErrors.push({label:'draft-images',message:error.message}));
+    const sent=()=>page.evaluate(()=>qa.sent.filter(message=>message.type==='ANALYZE_DRAFT'));
+    for(const scene of ['new-inline','new-modal','reply-modal','reply-inline'])for(const scheme of ['dark','light']){
+      const label=`draft images/${scene}/${scheme}`;
+      await start(page,scene,scheme,1100,'en','separator',page=>installImageFixture(page));
+      const action=page.locator('superx-draft-action').getByRole('button');
+      check(label+': image-only draft enables the explicit check',await action.isEnabled());
+      await page.locator('[contenteditable]').fill('A claim in the attached picture.');await settle(page);
+      await page.locator('[contenteditable]').fill('');await settle(page);
+      check(label+': selecting or typing never reads attachment bytes',await page.evaluate(()=>qa.imageFetches.length===0));
+      await action.click();await page.waitForFunction(()=>qa.sent.some(message=>message.type==='ANALYZE_DRAFT'));
+      const request=(await sent())[0],capture=await page.evaluate(()=>qa.imageFetches);
+      check(label+': one trusted click captures the image without credentials',capture.length===1&&capture[0].credentials==='omit'&&capture[0].hadSignal,capture);
+      check(label+': image bytes reach the image-only draft rather than a transient blob URL',request.draft.text===''&&request.draft.images?.length===1&&request.draft.images[0].url.startsWith('data:image/png;base64,')&&request.draft.images[0].alt==='User attachment 0'&&!JSON.stringify(request).includes('blob:'),{mode:request.draft.mode,imageCount:request.draft.images?.length,text:request.draft.text});
+      check(label+': included image does not show an inaccurate text-only warning',await page.locator('superx-draft-panel .text-only').isHidden());
+      await emit(page,{type:'RESULT',requestId:request.requestId,result:{text:'The local attachment has been included.',model:'grok-4.3',usage:{input_tokens:20,output_tokens:10,total_tokens:30}}});await settle(page);
+      await page.evaluate(()=>{const img=document.querySelector('.fixture-draft-images img');img.src=URL.createObjectURL(new Blob([qa.imageBytes],{type:'image/png'}));});await settle(page);
+      check(label+': replacing the visible image marks the retained answer stale',await page.locator('superx-draft-panel .stale').isVisible());
+      check(label+': image replacement does not silently read bytes or request a new answer',await page.evaluate(()=>qa.imageFetches.length===1)&&((await sent()).length===1));
+      await page.locator('.fixture-draft-images').evaluate(node=>node.remove());await settle(page);
+      check(label+': removing the final image disables the empty draft and hides its retained result',await action.isDisabled()&&await page.locator('superx-draft-panel').isHidden());
+    }
+    for(const reason of ['account-change','reset']){
+      await start(page,'new-modal','dark',1100,'en','separator',page=>installImageFixture(page,{defer:true}));
+      await page.locator('superx-draft-action').getByRole('button').click();await page.waitForFunction(()=>qa.imageFetches.length===1);
+      check('draft images/'+reason+': attachment capture waits without dispatching a provider request',(await sent()).length===0);
+      if(reason==='account-change')await config(page,{identity:'api:other-account'});else await page.evaluate(()=>qa.manager.reset());
+      await page.evaluate(()=>{for(const release of qa.releaseImages)release();});await settle(page);
+      check('draft images/'+reason+': cancelled image capture cannot dispatch stale image bytes',await page.evaluate(()=>qa.imageAborts===1)&&((await sent()).length===0));
+    }
+    await start(page,'new-modal','dark',1100,'en','separator',page=>installImageFixture(page,{defer:true,fastTimeout:true}));
+    await page.locator('superx-draft-action').getByRole('button').click();
+    await page.waitForFunction(()=>document.querySelector('superx-draft-panel').shadowRoot.querySelector('.spinner').hidden);
+    const timedOutStatus=await page.locator('superx-draft-panel .state-label').innerText();
+    const unavailable=await page.evaluate(()=>GrokFirstUI.t('draft.imageUnavailable','en'));
+    check('draft images/timeout: stalled capture aborts with a useful error and no provider dispatch',timedOutStatus===unavailable&&await page.evaluate(()=>qa.imageAborts===1)&&(await sent()).length===0,timedOutStatus);
+    await page.evaluate(()=>{for(const release of qa.releaseImages)release();});await settle(page);
+    check('draft images/timeout: late image resolution cannot dispatch after the timeout',(await sent()).length===0);
+    await start(page,'new-inline','light',1100,'en','separator',page=>installImageFixture(page,{fastTimeout:true}));
+    await page.locator('superx-draft-action').getByRole('button').click();await page.waitForFunction(()=>qa.sent.some(message=>message.type==='ANALYZE_DRAFT'));await settle(page);
+    check('draft images/timeout: successful capture clears its deadline before it can fire',await page.evaluate(()=>qa.captureTimers.length===1&&qa.captureTimers[0].cleared&&!qa.captureTimers[0].fired)&&(await sent()).length===1,await page.evaluate(()=>qa.captureTimers));
+    for(const [kind,options,expected]of [
+      ['unsupported',{unsupported:true},'draft.imageUnsupported'],['unavailable',{failFetch:true},'draft.imageUnavailable'],
+      ['oversize',{oversize:true},'draft.imageTooLarge'],['too-many',{count:5},'draft.imageTooLarge']
+    ]){
+      await start(page,'new-inline','light',1100,'en','separator',page=>installImageFixture(page,options));
+      await page.locator('superx-draft-action').getByRole('button').click();await page.waitForFunction(()=>document.querySelector('superx-draft-panel').shadowRoot.querySelector('.spinner').hidden);
+      const status=await page.locator('superx-draft-panel .state-label').innerText();
+      const expectedStatus=await page.evaluate(key=>GrokFirstUI.t(key,'en'),expected);
+      check('draft images/'+kind+': attachment failure is visible and never falls back to text-only analysis',(await sent()).length===0&&status===expectedStatus&&status!==expected,status);
+      if(kind==='too-many')check('draft images/too-many: validates count before fetching bytes',await page.evaluate(()=>qa.imageFetches.length===0));
+    }
+    await start(page,'new-modal','light',1100,'en','separator',page=>installImageFixture(page,{quote:true}));
+    await page.locator('[contenteditable]').fill('Check my attached picture in relation to the quoted source.');await settle(page);
+    await page.locator('superx-draft-action').getByRole('button').click();await page.waitForFunction(()=>qa.sent.some(message=>message.type==='ANALYZE_DRAFT'));
+    const quotedRequest=(await sent())[0];
+    check('draft images/quote: quoted preview pixels are never recaptured as private draft uploads',quotedRequest.draft.images?.length===1&&await page.evaluate(()=>qa.imageFetches.length===1&&qa.imageFetches[0].url!==qa.quoteBlobURL),{imageCount:quotedRequest.draft.images?.length});
+    check('draft images/quote: quoted text remains auxiliary context',quotedRequest.draft.quotedContext?.some(post=>post.text==='An independently quoted source'),quotedRequest.draft.quotedContext);
+    check('draft images: native publish button was never activated',await page.evaluate(()=>qa.nativePublishes===0));
+    await imageContext.close();
+  }
   if(focus==='full'||focus==='controls'){
     for(const scene of ['new-inline','new-modal','reply-modal','reply-inline'])for(const scheme of ['dark','light'])for(const width of [1280,390]){
       const label=`draft controls/${scene}/${scheme}/${width}`,context=await browser.newContext({viewport:{width,height:1000},colorScheme:scheme,reducedMotion:'reduce'});
@@ -194,7 +302,7 @@ try{
       check(`${label}: empty editor keeps visible disabled circle beside publish`,empty.visible&&empty.disabled&&empty.directBeforePublish&&!empty.insidePublishColumn&&!empty.overflow,empty);
       check(`${label}: medium logo uses 23px in the native 36px circle`,Math.abs(empty.button.width-empty.button.height)<=1&&Math.abs(empty.button.height-empty.geometry.publish.height)<=1&&empty.mark.width>20&&empty.mark.width<26&&Math.abs(empty.mark.width-23)<=.1&&Math.abs(empty.mark.width-empty.mark.height)<=1&&empty.mask.includes('superx-symbol.svg'),empty);
       check(`${label}: accessible disabled control retains a useful label and title`,Boolean(empty.aria)&&Boolean(empty.title)&&empty.cursor!=='pointer',empty);
-      if(scheme==='light')check(`${label}: English empty tooltip gives the precise next step`,empty.title==='Enter a draft to fact-check.',empty.title);
+      if(scheme==='light')check(`${label}: English empty tooltip gives the precise next step`,empty.title==='Enter text or add an image to fact-check.',empty.title);
       await page.mouse.click(empty.button.x+empty.button.width/2,empty.button.y+empty.button.height/2);await settle(page);
       check(`${label}: trusted mouse click on disabled empty action sends nothing`,await page.evaluate(()=>qa.sent.filter(message=>message.type==='ANALYZE_DRAFT').length===0&&qa.nativePublishes===0));
       await startFrameAudit(page);await editor.fill('A short factual draft.');await settle(page);await page.mouse.move(0,0);await settle(page);
@@ -250,7 +358,7 @@ try{
       if(screenshot)(report.screenshotStates||={})[screenshot]={draft:'empty',nativePublish:'disabled',nativeButtonOpacity:'.5',nativePublishWrapperOpacity:'.5',effectiveNativeOpacity:empty.publish.opacity,effectiveDraftOpacity:empty.action.opacity,source:'isolated native-disabled fixture; no model request'};
       check(`${label}: disabled opacity matches native even across wrapper ownership`,empty.action.disabled&&empty.publish.disabled&&Math.abs(empty.action.opacity-empty.publish.opacity)<.001&&Math.abs(empty.publish.opacity-.25)<.001,empty);
       check(`${label}: actual disabled composite pixels match native Post`,emptyPixels.maxDifference<=3,emptyPixels);
-      check(`${label}: empty English tooltip stays exact`,empty.title==='Enter a draft to fact-check.',empty.title);
+      check(`${label}: empty English tooltip stays exact`,empty.title==='Enter text or add an image to fact-check.',empty.title);
       await page.mouse.click(empty.action.x,empty.action.y+12);await settle(page);
       check(`${label}: disabled appearance remains non-interactive`,await page.evaluate(()=>qa.sent.filter(message=>message.type==='ANALYZE_DRAFT').length===0&&qa.nativePublishes===0));
       await page.locator('[contenteditable]').fill('A draft with native enabled Post.');await settle(page);await page.mouse.move(0,0);const enabled=await capture(),enabledPixels=await pixels(enabled);
@@ -735,7 +843,8 @@ try{
     };
     const sendDraft=async page=>{
       await page.locator('[role="dialog"] [contenteditable]').fill('This incident did not happen as described.');await settle(page);
-      await page.locator('[role="dialog"] superx-draft-action').getByRole('button').click();await settle(page);
+      await page.locator('[role="dialog"] superx-draft-action').getByRole('button').click();
+      await page.waitForFunction(()=>qa.sent.some(message=>message.type==='ANALYZE_DRAFT'));await settle(page);
       return page.evaluate(()=>qa.sent.filter(message=>message.type==='ANALYZE_DRAFT').at(-1));
     };
     const linkless=await prepare(),linklessRequest=await sendDraft(linkless),localParent=linklessRequest.draft.context;
@@ -768,9 +877,11 @@ try{
     check('modal local context: plain quote card is not classified as an uploaded attachment',!quoteRequest.draft.hasMedia&&await quote.locator('superx-draft-panel .text-only').isHidden(),quoteRequest.draft);
     await quote.screenshot({path:path.join(output,'modalcontext-button-quote.png'),fullPage:true});report.screenshots.push('modalcontext-button-quote.png');
     const attached=await prepare({preview:'',scene:'new-modal',path:'/compose/post'});
-    await attached.locator('.editor-row').evaluate((node,markup)=>node.insertAdjacentHTML('afterend','<div data-testid="attachments">'+markup+'<div data-testid="tweetPhoto" style="width:100px;height:50px"><img alt="User draft attachment" src="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22100%22 height=%2250%22/%3E"></div></div>'),quoteMarkup);await settle(attached);
+    await attached.locator('.editor-row').evaluate((node,markup)=>node.insertAdjacentHTML('afterend','<div data-testid="attachments">'+markup+'</div>'),quoteMarkup);
+    await installImageFixture(attached);await settle(attached);
     const attachedRequest=await sendDraft(attached);
-    check('modal local context: a real draft attachment outside the quote is still identified',attachedRequest.draft.hasMedia===true&&attachedRequest.draft.quotedContext?.length===1&&await attached.locator('superx-draft-panel .text-only').isVisible(),attachedRequest.draft);
+    check('modal local context: a PNG draft attachment outside the quote is captured and included',attachedRequest.draft.hasMedia===true&&attachedRequest.draft.images?.length===1&&attachedRequest.draft.images[0].url.startsWith('data:image/png;base64,')&&attachedRequest.draft.quotedContext?.length===1&&await attached.locator('superx-draft-panel .text-only').isHidden(),{imageCount:attachedRequest.draft.images?.length,quotedCount:attachedRequest.draft.quotedContext?.length});
+    check('modal local context: only the explicit uploaded attachment is read',await attached.evaluate(()=>qa.imageFetches.length===1));
     for(const variant of ['exact','different-author','different-timestamp','ambiguous','missing-timestamp']){
       const other={id:777,body:parentBody,username:variant==='different-author'?'anotherauthor':'replyauthor',author:variant==='different-author'?'Another Author':'Reply Author',timestamp:variant==='different-timestamp'?'2026-10-22T09:00:00.000Z':parentTime};
       const background=modalPreview(other)+(variant==='ambiguous'?modalPreview({...other,id:778}):'')+modalPreview({id:779,username:'unrelated',body:'Unrelated background content.'});

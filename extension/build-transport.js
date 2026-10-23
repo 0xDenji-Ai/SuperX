@@ -1,7 +1,7 @@
 (function(root){
   'use strict';
   const ACP=root.SuperXACP||(typeof require==='function'?require('./build-acp.js'):null);
-  const MAX_MESSAGE=1000000,MAX_PENDING=16;
+  const MAX_MESSAGE=1000000,MAX_IMAGE_PROMPT=16*1024*1024,MAX_PENDING=16;
   function fail(code){return Object.assign(new Error('The local Grok connection could not complete the request.'),{code});}
   function connection(value){if(!value||!Number.isInteger(value.port)||value.port<1024||value.port>65535||typeof value.secret!=='string'||!/^[-_A-Za-z0-9]{24,256}$/.test(value.secret)||/^(?:xai|sk)-/i.test(value.secret))throw fail('BUILD_CONNECTION_REQUIRED');return {port:value.port,secret:value.secret};}
   const defaultFactory=url=>new root.WebSocket(url);
@@ -35,7 +35,7 @@
       });
       try{await this.opening;}finally{this.opening=null;}
     }
-    send(value){if(!this.connected)throw fail('BUILD_DISCONNECTED');const text=JSON.stringify(value);if(text.length>MAX_MESSAGE)throw fail('BUILD_LIMIT');this.socket.send(text);}
+    send(value){if(!this.connected)throw fail('BUILD_DISCONNECTED');const text=JSON.stringify(value);const limit=value.method==='session/prompt'&&Array.isArray(value.params?.prompt)&&value.params.prompt.some(part=>part?.type==='image')?MAX_IMAGE_PROMPT:MAX_MESSAGE;if(text.length>limit)throw fail('BUILD_LIMIT');this.socket.send(text);}
     async request(method,params,{timeoutMs=this.requestTimeoutMs,signal}={}){
       if(signal?.aborted)throw fail('BUILD_CANCELLED');await this.open();if(signal?.aborted)throw fail('BUILD_CANCELLED');if(this.pending.size>=MAX_PENDING)throw fail('BUILD_LIMIT');
       const id=++this.sequence;
@@ -45,7 +45,7 @@
         const abort=()=>finish(fail('BUILD_CANCELLED'));
         const timer=setTimeout(()=>finish(fail('BUILD_TIMEOUT')),Math.max(1,timeoutMs));timer.unref?.();
         this.pending.set(id,{finish});signal?.addEventListener('abort',abort,{once:true});
-        try{this.send({jsonrpc:'2.0',id,method,params});}catch{finish(fail('BUILD_DISCONNECTED'));}
+        try{this.send({jsonrpc:'2.0',id,method,params});}catch(error){finish(error?.code==='BUILD_LIMIT'?error:fail('BUILD_DISCONNECTED'));}
       });
     }
     notify(method,params){this.send({jsonrpc:'2.0',method,params});}
@@ -66,7 +66,7 @@
   class Bridge {
     constructor(input,options={}){this.connection=connection(input);this.options=options;this.transport=null;this.client=null;this.active=null;this.lastStatus=null;this.controller=null;this.uncertainSessions=new Set();}
     get connected(){return this.transport?.connected===true;}
-    prepare(){if(!this.client){this.transport=new Socket(this.connection,this.options);this.client=ACP.create({transport:this.transport,heartbeatMs:this.options.heartbeatMs});}return this.client;}
+    prepare(){if(!this.client){this.transport=new Socket(this.connection,this.options);this.client=ACP.create({transport:this.transport,heartbeatMs:this.options.heartbeatMs,imageFetcher:this.options.imageFetcher,imageTimeoutMs:this.options.imageTimeoutMs});}return this.client;}
     async request(payload,{signal,onUpdate}={}){
       if(this.active){if(payload.type==='STATUS'&&this.lastStatus?.available)return {...this.lastStatus,busy:true};throw fail('BUILD_BUSY');}
       let client;this.controller=new AbortController();const abort=()=>this.controller?.abort();signal?.addEventListener('abort',abort,{once:true});if(signal?.aborted)abort();

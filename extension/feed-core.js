@@ -488,7 +488,8 @@
       const normalized = url.toString();
       if (seen.has(normalized)) continue;
       seen.add(normalized);
-      images.push({ url: normalized, alt: attribute(img, 'alt').trim() });
+      const thumbnail = /\/(?:ext_tw_|amplify_|tweet_)?video_thumb\//.test(url.pathname);
+      images.push({ url: normalized, alt: attribute(img, 'alt').trim(), ...(thumbnail ? {kind:'video-thumbnail'} : {}) });
     }
     return images;
   }
@@ -521,7 +522,8 @@
       username,
       timestamp: timestamp ? attribute(timestamp, 'datetime') : '',
       images,
-      hasMedia: images.length > 0 || hasVideo
+      hasMedia: images.length > 0 || hasVideo,
+      ...(hasVideo || images.some(image => image.kind === 'video-thumbnail') ? {hasVideo:true} : {})
     };
   }
 
@@ -534,7 +536,9 @@
       const quoteRoot = quoteRootFor(element, article);
       if (quoteRoot) roots.add(quoteRoot);
     }
-    const quotedContext = Array.from(roots).map(scope => scopePost(scope, article)).filter(quote => quote.id || quote.text || quote.hasMedia);
+    // Keep the main post's established identity/language extraction, but use
+    // owned scopes for quoted cards so nested media/text stays with its source.
+    const quotedContext = Array.from(roots).map(scope => extractPostContext(scope, 1)).filter(Boolean);
     return { ...post, quotedContext, isPromoted: isPromoted(article) };
   }
 

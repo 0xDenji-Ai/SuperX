@@ -1,5 +1,5 @@
 {
   "extensionDescription": {
-    "message": "GrokがXの投稿を自動で詳しく検証。自分の投稿・返信の下書きも検証でき、出典リンクと24時間の閲覧履歴を表示。The X Subscriptionでログイン、または自分のAPI Keyを使用。"
+    "message": "GrokがXの投稿を自動で詳しく検証。投稿・返信の下書きも確認でき、出典と24時間の閲覧履歴を表示。The X SubscriptionまたはAPI Keyに対応。"
   }
 }

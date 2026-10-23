@@ -2,6 +2,17 @@
 
 SuperX release history. The extension's `manifest.json` is the authoritative installed version. Test counts below describe those releases' recorded checks, not live provider or browser-store certification.
 
+## 1.0.0 — Fact-check posts, drafts and images (2026-10-24)
+
+- Release the current post and draft fact-checking workflow as the first 1.0 milestone on GitHub. The Chrome Web Store update is submitted separately using the same installation ZIP; availability there is not implied by the GitHub release.
+
+- Supply published-post pictures, relevant reply ancestors and nested quoted-post pictures as labeled native image inputs, rather than relying only on URL text or a media-presence flag. Keep each source's ownership and distinguish a video thumbnail from a watched video. Continue to treat screenshot text as a claim to investigate, not independent corroboration.
+- Read newly attached draft PNG/JPEG pictures only after an explicit Check, including image-only drafts. Keep the draft as the target and quoted/parent material as supporting context. Changing attachments marks existing findings stale without automatically sending another request. Videos and other non-image draft attachments remain excluded.
+- Limit unpublished draft pictures to four and 8 MiB total decoded bytes. Bound context to 24 images and the existing text budget, with explicit omitted-media notices. Local Build additionally limits all loaded image bytes to 8 MiB and checks advertised image support before sending native ACP image blocks. Failed, unsupported or dropped images report an error instead of silently completing a text-only check; image loading has a bounded deadline.
+- Keep draft image bytes out of persistent history, answer caches and diagnostics. Update the bilingual privacy policy and all twelve UI languages; do not add host permissions. Preserve published 0.9.13 and earlier packages; website privacy publication remains a separate deployment.
+- Keep all thirteen localized package summaries concise while including automatic post checks, manual draft checks, evidence sources, 24-hour browsing history and connection choices. Simplified Chinese: “Grok 自动深入核查 X 帖子，也可核查发帖、回复草稿，附证据来源。查看近 24 小时浏览历史。支持 The X Subscription 或 API Key。”
+- Mark Grok 4.3 and no reasoning as recommended in all three connection settings, with concise localized guidance on fast feed browsing, shorter answers and lower Token use. Keep existing selections and availability checks unchanged.
+
 ## 0.9.13 — Check a post or reply before publishing (Preview, 2026-10-22)
 
 - Add a manual draft-check button in the home composer, new-post dialog, reply dialog and inline reply editor. The round control sits directly before Post/Reply with symmetric native spacing, matches its height and effective disabled colors, and shows a balanced SuperX logo. Empty drafts keep the control visible but disabled; typing enables it without shifting the toolbar. Accessible labels and hover hints describe checking or showing/hiding existing results; checking again is a separate header action. This GitHub Preview does not change Chrome Web Store or GitHub Stable/Latest, which remain 0.9.12.

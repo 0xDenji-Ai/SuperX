@@ -23,6 +23,9 @@
     BUILD_OUTPUT_INVALID:'Grok Build did not return a complete reader answer.',
     BUILD_LANGUAGE_MISMATCH:'Grok Build did not follow the selected output language.',
     BUILD_SEARCH_NOT_PERFORMED:'Grok Build did not confirm the required search-tool use.',
+    BUILD_IMAGE_UNSUPPORTED:'This local Grok service does not support image input. The images were not checked.',
+    BUILD_IMAGE_UNAVAILABLE:'A context image could not be loaded safely. The images were not checked; try again.',
+    BUILD_IMAGE_LIMIT:'The context images exceed the local connection limit. The images were not checked.',
     BUILD_LIMIT:'Grok Build has too many pending tasks. Try again after they finish.',
     RATE_LIMIT:'Grok Build reached a usage limit. Try again later.',
     CANCELED:'The Grok Build request was canceled.',
@@ -40,6 +43,7 @@
   function hostErrorCode(code) {
     if(['BUILD_CANCELLED','BUILD_CANCELED','CANCELLED','CANCELED'].includes(code))return 'CANCELED';
     if(['BUILD_QUOTA','BUILD_RATE_LIMIT','QUOTA_EXCEEDED','RATE_LIMIT','rate_limit_exceeded'].includes(code))return 'RATE_LIMIT';
+    if(code==='MEDIA_INPUT_LIMIT')return 'BUILD_IMAGE_LIMIT';
     return Object.hasOwn(ERROR_MESSAGES,code)?code:'BUILD_UNAVAILABLE';
   }
   function publicError(error) {
@@ -73,10 +77,22 @@
   }
   function taskRequest(post,settings,task,analysis) {
     const request=API.buildRequest(post,{...settings,provider:'api',apiModel:settings.buildModel,apiReasoningEffort:settings.buildReasoningEffort},task,analysis);
-    const prompt=request.instructions+'\n\n'+request.input.map(input=>input.content).join('\n\n');
+    const text=[],images=[];
+    for(const input of request.input){
+      if(typeof input.content==='string'){text.push(input.content);continue;}
+      if(!Array.isArray(input.content))throw errorFor('BUILD_PROTOCOL_ERROR');
+      let imageLabel='';
+      for(const part of input.content){
+        if(part?.type==='input_text'&&typeof part.text==='string'){text.push(part.text);imageLabel=part.text.length<=1000?part.text:'';}
+        else if(part?.type==='input_image'&&typeof part.image_url==='string')images.push({url:part.image_url,label:imageLabel||'Context image '+(images.length+1)});
+        else throw errorFor('BUILD_PROTOCOL_ERROR');
+      }
+    }
+    const prompt=request.instructions+'\n\n'+text.join('\n\n');
     if(prompt.length>MAX_TEXT)throw errorFor('BUILD_OUTPUT_INVALID');
     return {type:'RUN',task,...(post?.kind==='draft'&&task==='verify'?{target:'draft'}:{}),transport:settings.buildTransport,model:settings.buildModel,effort:settings.buildReasoningEffort,
       webSearch:task==='verify'&&settings.webSearch,xSearch:task==='verify'&&settings.xSearch,prompt,
+      ...(images.length?{images}:{}),
       ...(task==='comments'?{outputSchema:request.text.format.schema}:{})};
   }
   function normalizedSettings(settings,post) {
@@ -177,6 +193,7 @@
       const result=await bridge.request({type:'STATUS'});
       const catalog=modelCatalog(result.modelCatalog);
       return {connected:result.connected===true,permission:'granted',installed:result.installed===true,available:result.available===true,
+        ...(typeof result.imageInputSupported==='boolean'?{imageInputSupported:result.imageInputSupported}:{}),
         ...(typeof result.authenticated==='boolean'?{authenticated:result.authenticated}:{}),
         ...(typeof result.version==='string'&&/^[A-Za-z0-9.+_-]{1,80}$/.test(result.version)?{version:result.version}:{}),
         ...(catalog?{modelCatalog:catalog}:{}),...(result.errorCode?{errorCode:hostErrorCode(result.errorCode)}:{})};

@@ -13,6 +13,18 @@ test('bounded RPC frames, malformed messages and individual response IDs cannot 
     const bad=f.socket.request('bad',{});await tick();f.sockets[0].dispatch('message',{data:'not JSON PRIVATE_CODE'});await assert.rejects(bad,error=>error.code==='BUILD_PROTOCOL_ERROR'&&!error.message.includes('PRIVATE'));assert.equal(f.socket.connected,false);
   }finally{f.socket.close();}
 });
+
+test('only outgoing image prompts get the larger bound while incoming messages remain limited',async()=>{
+  const f=socket();try{
+    await f.socket.open();
+    f.socket.send({jsonrpc:'2.0',method:'session/prompt',params:{prompt:[{type:'image',data:'A'.repeat(1200000)}]}});
+    assert.equal(f.messages.at(-1).params.prompt[0].data.length,1200000);
+    assert.throws(()=>f.socket.send({jsonrpc:'2.0',method:'other',params:{text:'A'.repeat(1200000)}}),{code:'BUILD_LIMIT'});
+    assert.throws(()=>f.socket.send({jsonrpc:'2.0',method:'session/prompt',params:{prompt:[{type:'image',data:'A'.repeat(16*1024*1024)}]}}),{code:'BUILD_LIMIT'});
+    f.sockets[0].dispatch('message',{data:JSON.stringify({jsonrpc:'2.0',method:'session/update',params:{text:'A'.repeat(1000000)}})});
+    assert.equal(f.socket.connected,false);
+  }finally{f.socket.close();}
+});
 test('pending limits, abort and timeout affect only the matching RPC without replaying it',async()=>{
   const f=socket({onMessage:()=>true},{requestTimeoutMs:20});const keepAlive=setTimeout(()=>{},1000);try{
     const controller=new AbortController(),aborted=f.socket.request('abort',{}, {signal:controller.signal});await tick();controller.abort();await assert.rejects(aborted,{code:'BUILD_CANCELLED'});

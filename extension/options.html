@@ -82,12 +82,11 @@
             <div class="field model-field">
               <label for="api-model" data-i18n="options.model">Model</label>
               <select id="api-model" required dir="ltr" aria-describedby="model-help api-model-status"></select>
-              <p id="model-help" class="help" data-i18n="options.modelHelp">Grok 4.3 is a fast, lower-cost starting point. Check pricing and model access for your account.</p>
               <p id="api-model-status" class="help field-error" role="status" aria-live="polite" hidden></p>
               <div class="field reasoning-field">
                 <label for="api-reasoning-effort" data-i18n="options.reasoning">Reasoning effort</label>
-                <select id="api-reasoning-effort" required aria-describedby="reasoning-help api-model-status"></select>
-                <p id="reasoning-help" class="help" data-i18n="options.reasoningHelp">Only supported levels are shown. Higher effort may take longer and use more Tokens.</p>
+                <select id="api-reasoning-effort" required aria-describedby="model-help api-model-status"></select>
+                <p id="model-help" class="help" data-i18n="options.fastFactCheckHelp">Grok 4.3 with no reasoning suits feed browsing: usually faster, shorter answers with fewer Tokens.</p>
               </div>
               <div class="model-actions">
                 <button id="fast-preset" class="text-button" type="button" data-i18n="options.fastPreset">Use fast defaults</button>
@@ -123,14 +122,15 @@
             </div>
             <div class="field model-field">
               <label for="oauth-model" data-i18n="options.model">Model</label>
-              <select id="oauth-model" required dir="ltr" aria-describedby="oauth-model-help oauth-model-status"></select>
+              <select id="oauth-model" required dir="ltr" aria-describedby="oauth-model-help oauth-recommendation-help oauth-model-status"></select>
               <p id="oauth-model-help" class="help" data-i18n="oauth.modelHelp">Use the models available to your account.</p>
               <p id="oauth-model-status" class="help field-error" role="status" aria-live="polite"></p>
               <button id="oauth-refresh-models" class="text-button" type="button" data-i18n="oauth.refreshModels">Refresh available models</button>
             </div>
             <div class="field">
               <label for="oauth-reasoning-effort" data-i18n="options.reasoning">Reasoning effort</label>
-              <select id="oauth-reasoning-effort" required aria-describedby="oauth-model-status"></select>
+              <select id="oauth-reasoning-effort" required aria-describedby="oauth-recommendation-help oauth-model-status"></select>
+              <p id="oauth-recommendation-help" class="help" data-i18n="options.fastFactCheckHelp">Grok 4.3 with no reasoning suits feed browsing: usually faster, shorter answers with fewer Tokens.</p>
             </div>
           </div>
           <div id="api-concurrency-field" class="field concurrency-field">
@@ -166,14 +166,15 @@
             <div class="connection-actions"><button id="clear-build-connection" class="text-button" type="button" data-i18n="build.clear">Forget local connection</button></div>
             <div class="field">
               <label for="build-model" data-i18n="options.model">Model</label>
-              <select id="build-model" required aria-describedby="build-model-help build-fast-help build-model-status"></select>
+              <select id="build-model" required aria-describedby="build-model-help build-fast-help build-recommendation-help build-model-status"></select>
               <p id="build-model-help" class="help" data-i18n="options.buildModelHelp">Model settings are saved separately from API mode. Available models and reasoning levels are checked when connecting.</p>
               <p id="build-fast-help" class="help" hidden></p>
               <p id="build-model-status" class="help field-error" role="status" aria-live="polite"></p>
             </div>
             <div class="field">
               <label for="build-reasoning-effort" data-i18n="options.reasoning">Reasoning effort</label>
-              <select id="build-reasoning-effort" required aria-describedby="build-model-status"></select>
+              <select id="build-reasoning-effort" required aria-describedby="build-recommendation-help build-model-status"></select>
+              <p id="build-recommendation-help" class="help" data-i18n="options.fastFactCheckHelp">Grok 4.3 with no reasoning suits feed browsing: usually faster, shorter answers with fewer Tokens.</p>
             </div>
             <div class="connection-check">
               <button id="check-build" class="secondary-button" type="button" data-i18n="options.checkBuild">Check connection</button>

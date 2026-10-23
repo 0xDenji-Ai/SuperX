@@ -245,6 +245,33 @@ test('extracts the outer post while preserving a quoted role-link context', () =
   assert.equal(result.quotedContext[0].text, 'Quoted claim');
 });
 
+test('published media stays attached to its own source through nested quotes and distinguishes video thumbnails',()=>{
+  const image=(name,alt='')=>e('img',{src:`https://pbs.twimg.com/media/${name}.jpg?name=small`,alt});
+  const nested=e('div',{role:'link'},[header('deep','303'),tweetText('Deep source.'),image('deep','Deep screenshot')]);
+  const quoted=e('div',{role:'link'},[header('quoted','302'),tweetText('Quoted source.'),
+    e('img',{src:'https://pbs.twimg.com/ext_tw_video_thumb/302/example.jpg?name=small',alt:'Video cover'}),
+    e('div',{'data-testid':'videoPlayer'}),nested]);
+  const outer=e('article',{'data-testid':'tweet'},[header('author','301'),tweetText('Main source.'),image('main','Main screenshot'),quoted]);
+  const result=core.extractPost(outer);
+  assert.equal(result.text,'Main source.');assert.deepEqual(result.images,[{url:'https://pbs.twimg.com/media/main.jpg',alt:'Main screenshot'}]);
+  assert.equal(result.hasVideo,undefined);
+  const quote=result.quotedContext[0];assert.equal(quote.text,'Quoted source.');assert.equal(quote.id,'302');assert.equal(quote.hasVideo,true);
+  assert.deepEqual(quote.images,[{url:'https://pbs.twimg.com/ext_tw_video_thumb/302/example.jpg',alt:'Video cover',kind:'video-thumbnail'}]);
+  assert.equal(quote.quotedContext[0].id,'303');assert.equal(quote.quotedContext[0].text,'Deep source.');
+  assert.deepEqual(quote.quotedContext[0].images,[{url:'https://pbs.twimg.com/media/deep.jpg',alt:'Deep screenshot'}]);
+});
+
+test('media-only native previews retain published pictures without inventing a permalink or inheriting quoted images',()=>{
+  const quoted=e('button',{},[e('div',{'data-testid':'User-Name'},[],'@quoted'),tweetText('Quoted words.'),
+    e('img',{src:'https://pbs.twimg.com/media/quote.png',alt:'Quoted image'})]);
+  const preview=e('button',{},[e('div',{'data-testid':'User-Name'},[],'@author'),
+    e('img',{src:'https://pbs.twimg.com/media/own.png',alt:'Screenshot has the primary claim'}),quoted]);
+  const result=core.extractPostContext(preview);
+  assert.equal(result.text,'');assert.equal(result.snapshotOnly,true);assert.equal(result.id,null);assert.equal(result.hasMedia,true);
+  assert.deepEqual(result.images,[{url:'https://pbs.twimg.com/media/own.png',alt:'Screenshot has the primary claim'}]);
+  assert.deepEqual(result.quotedContext[0].images,[{url:'https://pbs.twimg.com/media/quote.png',alt:'Quoted image'}]);
+});
+
 test('a nested quoted article appearing before outer content cannot become the outer post', () => {
   const quoted = e('article', {}, [header('inside', '55'), tweetText('Inside')]);
   const article = e('article', {}, [quoted, header('outside', '66'), tweetText('Outside')]);

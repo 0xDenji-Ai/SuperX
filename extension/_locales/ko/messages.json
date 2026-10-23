@@ -1,5 +1,5 @@
 {
   "extensionDescription": {
-    "message": "Grok으로 X 게시물을 자동 심층 검증하고 내 게시물·답글 초안도 확인하세요. 출처 링크와 최근 24시간 기록 제공. The X Subscription 로그인 또는 개인 API Key 지원."
+    "message": "Grok이 X 게시물을 자동 심층 검증합니다. 내 게시물·답글 초안도 확인하세요. 출처와 24시간 방문 기록 제공. The X Subscription 또는 API Key 지원."
   }
 }

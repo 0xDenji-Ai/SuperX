@@ -1754,102 +1754,102 @@
   ], {
     en:[
       'Check draft','Checking…','SuperX · Draft fact-check','Collapse','Show check','Show full answer','Show less',
-      'Draft changed. Check again to update.','Check again','Enter a draft to fact-check.','Draft is too long to check.',
+      'Draft changed. Check again to update.','Check again',"Enter text or add an image to fact-check.",'Draft is too long to check.',
       'Reply context included','Could not complete this check.','Open Settings',
       'Only sent when you click Check draft.','The editor closed. Your check is kept on this page.',
       'Model & tokens','Connection changed. Check this draft again.','This check is incomplete.'
     ],
     'zh-CN':[
       '核查草稿','核查中…','SuperX · 草稿核查','收起','查看核查','展开全文','收起全文',
-      '草稿已修改，重新核查以更新。','重新核查','输入内容后核查。','草稿过长，无法核查。',
+      '草稿已修改，重新核查以更新。','重新核查',"输入文字或添加图片后核查。",'草稿过长，无法核查。',
       '已包含回复上下文','未能完成本次核查。','打开设置',
       '点击核查草稿时才会发送内容。','编辑器已关闭，本页保留核查结果。',
       '模型与 Token','连接已更改，请重新核查草稿。','本次核查尚未完成。'
     ],
     'zh-TW':[
       '查核草稿','查核中…','SuperX · 草稿查核','收合','查看查核','展開全文','收合全文',
-      '草稿已修改，請重新查核以更新。','重新查核','輸入內容後查核。','草稿過長，無法查核。',
+      '草稿已修改，請重新查核以更新。','重新查核',"輸入文字或加入圖片後查核。",'草稿過長，無法查核。',
       '已包含回覆上下文','未能完成本次查核。','開啟設定',
       '點選查核草稿時才會傳送內容。','編輯器已關閉，本頁保留查核結果。',
       '模型與 Token','連線已變更，請重新查核草稿。','本次查核尚未完成。'
     ],
     ja:[
       '下書きを確認','確認中…','SuperX · 下書きの事実確認','折りたたむ','確認結果を表示','全文を表示','表示を減らす',
-      '下書きが変更されました。再確認して更新してください。','再確認','確認する内容を入力してください。','下書きが長すぎるため確認できません。',
+      '下書きが変更されました。再確認して更新してください。','再確認',"テキストを入力するか画像を追加して確認してください。",'下書きが長すぎるため確認できません。',
       '返信元の内容を含む','確認を完了できませんでした。','設定を開く',
       '「下書きを確認」を押したときだけ送信します。','編集欄を閉じました。確認結果はこのページに保持されます。',
       'モデルとトークン','接続が変更されました。下書きを再確認してください。','この確認は未完了です。'
     ],
     ko:[
       '초안 확인','확인 중…','SuperX · 초안 사실 확인','접기','확인 결과 보기','전체 답변 보기','간략히 보기',
-      '초안이 변경되었습니다. 다시 확인해 갱신하세요.','다시 확인','확인할 내용을 입력하세요.','초안이 너무 길어 확인할 수 없습니다.',
+      '초안이 변경되었습니다. 다시 확인해 갱신하세요.','다시 확인',"확인할 텍스트를 입력하거나 이미지를 추가하세요.",'초안이 너무 길어 확인할 수 없습니다.',
       '답글의 원문 맥락 포함','확인을 완료하지 못했습니다.','설정 열기',
       '초안 확인을 누를 때만 내용을 전송합니다.','편집기가 닫혔습니다. 확인 결과는 이 페이지에 유지됩니다.',
       '모델 및 토큰','연결이 변경되었습니다. 초안을 다시 확인하세요.','이번 확인은 완료되지 않았습니다.'
     ],
     es:[
       'Verificar borrador','Verificando…','SuperX · Verificación del borrador','Contraer','Ver verificación','Ver respuesta completa','Ver menos',
-      'El borrador cambió. Vuelve a verificarlo para actualizar.','Verificar de nuevo','Escribe un borrador para verificarlo.','El borrador es demasiado largo para verificarlo.',
+      'El borrador cambió. Vuelve a verificarlo para actualizar.','Verificar de nuevo',"Escribe texto o añade una imagen para verificar.",'El borrador es demasiado largo para verificarlo.',
       'Incluye el contexto de la respuesta','No se pudo completar la verificación.','Abrir ajustes',
       'Solo se envía al pulsar Verificar borrador.','El editor se cerró. La verificación se conserva en esta página.',
       'Modelo y tokens','La conexión cambió. Vuelve a verificar el borrador.','Esta verificación está incompleta.'
     ],
     fr:[
       'Vérifier le brouillon','Vérification…','SuperX · Vérification du brouillon','Réduire','Voir la vérification','Voir la réponse complète','Voir moins',
-      'Le brouillon a changé. Relancez la vérification pour actualiser.','Vérifier à nouveau','Saisissez un brouillon à vérifier.','Le brouillon est trop long pour être vérifié.',
+      'Le brouillon a changé. Relancez la vérification pour actualiser.','Vérifier à nouveau',"Saisissez du texte ou ajoutez une image à vérifier.",'Le brouillon est trop long pour être vérifié.',
       'Contexte de la réponse inclus','La vérification n’a pas pu aboutir.','Ouvrir les paramètres',
       'Envoyé uniquement en cliquant sur Vérifier le brouillon.','L’éditeur est fermé. La vérification reste sur cette page.',
       'Modèle et tokens','La connexion a changé. Vérifiez à nouveau le brouillon.','Cette vérification est incomplète.'
     ],
     de:[
       'Entwurf prüfen','Wird geprüft…','SuperX · Entwurfsprüfung','Einklappen','Prüfung anzeigen','Ganze Antwort anzeigen','Weniger anzeigen',
-      'Entwurf geändert. Zum Aktualisieren erneut prüfen.','Erneut prüfen','Entwurf zum Prüfen eingeben.','Der Entwurf ist zu lang zum Prüfen.',
+      'Entwurf geändert. Zum Aktualisieren erneut prüfen.','Erneut prüfen',"Text eingeben oder ein Bild zum Prüfen hinzufügen.",'Der Entwurf ist zu lang zum Prüfen.',
       'Antwortkontext enthalten','Die Prüfung konnte nicht abgeschlossen werden.','Einstellungen öffnen',
       'Wird erst beim Klick auf Entwurf prüfen gesendet.','Der Editor wurde geschlossen. Die Prüfung bleibt auf dieser Seite.',
       'Modell und Tokens','Verbindung geändert. Den Entwurf erneut prüfen.','Diese Prüfung ist unvollständig.'
     ],
     pt:[
       'Verificar rascunho','Verificando…','SuperX · Verificação do rascunho','Recolher','Ver verificação','Ver resposta completa','Ver menos',
-      'O rascunho mudou. Verifique novamente para atualizar.','Verificar novamente','Digite um rascunho para verificar.','O rascunho é longo demais para verificar.',
+      'O rascunho mudou. Verifique novamente para atualizar.','Verificar novamente',"Digite texto ou adicione uma imagem para verificar.",'O rascunho é longo demais para verificar.',
       'Contexto da resposta incluído','Não foi possível concluir a verificação.','Abrir configurações',
       'Enviado apenas ao clicar em Verificar rascunho.','O editor foi fechado. A verificação permanece nesta página.',
       'Modelo e tokens','A conexão mudou. Verifique o rascunho novamente.','Esta verificação está incompleta.'
     ],
     ar:[
       'تحقّق من المسودة','جارٍ التحقق…','SuperX · التحقق من المسودة','طي','عرض التحقق','عرض الإجابة كاملة','عرض أقل',
-      'تغيّرت المسودة. تحقّق مجددًا لتحديث النتيجة.','تحقّق مجددًا','أدخل مسودة للتحقق منها.','المسودة أطول من أن يتم التحقق منها.',
+      'تغيّرت المسودة. تحقّق مجددًا لتحديث النتيجة.','تحقّق مجددًا',"أدخل نصًا أو أضف صورة للتحقق.",'المسودة أطول من أن يتم التحقق منها.',
       'يشمل سياق الرد','تعذّر إكمال التحقق.','فتح الإعدادات',
       'لا يُرسل المحتوى إلا عند الضغط على تحقّق من المسودة.','أُغلق المحرر. تبقى نتيجة التحقق في هذه الصفحة.',
       'النموذج والرموز','تغيّر الاتصال. تحقّق من المسودة مجددًا.','هذا التحقق غير مكتمل.'
     ],
     ru:[
       'Проверить черновик','Проверка…','SuperX · Проверка черновика','Свернуть','Показать проверку','Показать весь ответ','Показать меньше',
-      'Черновик изменён. Повторите проверку для обновления.','Проверить снова','Введите черновик для проверки.','Черновик слишком длинный для проверки.',
+      'Черновик изменён. Повторите проверку для обновления.','Проверить снова',"Введите текст или добавьте изображение для проверки.",'Черновик слишком длинный для проверки.',
       'Контекст ответа включён','Не удалось завершить проверку.','Открыть настройки',
       'Отправляется только после нажатия «Проверить черновик».','Редактор закрыт. Проверка сохранена на этой странице.',
       'Модель и токены','Подключение изменилось. Проверьте черновик снова.','Эта проверка не завершена.'
     ],
     hi:[
       'ड्राफ़्ट जाँचें','जाँच जारी…','SuperX · ड्राफ़्ट की तथ्य जाँच','समेटें','जाँच देखें','पूरा जवाब देखें','कम दिखाएँ',
-      'ड्राफ़्ट बदल गया है। अपडेट करने के लिए फिर जाँचें।','फिर जाँचें','जाँचने के लिए ड्राफ़्ट लिखें।','ड्राफ़्ट जाँचने के लिए बहुत लंबा है।',
+      'ड्राफ़्ट बदल गया है। अपडेट करने के लिए फिर जाँचें।','फिर जाँचें',"जाँचने के लिए टेक्स्ट लिखें या इमेज जोड़ें।",'ड्राफ़्ट जाँचने के लिए बहुत लंबा है।',
       'जवाब का संदर्भ शामिल है','जाँच पूरी नहीं हो सकी।','सेटिंग खोलें',
       'ड्राफ़्ट जाँचें दबाने पर ही सामग्री भेजी जाती है।','एडिटर बंद है। जाँच का नतीजा इस पेज पर बना रहता है।',
       'मॉडल और टोकन','कनेक्शन बदल गया है। ड्राफ़्ट फिर जाँचें।','यह जाँच अधूरी है।'
     ]
   });
   section(['draft.textOnly'], {
-    en:['Checks draft text only; attachments are not included.'],
-    'zh-CN':['本次仅核查草稿文字，不包含附件。'],
-    'zh-TW':['本次僅查核草稿文字，不包含附件。'],
-    ja:['下書きのテキストのみを確認します。添付ファイルは含まれません。'],
-    ko:['초안의 텍스트만 확인하며 첨부 파일은 포함하지 않습니다.'],
-    es:['Solo verifica el texto del borrador; no incluye los archivos adjuntos.'],
-    fr:['Vérifie uniquement le texte du brouillon, sans les pièces jointes.'],
-    de:['Prüft nur den Entwurfstext; Anhänge sind nicht enthalten.'],
-    pt:['Verifica apenas o texto do rascunho; os anexos não são incluídos.'],
-    ar:['يتحقق من نص المسودة فقط؛ لا يشمل المرفقات.'],
-    ru:['Проверяется только текст черновика; вложения не включены.'],
-    hi:['केवल ड्राफ़्ट के पाठ की जाँच होती है; अटैचमेंट शामिल नहीं हैं।']
+    en:["Videos and other non-image attachments are not included."],
+    'zh-CN':["不包含视频及其他非图片附件。"],
+    'zh-TW':["不包含影片及其他非圖片附件。"],
+    ja:["動画や画像以外の添付ファイルは含まれません。"],
+    ko:["동영상 및 이미지가 아닌 첨부 파일은 포함되지 않습니다."],
+    es:["No se incluyen vídeos ni otros adjuntos que no sean imágenes."],
+    fr:["Les vidéos et les autres pièces jointes non image sont exclues."],
+    de:["Videos und andere Anhänge, die keine Bilder sind, werden nicht einbezogen."],
+    pt:["Vídeos e outros anexos que não sejam imagens não são incluídos."],
+    ar:["لا تُضمَّن مقاطع الفيديو والمرفقات الأخرى غير الصور."],
+    ru:["Видео и другие вложения, не являющиеся изображениями, не включаются."],
+    hi:["वीडियो और इमेज के अलावा अन्य अटैचमेंट शामिल नहीं हैं।"]
   });
   section(['draft.actionCheck','draft.actionShow','draft.actionHide'], {
     en:['Check','Show','Hide'],
@@ -1967,7 +1967,36 @@
     ru:['Вызовы поиска: зафиксированы','Вызовы поиска: не подтверждены','Вызовы поиска: ожидается отчёт','Зафиксированные вызовы не гарантируют достоверные доказательства или правильный ответ.'],
     hi:['खोज कॉल: दर्ज हैं','खोज कॉल: पुष्टि नहीं हुई','खोज कॉल: रिपोर्ट की प्रतीक्षा','दर्ज कॉल मान्य प्रमाण या सही जवाब की गारंटी नहीं देते।']
   });
-  const aliases = {'common.auto':'lang.auto','common.failed':'status.failed','tooltip.collapse':'common.collapse','tooltip.expand':'common.expand'};
+  // Image checks share translated failures across draft and local-service paths.
+  section(["draft.imageUnsupported","draft.imageTooLarge","draft.imageUnavailable","error.mediaLimit","build.imageUnsupported"], {
+    "en": ["Draft images must be PNG or JPEG.","Use up to 4 draft images, 8 MiB total.","An image could not be loaded. Try the check again.","The images exceed this request's size or count limit.","This local Grok service does not support image input."],
+    "zh-CN": ["草稿图片仅支持 PNG 或 JPEG。","草稿最多包含 4 张图片，总大小不超过 8 MiB。","无法加载图片，请重新核查。","图片数量或大小超出本次请求支持的限制。","当前本机 Grok 服务不支持图片输入。"],
+    "zh-TW": ["草稿圖片僅支援 PNG 或 JPEG。","草稿最多包含 4 張圖片，總大小不超過 8 MiB。","無法載入圖片，請重新查核。","圖片數量或大小超出本次請求支援的限制。","目前的本機 Grok 服務不支援圖片輸入。"],
+    "ja": ["下書きの画像はPNGまたはJPEGのみ対応しています。","下書きの画像は最大4枚、合計8 MiBまでです。","画像を読み込めませんでした。もう一度確認してください。","画像の枚数またはサイズが、このリクエストの上限を超えています。","このローカルGrokサービスは画像入力に対応していません。"],
+    "ko": ["초안 이미지는 PNG 또는 JPEG만 지원합니다.","초안 이미지는 최대 4개, 총 8 MiB까지 가능합니다.","이미지를 불러오지 못했습니다. 다시 확인하세요.","이미지 수 또는 크기가 이 요청의 한도를 초과했습니다.","이 로컬 Grok 서비스는 이미지 입력을 지원하지 않습니다."],
+    "es": ["Las imágenes del borrador deben ser PNG o JPEG.","Usa hasta 4 imágenes en el borrador, con un total de 8 MiB.","No se pudo cargar una imagen. Vuelve a verificar.","Las imágenes superan el límite de tamaño o cantidad de esta solicitud.","Este servicio local de Grok no admite imágenes como entrada."],
+    "fr": ["Les images du brouillon doivent être au format PNG ou JPEG.","Ajoutez au maximum 4 images au brouillon, pour un total de 8 MiB.","Impossible de charger une image. Relancez la vérification.","Les images dépassent la limite de taille ou de nombre de cette requête.","Ce service Grok local ne prend pas en charge les images en entrée."],
+    "de": ["Entwurfsbilder müssen PNG- oder JPEG-Dateien sein.","Höchstens 4 Entwurfsbilder mit insgesamt 8 MiB verwenden.","Ein Bild konnte nicht geladen werden. Erneut prüfen.","Anzahl oder Größe der Bilder überschreitet das Limit dieser Anfrage.","Dieser lokale Grok-Dienst unterstützt keine Bildeingabe."],
+    "pt": ["As imagens do rascunho devem ser PNG ou JPEG.","Use até 4 imagens no rascunho, com um total de 8 MiB.","Não foi possível carregar uma imagem. Verifique novamente.","As imagens excedem o limite de tamanho ou quantidade desta solicitação.","Este serviço local do Grok não suporta entrada de imagens."],
+    "ar": ["يجب أن تكون صور المسودة بتنسيق PNG أو JPEG.","استخدم حتى 4 صور في المسودة بحجم إجمالي 8 MiB.","تعذّر تحميل صورة. أعد التحقق.","تتجاوز الصور حد الحجم أو العدد المسموح به لهذا الطلب.","خدمة Grok المحلية هذه لا تدعم إدخال الصور."],
+    "ru": ["Изображения черновика должны быть в формате PNG или JPEG.","Добавьте до 4 изображений в черновик, суммарно не более 8 MiB.","Не удалось загрузить изображение. Повторите проверку.","Количество или размер изображений превышает лимит этого запроса.","Этот локальный сервис Grok не поддерживает ввод изображений."],
+    "hi": ["ड्राफ़्ट की इमेज PNG या JPEG होनी चाहिए।","ड्राफ़्ट में अधिकतम 4 इमेज जोड़ें, कुल आकार 8 MiB तक।","इमेज लोड नहीं हो सकी। फिर से जाँचें।","इमेज का आकार या संख्या इस अनुरोध की सीमा से अधिक है।","यह स्थानीय Grok सेवा इमेज इनपुट का समर्थन नहीं करती।"]
+  });
+  section(['options.recommendedChoice','options.fastFactCheckHelp'], {
+    "en": ["{label} (Recommended)","Grok 4.3 with no reasoning suits feed browsing: usually faster, shorter answers with fewer Tokens."],
+    "zh-CN": ["{label}（推荐）","推荐 Grok 4.3 + 无推理，适合边刷边核查：通常更快、更简洁，Token 消耗更低。"],
+    "zh-TW": ["{label}（推薦）","推薦 Grok 4.3 + 無推理，適合邊瀏覽邊查核：通常更快、更精簡，Token 消耗更低。"],
+    "ja": ["{label}（推奨）","フィード閲覧にはGrok 4.3＋推論なしを推奨。通常、回答が速く簡潔になり、トークン消費も抑えられます。"],
+    "ko": ["{label} (추천)","피드 탐색에는 Grok 4.3 + 추론 없음을 권장합니다. 일반적으로 더 빠르고 간결하며 토큰 사용량이 적습니다."],
+    "es": ["{label} (Recomendado)","Para navegar por el feed, se recomienda Grok 4.3 sin razonamiento: respuestas normalmente más rápidas y breves, con menos Tokens."],
+    "fr": ["{label} (Recommandé)","Pour parcourir le fil, Grok 4.3 sans raisonnement donne généralement des réponses plus rapides et concises, avec moins de Tokens."],
+    "de": ["{label} (Empfohlen)","Für den Feed eignet sich Grok 4.3 ohne Reasoning: meist schnellere, kürzere Antworten mit weniger Tokens."],
+    "pt": ["{label} (Recomendado)","Para navegar no feed, use Grok 4.3 sem raciocínio: respostas geralmente mais rápidas e curtas, com menos Tokens."],
+    "ar": ["{label} (موصى به)","لتصفح الخلاصة، يُنصح بـ Grok 4.3 دون استدلال: إجابات أسرع وأقصر عادةً مع رموز أقل."],
+    "ru": ["{label} (Рекомендуется)","Для просмотра ленты подходит Grok 4.3 без рассуждений: ответы обычно быстрее и короче, расход токенов ниже."],
+    "hi": ["{label} (अनुशंसित)","फ़ीड देखते समय Grok 4.3 बिना तर्क-विचार के उपयुक्त है: आम तौर पर तेज़, संक्षिप्त जवाब और कम टोकन।"]
+  });
+  const aliases = {'common.auto':'lang.auto','common.failed':'status.failed','tooltip.collapse':'common.collapse','tooltip.expand':'common.expand','build.imageUnavailable':'draft.imageUnavailable','build.imageLimit':'error.mediaLimit'};
   for (const language of SUPPORTED_LANGUAGES) {
     for (const [key, source] of Object.entries(aliases)) catalog[language][key] = catalog[language][source];
     Object.freeze(catalog[language]);

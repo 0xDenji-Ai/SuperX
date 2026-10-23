@@ -59,11 +59,18 @@
     if(!choices.some(item=>item.value===savedModel))choices.push({value:savedModel,label:ui.t(core.isNonTextGenerationModel(savedModel)?"options.unsupportedModel":"options.savedModel",uiLanguage,{model:savedModel})});
     return choices;
   }
+  function modelChoiceLabel(item) {
+    return item.value === "grok-4.3" ? ui.t("options.recommendedChoice",uiLanguage,{label:item.label}) : item.label;
+  }
+  function reasoningChoiceLabel(value) {
+    const label=ui.t("options.reasoning."+value,uiLanguage);
+    return value === "none" ? ui.t("options.recommendedChoice",uiLanguage,{label}) : label;
+  }
   function populateOAuthModels(model=currentSettings.oauthModel||"grok-4.3",effort=$("oauth-reasoning-effort").value||currentSettings.oauthReasoningEffort||"none",modelChanged=false){
     const select=$("oauth-model");select.replaceChildren();
-    for(const {value,label}of modelChoices(currentSettings.oauthModel)){const option=document.createElement("option");option.value=value;option.textContent=label;option.disabled=core.isNonTextGenerationModel(value)||Array.isArray(oauthStatus.catalogModels)&&!oauthStatus.catalogModels.some(entry=>entry.id===value&&entry.available!==false);select.append(option);}select.value=model;
+    for(const item of modelChoices(currentSettings.oauthModel)){const {value}=item,option=document.createElement("option");option.value=value;option.textContent=modelChoiceLabel(item);option.disabled=core.isNonTextGenerationModel(value)||Array.isArray(oauthStatus.catalogModels)&&!oauthStatus.catalogModels.some(entry=>entry.id===value&&entry.available!==false);select.append(option);}select.value=model;
     const reasoning=$("oauth-reasoning-effort"),efforts=oauthEfforts(model),preferred=core.reasoningEffort(model),selected=efforts.includes(effort)?effort:!modelChanged&&["none","minimal","low","medium","high","xhigh","auto"].includes(effort)?effort:efforts.includes(preferred)?preferred:efforts[0]||"";reasoning.replaceChildren();
-    for(const value of [...efforts,...(selected&&!efforts.includes(selected)?[selected]:[])]){const option=document.createElement("option");option.value=value;option.textContent=ui.t("options.reasoning."+value,uiLanguage);option.disabled=!efforts.includes(value);reasoning.append(option);}reasoning.value=selected;
+    for(const value of [...efforts,...(selected&&!efforts.includes(selected)?[selected]:[])]){const option=document.createElement("option");option.value=value;option.textContent=reasoningChoiceLabel(value);option.disabled=!efforts.includes(value);reasoning.append(option);}reasoning.value=selected;
   }
   function renderOAuth(){
     const selected=isOAuth(),pending=["authorizing","restoring","refreshing","logging_out"].includes(oauthStatus.state),authorizing=oauthStatus.state==="authorizing",connected=oauthStatus.connected;
@@ -346,7 +353,7 @@
     select.replaceChildren();
     for (const item of modelChoices(currentSettings.apiModel)) {
       const option = document.createElement("option");
-      option.value = item.value;option.textContent = item.label;
+      option.value = item.value;option.textContent = modelChoiceLabel(item);
       option.disabled=core.isNonTextGenerationModel(item.value);
       select.append(option);
     }
@@ -357,7 +364,7 @@
     select.replaceChildren();
     for (const value of core.modelProfile(model)?.efforts || ["auto"]) {
       const option = document.createElement("option");
-      option.value = value;option.textContent = ui.t("options.reasoning."+value,uiLanguage);
+      option.value = value;option.textContent = reasoningChoiceLabel(value);
       select.append(option);
     }
     select.value = core.reasoningEffort(model,effort);
@@ -369,7 +376,7 @@
   function populateBuildModels(model) {
     const select = $("build-model");select.replaceChildren();
     for (const item of buildModelChoices()) {
-      const option = document.createElement("option");option.value=item.value;option.textContent=item.label;
+      const option = document.createElement("option");option.value=item.value;option.textContent=modelChoiceLabel(item);
       const catalog = buildStatus?.modelCatalog;
       option.disabled = core.isNonTextGenerationModel(item.value) || Array.isArray(catalog) && !catalog.some(entry => (typeof entry === "string" ? entry : entry.id) === item.value && entry.available !== false);
       select.append(option);
@@ -383,14 +390,14 @@
     const supported = ["none","minimal","low","medium","high","xhigh"];
     const efforts = Array.isArray(entry?.efforts) ? supported.filter(value => entry.efforts.includes(value)) : supported;
     for (const value of efforts) {
-      const option=document.createElement("option");option.value=value;option.textContent=ui.t("options.reasoning."+value,uiLanguage);select.append(option);
+      const option=document.createElement("option");option.value=value;option.textContent=reasoningChoiceLabel(value);select.append(option);
     }
     const preferred=core.buildReasoningEffort(model);
     const selected=efforts.includes(effort) ? effort : !modelChanged&&supported.includes(effort) ? effort : efforts.includes(preferred) ? preferred : efforts[0] || "";
     // A connection refresh must not silently turn 'none' into a reasoning
     // level. Keep an unavailable saved choice visible until explicitly edited.
     if(selected&&!efforts.includes(selected)){
-      const option=document.createElement("option");option.value=selected;option.textContent=ui.t("options.reasoning."+selected,uiLanguage);option.disabled=true;select.append(option);
+      const option=document.createElement("option");option.value=selected;option.textContent=reasoningChoiceLabel(selected);option.disabled=true;select.append(option);
     }
     select.value=selected;
   }

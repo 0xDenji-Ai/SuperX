@@ -275,35 +275,84 @@ function updateUILanguage(client,value) {
   });
   return uiLanguageWrites;
 }
+function sanitizePostImages(raw) {
+  const images=[],seen=new Set();
+  for(const image of Array.isArray(raw)?raw.slice(0,32):[]){
+    if(!image||typeof image.url!=='string'||image.url.length>2048)continue;
+    let url;try{url=new URL(image.url);}catch{continue;}
+    if(url.protocol!=='https:'||url.hostname!=='pbs.twimg.com'||url.port||url.username||url.password||
+      !/^\/(?:media|(?:ext_tw_|amplify_|tweet_)?video_thumb)\//.test(url.pathname))continue;
+    // CDN renditions are one image. Forward no arbitrary query fields from an
+    // untrusted DOM snapshot, credentials, or fragments to the image reader.
+    const format=url.searchParams.get('format');url.search='';url.hash='';
+    if(format&&/^(?:jpe?g|png|webp|gif)$/i.test(format))url.searchParams.set('format',format.toLowerCase());
+    const normalized=url.href;if(seen.has(normalized))continue;seen.add(normalized);
+    images.push({url:normalized,alt:typeof image.alt==='string'?image.alt.slice(0,500):'',
+      ...(/\/(?:ext_tw_|amplify_|tweet_)?video_thumb\//.test(url.pathname)?{kind:'video-thumbnail'}:{})});
+    if(images.length===4)break;
+  }
+  return images;
+}
 function sanitizePost(raw) {
   const url = Core.canonicalPostUrl(raw?.url);
   const id = url?.match(/\/status\/(\d+)$/)?.[1];
   if (!id || id !== String(raw?.id)) throw new Error('无法识别帖子地址。');
   const text = value => typeof value === 'string' ? value.slice(0,12000) : '';
   const language = value => { const hint=Core.resolvePostLanguage('auto',{language:value,text:''});return hint==='auto'?'':hint; };
-  const context = p => ({id:text(p.id),url:Core.canonicalPostUrl(p.url),text:text(p.text),language:language(p.language),author:text(p.author).slice(0,200),timestamp:text(p.timestamp).slice(0,60),hasMedia:Boolean(p.hasMedia),images:(Array.isArray(p.images)?p.images:[]).slice(0,4).map(img=>({url:GrokFirstAPI.safeUrl(img.url),alt:text(img.alt).slice(0,500)})).filter(img=>img.url && new URL(img.url).hostname === 'pbs.twimg.com')});
-  return {...context(raw),id,url,quotedContext:(Array.isArray(raw.quotedContext)?raw.quotedContext:[]).slice(0,2).map(context)};
+  const context = (p,depth=0) => {
+    const images=sanitizePostImages(p.images);
+    return {id:text(p.id),url:Core.canonicalPostUrl(p.url),text:text(p.text),language:language(p.language),author:text(p.author).slice(0,200),timestamp:text(p.timestamp).slice(0,60),hasMedia:Boolean(p.hasMedia)||p.hasVideo===true||images.length>0,images,
+      ...(p.hasVideo===true||images.some(image=>image.kind==='video-thumbnail')?{hasVideo:true}:{}),
+      ...(p.textTruncated===true?{textTruncated:true}:{}),
+      ...(p.snapshotOnly===true&&!p.id&&!p.url?{snapshotOnly:true}:{}),
+      ...(depth<2&&Array.isArray(p.quotedContext)&&p.quotedContext.length?{quotedContext:p.quotedContext.slice(0,2).filter(quote=>quote&&typeof quote==='object'&&!Array.isArray(quote)).map(quote=>context(quote,depth+1))}:{})};
+  };
+  return {...context(raw),id,url,quotedContext:(Array.isArray(raw.quotedContext)?raw.quotedContext:[]).slice(0,2).filter(quote=>quote&&typeof quote==='object'&&!Array.isArray(quote)).map(quote=>context(quote,1))};
+}
+function sanitizeDraftImages(raw) {
+  if(raw===undefined)return [];
+  if(!Array.isArray(raw)||raw.length>4)throw new Error('无法读取草稿图片。');
+  let total=0;const alphabet='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  return raw.map(image=>{
+    const url=image?.url;if(typeof url!=='string'||url.length>Math.ceil(8*1024*1024/3)*4+32)throw new Error('无法读取草稿图片。');
+    const match=/^data:image\/(png|jpeg);base64,/.exec(url);if(!match)throw new Error('无法读取草稿图片。');
+    const data=url.slice(match[0].length),padding=data.endsWith('==')?2:data.endsWith('=')?1:0;
+    if(!data.length||data.length%4||!/^[A-Za-z0-9+/]+={0,2}$/.test(data))throw new Error('无法读取草稿图片。');
+    const bytes=data.length/4*3-padding;total+=bytes;if(total>8*1024*1024)throw new Error('草稿图片总大小不能超过 8 MiB。');
+    if(padding&&alphabet.indexOf(data[data.length-padding-1])%(padding===2?16:4)!==0)throw new Error('无法读取草稿图片。');
+    const header=[];for(let index=0;index<Math.min(data.length,12);index+=4){
+      const a=alphabet.indexOf(data[index]),b=alphabet.indexOf(data[index+1]),c=alphabet.indexOf(data[index+2]),d=alphabet.indexOf(data[index+3]);
+      header.push((a<<2)|(b>>4));if(c>=0)header.push(((b&15)<<4)|(c>>2));if(d>=0)header.push(((c&3)<<6)|d);
+    }
+    const valid=match[1]==='png'?[137,80,78,71,13,10,26,10].every((value,index)=>header[index]===value):header[0]===255&&header[1]===216&&header[2]===255;
+    if(!valid)throw new Error('无法读取草稿图片。');
+    return {url,alt:typeof image.alt==='string'?image.alt.slice(0,500):''};
+  });
 }
 function sanitizeDraft(raw) {
-  if(!raw||typeof raw!=='object'||Array.isArray(raw)||typeof raw.id!=='string'||!/^[A-Za-z0-9_-]{1,80}$/.test(raw.id)||typeof raw.text!=='string'||!raw.text.trim()||raw.text.length>30000)throw new Error('请输入不超过 30000 字符的草稿。');
+  if(!raw||typeof raw!=='object'||Array.isArray(raw)||typeof raw.id!=='string'||!/^[A-Za-z0-9_-]{1,80}$/.test(raw.id)||typeof raw.text!=='string'||raw.text.length>30000)throw new Error('请输入不超过 30000 字符的草稿。');
+  const images=sanitizeDraftImages(raw.images);if(!raw.text.trim()&&!images.length)throw new Error('请输入草稿文字或添加图片。');
   if(raw.mode!=null&&!['post','reply'].includes(raw.mode))throw new Error('无法识别草稿类型。');
   const mode=raw.mode||(raw.context!=null||raw.threadContext!=null?'reply':'post');
-  const result={kind:'draft',id:raw.id,text:raw.text.trim(),mode,...(raw.hasMedia===true?{hasMedia:true}:{})};
+  const result={kind:'draft',id:raw.id,text:raw.text.trim(),mode,...(images.length?{images}:{}),...(raw.hasMedia===true||images.length?{hasMedia:true}:{}),...(raw.hasUncheckedMedia===true?{hasUncheckedMedia:true}:{})};
   // A native composer preview can lack a permalink. Only its explicit marker
   // permits a text snapshot, never a malformed or mismatched supplied identity.
-  // Quotes have a bounded depth/count; composer attachments remain excluded.
+  // Draft image bytes are accepted only at the target; context requires X URLs.
   const project=(value,limit,quoteDepth=0,full=false)=>{
     if(!value||typeof value!=='object'||Array.isArray(value))throw new Error('无法识别帖子上下文。');
     const snapshot=value.snapshotOnly===true&&value.id==null&&value.url==null;
     let post;
     if(snapshot){
-      if(typeof value.text!=='string'||!value.text.trim()&&value.hasMedia!==true)throw new Error('无法识别帖子快照。');
+      const images=sanitizePostImages(value.images);
+      if(typeof value.text!=='string'||!value.text.trim()&&value.hasMedia!==true&&value.hasVideo!==true&&!images.length)throw new Error('无法识别帖子快照。');
       const hint=Core.resolvePostLanguage('auto',{language:value.language,text:''});
       post={id:null,url:null,text:value.text.slice(0,12000),language:hint==='auto'?'':hint,
-        author:typeof value.author==='string'?value.author.slice(0,200):'',timestamp:typeof value.timestamp==='string'?value.timestamp.slice(0,60):'',hasMedia:value.hasMedia===true};
+        author:typeof value.author==='string'?value.author.slice(0,200):'',timestamp:typeof value.timestamp==='string'?value.timestamp.slice(0,60):'',hasMedia:value.hasMedia===true||value.hasVideo===true||images.length>0,images,
+        ...(value.hasVideo===true||images.some(image=>image.kind==='video-thumbnail')?{hasVideo:true}:{})};
     }else post=sanitizePost(value);
     const shortened=typeof value.text==='string'&&value.text.length>limit;
-    const out=full&&!snapshot?{...post}:{id:post.id,url:post.url,text:post.text,language:post.language,author:post.author,timestamp:post.timestamp,hasMedia:post.hasMedia};
+    const out=full&&!snapshot?{...post}:{id:post.id,url:post.url,text:post.text,language:post.language,author:post.author,timestamp:post.timestamp,hasMedia:post.hasMedia,
+      ...(post.images?.length?{images:post.images}:{}),...(post.hasVideo===true?{hasVideo:true}:{})};
     out.text=post.text.slice(0,limit);
     if(snapshot)out.snapshotOnly=true;
     if(shortened||value.textTruncated===true)out.textTruncated=true;
@@ -350,7 +399,7 @@ function cacheKey(post, s, inputFingerprint) {
   const mode=Core.explanationMode(s);
   const prompts=['fact-check-prompts-v2-deeper',mode==='preset'?Core.DEFAULT_PROMPTS.verify:s.verifyPrompt];
   return JSON.stringify(['GrokFirst-v1',s.provider,s.provider==='build'?['official-ws-v1',s.buildPort,s.buildModel]:s.provider==='oauth'?[s.oauthCredentialId,s.oauthModel]:s.apiModel,s.language,s.webSearch,s.xSearch,
-    'api-v10-model-reasoning',mode,'only',
+    'api-v11-context-images',mode,'only',
     Core.apiPostIdentity(post,s),...prompts,selectedEffort(s)]);
 }
 function sanitizeAnalysis(raw) {
