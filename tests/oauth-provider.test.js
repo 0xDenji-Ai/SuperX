@@ -91,10 +91,10 @@ test('refresh responses may omit a refresh token, and a stale 401 cannot rotate 
   await assert.rejects(h.oauth.ensureAccessToken({expectedCredentialId:webcrypto.randomUUID()}),{code:'OAUTH_ACCOUNT_CHANGED'});assert.equal(h.count(OAuth.CONFIG.tokenEndpoint,'refresh_token'),1);
 });
 
-test('worker restart reuses a matched live session and repairs alarms; a browser restart restores using one refresh grant',async()=>{
+test('worker restart reuses a matched live session and repairs alarms; an extension reload restores valid encrypted access without rotating',async()=>{
   const first=harness();const initial=await first.login();first.oauth.dispose();
   const worker=harness({local:clone(first.local.data),session:clone(first.session.data),profile:first.profile,time:first.time()});const status=await worker.oauth.initialize();assert.equal(status.connected,true);assert.equal(status.credentialId,initial.credentialId);assert.equal(worker.count(OAuth.CONFIG.tokenEndpoint),0);assert.equal(worker.alarms.has(OAuth.ALARMS.refresh),true);worker.oauth.dispose();
-  const browser=harness({local:clone(worker.local.data),session:{},profile:worker.profile,time:worker.time()});const restored=await browser.oauth.initialize();assert.equal(restored.connected,true);assert.equal(restored.credentialId,initial.credentialId);assert.equal(browser.count(OAuth.CONFIG.tokenEndpoint,'refresh_token'),1);assert.equal(browser.calls.some(call=>call.url.includes('/responses')),false);assert.equal(browser.session.data[OAuth.STORAGE_KEY].accessToken,AT);
+  const browser=harness({local:clone(worker.local.data),session:{},profile:worker.profile,time:worker.time()});const restored=await browser.oauth.initialize();assert.equal(restored.connected,true);assert.equal(restored.credentialId,initial.credentialId);assert.equal(browser.count(OAuth.CONFIG.tokenEndpoint,'refresh_token'),0);assert.equal(browser.calls.some(call=>call.url.includes('/responses')),false);assert.equal(browser.session.data[OAuth.STORAGE_KEY].accessToken,AT);
 });
 
 test('access expiry follows the returned lifetime and late or missing alarms have an on-demand refresh fallback',async()=>{
@@ -171,7 +171,7 @@ test('legacy, unmarked or mismatched pending scopes are cleared without resuming
 test('scope reduction leaves connected old grants and their refresh credentials usable without reauthorization',async()=>{
   const first=harness();const initial=await first.login();first.oauth.dispose();const local=clone(first.local.data),session=clone(first.session.data);assert.equal(local[OAuth.STORAGE_KEY].scope,undefined);assert.equal(session[OAuth.STORAGE_KEY].scope,undefined);const encrypted=clone(local[OAuth.STORAGE_KEY].refreshEncrypted);
   const worker=harness({storageRoundTrip:sortedStorage,local,session,profile:first.profile,time:first.time()});await worker.oauth.initialize();assert.equal(worker.oauth.status().connected,true);assert.equal(worker.oauth.status().credentialId,initial.credentialId);assert.equal((await worker.oauth.ensureAccessToken()).accessToken,AT);assert.deepEqual(worker.local.data[OAuth.STORAGE_KEY].refreshEncrypted,encrypted);assert.equal(worker.calls.length,0);worker.oauth.dispose();
-  const browser=harness({storageRoundTrip:sortedStorage,local:clone(worker.local.data),session:{},profile:worker.profile,time:worker.time()});await browser.oauth.initialize();assert.equal(browser.oauth.status().connected,true);assert.equal(browser.oauth.status().credentialId,initial.credentialId);assert.equal(browser.count(OAuth.CONFIG.tokenEndpoint,'refresh_token'),1);assert.equal(browser.count(OAuth.CONFIG.deviceEndpoint),0);assert.equal(browser.count(OAuth.CONFIG.revokeEndpoint),0);
+  const browser=harness({storageRoundTrip:sortedStorage,local:clone(worker.local.data),session:{},profile:worker.profile,time:worker.time()});await browser.oauth.initialize();assert.equal(browser.oauth.status().connected,true);assert.equal(browser.oauth.status().credentialId,initial.credentialId);assert.equal(browser.count(OAuth.CONFIG.tokenEndpoint,'refresh_token'),0);assert.equal(browser.count(OAuth.CONFIG.deviceEndpoint),0);assert.equal(browser.count(OAuth.CONFIG.revokeEndpoint),0);
 });
 
 test('unknown alarms and disconnected startup do not perform authentication or model requests',async()=>{
@@ -268,7 +268,7 @@ test('Chrome-like storage key sorting preserves device login, token commits, ref
   await h.oauth.setRemember(false);assert.equal(h.oauth.status().connected,true);assert.equal(h.local.data[OAuth.STORAGE_KEY].refreshEncrypted,undefined);assert.equal(h.session.data[OAuth.STORAGE_KEY].refreshToken,'SORTED_REFRESH_1');
   await h.oauth.setRemember(true);assert.equal(h.oauth.status().connected,true);assert.equal(h.session.data[OAuth.STORAGE_KEY].refreshToken,undefined);h.oauth.dispose();
   const worker=harness({storageRoundTrip:sortedStorage,local:clone(h.local.data),session:clone(h.session.data),profile:h.profile,time:h.time()});await worker.oauth.initialize();assert.equal(worker.oauth.status().connected,true);assert.equal(worker.oauth.status().credentialId,initial.credentialId);assert.equal(worker.count(OAuth.CONFIG.tokenEndpoint),0);worker.oauth.dispose();
-  const browser=harness({storageRoundTrip:sortedStorage,local:clone(worker.local.data),session:{},profile:worker.profile,time:worker.time()});await browser.oauth.initialize();assert.equal(browser.oauth.status().connected,true);assert.equal(browser.oauth.status().credentialId,initial.credentialId);assert.equal(browser.count(OAuth.CONFIG.tokenEndpoint,'refresh_token'),1);assert.equal(browser.changes.some(value=>value.errorCode==='OAUTH_STORAGE_ERROR'),false);
+  const browser=harness({storageRoundTrip:sortedStorage,local:clone(worker.local.data),session:{},profile:worker.profile,time:worker.time()});await browser.oauth.initialize();assert.equal(browser.oauth.status().connected,true);assert.equal(browser.oauth.status().credentialId,initial.credentialId);assert.equal(browser.count(OAuth.CONFIG.tokenEndpoint,'refresh_token'),0);assert.equal(browser.changes.some(value=>value.errorCode==='OAUTH_STORAGE_ERROR'),false);
 });
 
 test('storage read-back still rejects extra, missing, changed and nested credential fields',async()=>{
@@ -281,4 +281,27 @@ test('storage read-back still rejects extra, missing, changed and nested credent
 test('storage read-back treats catalog array order as meaningful before consuming a refresh token',async()=>{
   let corrupt=false;const h=harness({storageRoundTrip:value=>{const saved=sortedStorage(value);if(corrupt&&saved?.kind==='auth'&&saved.catalogModels?.length>1)saved.catalogModels.reverse();return saved;}});await h.login();corrupt=true;
   await assert.rejects(h.oauth.ensureAccessToken({forceRefresh:true}),{code:'OAUTH_STORAGE_ERROR'});assert.equal(h.oauth.status().connected,false);assert.equal(h.count(OAuth.CONFIG.tokenEndpoint,'refresh_token'),0);
+});
+
+
+test('five extension reloads retain remembered login without network or plaintext local access tokens',async()=>{
+  let h=harness();await h.login();
+  assert.ok(h.local.data[OAuth.STORAGE_KEY].accessEncrypted);
+  assert.equal(JSON.stringify(h.local.data).includes(AT),false);
+  for(let index=0;index<5;index++){
+    h.oauth.dispose();const next=harness({local:clone(h.local.data),session:{},profile:h.profile,time:h.time(),fetch:()=>{throw new Error('must not refresh on reload');}});
+    await next.oauth.initialize();assert.equal(next.oauth.status().connected,true);assert.equal(next.calls.length,0);assert.equal((await next.oauth.ensureAccessToken()).accessToken,AT);h=next;
+  }
+  await h.oauth.setRemember(false);assert.equal(h.local.data[OAuth.STORAGE_KEY].accessEncrypted,undefined);
+});
+
+test('expired access snapshots and legacy records use a normal refresh; uncertain rotation is never replayed',async()=>{
+  const first=harness();await first.login();first.oauth.dispose();
+  for(const legacy of [false,true]){
+    const local=clone(first.local.data);if(legacy)delete local[OAuth.STORAGE_KEY].accessEncrypted;
+    const restored=harness({local,session:{},profile:first.profile,time:legacy?first.time():first.oauth.status().expiresAt+1000});
+    await restored.oauth.initialize();assert.equal(restored.oauth.status().connected,true);assert.equal(restored.count(OAuth.CONFIG.tokenEndpoint,'refresh_token'),1);
+  }
+  const local=clone(first.local.data);local[OAuth.STORAGE_KEY].phase='refreshing';
+  const blocked=harness({local,session:{},profile:first.profile,time:first.time()});await blocked.oauth.initialize();assert.equal(blocked.oauth.status().connected,false);assert.equal(blocked.calls.length,0);
 });

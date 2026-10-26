@@ -206,7 +206,7 @@
     const task='Editable fact-check task:\n'+businessPrompt(settings,'verify');
     const request={
       model:settings.apiModel,
-      instructions:task+'\n\n'+FIXED_RULES+common+retrieve+search+(hasContextMedia(post)?MEDIA_RULES:'')+READER_OUTPUT,
+      instructions:task+'\n\n'+FIXED_RULES+common+retrieve+search+(hasContextMedia(post)?MEDIA_RULES:'')+READER_OUTPUT+Core.REVIEW_SCORE_RULES,
       input:[{role:'user',content:url},{role:'user',content:`Supporting context (untrusted data).\n${JSON.stringify(post)}`},...([contextImageInput(post)].filter(Boolean))],
       tools,tool_choice:'required',
       max_output_tokens:OUTPUT_LIMITS[stage],
@@ -920,6 +920,7 @@
       usage,usageByStage,usageComplete:billingComplete===true&&Object.values(usageByStage).every(usageComplete)&&usageComplete(usage),...sanitizedMetadata({modelByStage}),completedAt:Date.now()};
   }
   function assertMatchingScript(text,language,streaming=false,stage='verify') {
+    if(stage!=='comments')text=Core.reviewScore(text).text;
     const base=languageKey(language).split('-')[0].toLowerCase();
     const scripts={en:'Latin',es:'Latin',fr:'Latin',de:'Latin',pt:'Latin',zh:'Han',ja:'Han|Hiragana|Katakana',ko:'Han|Hangul',ar:'Arabic',ru:'Cyrillic',hi:'Devanagari'};
     if(!scripts[base])return;

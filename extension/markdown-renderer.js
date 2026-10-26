@@ -67,7 +67,8 @@
   }]});
 
   function render(target,text) {
-    const value=String(text??'').slice(0,LIMITS.text);
+    const core=root.XGrokCore||(typeof module==='object'&&module.exports?require('./feed-core.js'):null);
+    const value=(core?.reviewScore?core.reviewScore(String(text??'')).text:String(text??'')).slice(0,LIMITS.text);
     try {
       const document=target.ownerDocument||root.document;
       if(!lexer||!document)throw new Error('Markdown renderer unavailable');

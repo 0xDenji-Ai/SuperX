@@ -3790,3 +3790,29 @@ test('unknown persisted sources stay closed across normalization and require an 
   assert.equal((await restarted.message({type:'SAVE_SETTINGS',settings:{...restarted.local.data.settings,provider:'bad-provider'}})).ok,false);
   await restarted.message({type:'SAVE_SETTINGS',settings:{...restarted.local.data.settings,provider:'api'}});assert.equal((await restarted.message({type:'GET_CONFIG'})).ready,true);assert.equal((await analyze(restarted,restarted.connect(),'explicit-api')).type,'RESULT');
 });
+
+
+test('focus mode blocks non-explicit analysis in the worker and keeps the mode across settings saves',async()=>{
+  const bg=createBackground({settings:{checkMode:'manual'}});await bg.ready();const port=bg.connect();
+  port.send({type:'ANALYZE',requestId:'automatic',post:post(100)});
+  await until(()=>port.messages.some(m=>m.requestId==='automatic'&&m.type==='ERROR'));
+  assert.equal(port.messages.find(m=>m.requestId==='automatic').code,'MANUAL_REQUIRED');
+  assert.equal(bg.apiCalls.length,0);
+  const current=await bg.message({type:'GET_CONFIG'});
+  await bg.message({type:'SAVE_SETTINGS',settings:{...current.settings,dwellMs:5000}});
+  assert.equal(bg.local.data.settings.checkMode,'manual');
+  port.send({type:'ANALYZE',requestId:'explicit',post:post(100),force:true});
+  await until(()=>bg.apiCalls.length===1);
+  port.disconnect();
+});
+
+
+test('popup mode and dwell patches serialize without overwriting each other or provider preferences',async()=>{
+  const bg=createBackground({settings:{checkMode:'manual',provider:'api',language:'ja'}});await bg.ready();
+  const results=await Promise.all([bg.message({type:'SET_CHECK_PREFERENCES',checkMode:'auto'}),bg.message({type:'SET_CHECK_PREFERENCES',dwellMs:7000})]);
+  assert.ok(results.every(r=>r.ok));assert.equal(bg.local.data.settings.checkMode,'auto');assert.equal(bg.local.data.settings.dwellMs,7000);assert.equal(bg.local.data.settings.language,'ja');
+  assert.equal((await bg.message({type:'SET_CHECK_PREFERENCES',dwellMs:-1})).ok,false);
+  const restarted=createBackground({local:bg.local.data});await restarted.ready();
+  const current=await restarted.message({type:'GET_CONFIG'});assert.equal(current.settings.checkMode,'auto');assert.equal(current.settings.dwellMs,7000);
+  const denied=await bg.message({type:'SET_CHECK_PREFERENCES',checkMode:'manual'},{id:'test',url:'https://x.com/home'});assert.equal(denied.ok,false);assert.equal(bg.local.data.settings.checkMode,'auto');
+});

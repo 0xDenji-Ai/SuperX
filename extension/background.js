@@ -611,6 +611,7 @@ chrome.runtime.onConnect.addListener(port => {
       const report=(error,code,extra={})=>send(port,{type:comments?'COMMENT_ERROR':'ERROR',requestId,error,code,...extra});
       const requestId=messageRequestId;
       if(!requestId) return;
+      if(message.type==='ANALYZE'&&settings.checkMode==='manual'&&message.force!==true){report('请点击帖子的 SuperX 核查按钮。','MANUAL_REQUIRED');return;}
       if(client.requestCancellations.get(requestId)!==receivedCancellation)return;
       const currentCredentials=()=>settings.provider==='oauth'?receivedOAuthGeneration===oauthGeneration:settings.provider==='build'?receivedBuildGeneration===buildConnectionGeneration:receivedCredentialGeneration===securityGeneration;
       if(client.cancelEpoch!==receivedEpoch || receivedRevision!==revision||!currentCredentials()){report('任务已取消。','CANCELLED');return;}
@@ -713,6 +714,7 @@ function aggregateBilling(job,current={}){
   return billingMetadata({usage,usageComplete:values.every(value=>value.usageComplete===true&&GrokFirstAPI.usageComplete(value.usage)),usageByStage,model,modelByStage},job.settings.provider);
 }
 function retryPlan(job,error,code,extra={}){
+  if(job.settings.checkMode==='manual')return false;
   if(!logicalJobActive(job)||job.retryAttempts>=Core.AUTO_RETRY_LIMIT||!Core.autoRetryDecision({...error,provider:job.settings.provider}).retryable)return false;
   const safe=job.settings.provider==='build'?SuperXBuild.publicError(error):GrokFirstAPI.publicError(error);
   job.retryPlan={error:safe.error,code,extra};return true;
@@ -1089,6 +1091,13 @@ chrome.runtime.onMessage.addListener((message,sender,respond)=>{
     if(next&&!next.webSearch&&!next.xSearch) {respond({ok:false,errorKey:'options.urlSearchRequired'});return true;}
     queueSecurityMutation({apiKey,remember:message.remember,settings:next})
       .then(respond).catch(()=>respond(securityError()));
+    return true;
+  }
+  if(trustedUI(sender) && message?.type==='SET_CHECK_PREFERENCES') {
+    const patch={};
+    if(message.checkMode!==undefined){if(!['auto','manual'].includes(message.checkMode)){respond({ok:false});return true;}patch.checkMode=message.checkMode;}
+    if(message.dwellMs!==undefined){if(!Number.isFinite(message.dwellMs)||message.dwellMs<0||message.dwellMs>30000){respond({ok:false});return true;}patch.dwellMs=Math.round(message.dwellMs);}
+    queueSettingsMutation(()=>({...settings,...patch})).then(()=>respond({ok:true,settings})).catch(()=>respond({ok:false}));
     return true;
   }
   if(trustedUI(sender) && message?.type==='SAVE_SETTINGS') {

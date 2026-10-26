@@ -183,6 +183,9 @@
             </div>
           </div>
           <div class="field analysis-dwell-field">
+            <label for="check-mode" data-i18n="mode.label">Checking mode</label>
+            <select id="check-mode"><option value="manual" data-i18n="mode.manual">Focus check</option><option value="auto" data-i18n="mode.auto">Automatic checks</option></select>
+            <p class="help" data-i18n="mode.help">Click SuperX to check, or keep the pointer over the post until its border fills.</p>
             <label for="analysis-dwell" data-i18n="options.dwell">Analyze after (seconds)</label>
             <input id="analysis-dwell" type="number" min="0" max="30" step="any" value="1" required aria-describedby="analysis-dwell-help">
             <p id="analysis-dwell-help" class="help" data-i18n="options.dwellHelp">After scrolling stops, posts must stay visible for this long before automatic analysis. Default: 1 second; 0 starts immediately. Manual actions do not wait.</p>

@@ -49,6 +49,11 @@
     ui.apply(document,uiLanguage);
     const reason = loaded ? blockedReason() : null;
     $("enabled-label").textContent = ui.t(loaded ? reason || (currentSettings.enabled ? "common.enabled" : "common.paused") : "common.loading",uiLanguage,{model:currentSettings.oauthModel});
+    if(loaded&&!reason&&currentSettings.checkMode==='manual')$("enabled-label").textContent=ui.t(currentSettings.enabled?'mode.enabled':'mode.paused',uiLanguage);
+    $("check-mode").setAttribute('aria-label',ui.t('mode.label',uiLanguage));
+    for(const mode of ['auto','manual']){$('mode-'+mode).setAttribute('aria-pressed',String(currentSettings.checkMode===mode));$('mode-'+mode).disabled=busy||!loaded;}
+    if(document.activeElement!==$('focus-delay'))$('focus-delay').value=currentSettings.dwellMs/1000;
+    $('focus-delay').disabled=busy||!loaded;
     $("indicator").dataset.enabled = String(loaded && !reason && currentSettings.enabled);
     const build=currentSettings.provider==="build",oauth=currentSettings.provider==="oauth";
     $("provider-label").textContent = ui.t(oauth?"popup.oauthLabel":build ? "popup.buildLabel" : "popup.apiLabel",uiLanguage,{count:currentSettings.apiConcurrency,transport:currentSettings.buildTransport.toUpperCase()});
@@ -113,6 +118,28 @@
       uiLanguage = ui.resolveLanguage(currentSettings.interfaceLanguage,observedUILanguage);
     } catch (error) { errorMessage = {key:"errors.operation",error:error.message}; }
     finally { busy = false;render(); }
+  });
+  for(const mode of ['auto','manual'])$('mode-'+mode).addEventListener('click',async()=>{
+    if(busy||!loaded||currentSettings.checkMode===mode)return;
+    busy=true;errorMessage=null;render();
+    try{
+      const result=await chrome.runtime.sendMessage({type:'SET_CHECK_PREFERENCES',checkMode:mode});
+      if(!result?.ok)throw new Error(result?.error||ui.t('errors.noResponse',uiLanguage));
+      currentSettings=core.normalizeSettings(result.settings);
+    }catch(error){errorMessage={key:'errors.operation',error:error.message};}
+    finally{busy=false;render();}
+  });
+  $('focus-delay').addEventListener('change',async()=>{
+    if(busy||!loaded)return;
+    const value=$('focus-delay').value.trim(),seconds=Number(value);
+    if(!value||!Number.isFinite(seconds)||seconds<0||seconds>30){$('focus-delay').value=currentSettings.dwellMs/1000;return;}
+    busy=true;errorMessage=null;render();
+    try{
+      const result=await chrome.runtime.sendMessage({type:'SET_CHECK_PREFERENCES',dwellMs:Math.round(seconds*1000)});
+      if(!result?.ok)throw new Error(ui.t('errors.noResponse',uiLanguage));
+      currentSettings=core.normalizeSettings(result.settings);
+    }catch(error){errorMessage={key:'errors.operation',error:error.message};}
+    finally{busy=false;render();}
   });
   $("options").addEventListener("click",() => {
     openKeySettings().catch(error => showError("errors.operation",error.message));

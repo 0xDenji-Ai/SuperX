@@ -15,6 +15,11 @@
       <div class="state-card">
         <div class="state-heading"><span id="indicator" class="indicator" aria-hidden="true"></span><strong id="enabled-label">Loading…</strong></div>
         <dl><div><dt data-i18n="options.source">Answer source</dt><dd id="provider-label">—</dd></div></dl>
+        <div id="check-mode" class="mode-switch" role="group" aria-label="Checking mode">
+          <button id="mode-auto" type="button" aria-pressed="true" data-i18n="mode.auto">Automatic checks</button>
+          <button id="mode-manual" type="button" aria-pressed="false" data-i18n="mode.manual">Focus check</button>
+        </div>
+        <label class="dwell-control" for="focus-delay"><span data-i18n="mode.delay">Dwell time</span><span class="dwell-value"><input id="focus-delay" type="number" min="0" max="30" step="0.5" value="5" inputmode="decimal"><span data-i18n="mode.seconds">s</span></span></label>
       </div>
       <button id="toggle" class="primary-button" type="button" disabled>Loading…</button>
       <button id="options" class="secondary-button" type="button" data-i18n="common.openSettings">Open settings</button>

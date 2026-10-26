@@ -83,9 +83,10 @@
     async function commit(value,ticket){
       return serial(ticket,async()=>{
         try{
-          let refreshEncrypted;
+          let refreshEncrypted,accessEncrypted;
           if(value.remember){refreshEncrypted=await keyStore.seal(value.refreshToken);assertCurrent(ticket);if(!keyStore.isEnvelope(refreshEncrypted)||await keyStore.open(refreshEncrypted)!==value.refreshToken)throw failure('OAUTH_STORAGE_ERROR');assertCurrent(ticket);}
-          const local={...base(value,'committing'),...(refreshEncrypted?{refreshEncrypted}:{})};
+          if(value.remember){accessEncrypted=await keyStore.seal(value.accessToken);assertCurrent(ticket);if(!keyStore.isEnvelope(accessEncrypted)||await keyStore.open(accessEncrypted)!==value.accessToken)throw failure('OAUTH_STORAGE_ERROR');assertCurrent(ticket);}
+          const local={...base(value,'committing'),...(refreshEncrypted?{refreshEncrypted,accessEncrypted}:{})};
           const session={...base(value,'ready'),accessToken:value.accessToken,...(!value.remember?{refreshToken:value.refreshToken}:{})};
           await writeVerified(chrome.storage.local,local,ticket);
           await writeVerified(chrome.storage.session,session,ticket);
@@ -241,6 +242,14 @@
           auth={credentialId:local.credentialId,revision:local.revision,remember,expiresAt:local.expiresAt,lifetimeMs:local.lifetimeMs,refreshToken,accessToken:token(session?.accessToken)?session.accessToken:''};
           catalogModels=safeModels(catalogModels);
           const margin=Math.min(60000,Math.max(50,auth.lifetimeMs*0.1));
+          // Extension reload clears storage.session. Restore a still-valid,
+          // encrypted access token rather than rotating on every reload.
+          // In-flight or mismatched records were rejected above; never replay
+          // an uncertain refresh token after an interrupted rotation.
+          if(!auth.accessToken&&remember&&auth.expiresAt-now()>margin&&keyStore.isEnvelope(local.accessEncrypted)){
+            try{const savedAccess=await keyStore.open(local.accessEncrypted);assertCurrent(ticket);if(token(savedAccess)){auth.accessToken=savedAccess;await serial(ticket,()=>writeVerified(chrome.storage.session,{...base(auth,'ready'),accessToken:savedAccess},ticket));}}catch(error){if(!current(ticket))throw error;auth.accessToken='';}
+          }
+          if(auth.accessToken&&remember&&!local.accessEncrypted&&auth.expiresAt-now()>margin)await commit(auth,ticket);
           if(!auth.accessToken||auth.expiresAt-now()<=margin)await beginRefresh(ticket);
           else{state='connected';errorCode='';changed();await refreshAlarm(ticket);}
           if(current(ticket)&&auth&&!auth.blocked&&!catalogModels.length)await loadCatalogAfterAuthentication(ticket);

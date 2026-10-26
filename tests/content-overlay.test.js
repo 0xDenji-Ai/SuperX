@@ -98,6 +98,58 @@ test('the rail history icon opens local history independently of analysis readin
 });
 
 // The fake DOM records writes to the actual X nodes while giving the extension
+function focusFixture(overrides={}) {
+  const page=fixture();
+  for(const article of page.articles){
+    const header=page.document.createElement('div'),name=page.document.createElement('div'),caret=page.document.createElement('button');
+    name.setAttribute('data-testid','User-Name');caret.setAttribute('data-testid','caret');
+    header.append(name,caret);article.append(header);
+  }
+  page.configure({checkMode:'manual',dwellMs:1000,...overrides});
+  page.focusButtons=()=>page.nodes.filter(node=>node.tagName==='SUPERX-POST-CHECK'&&node.isConnected).map(node=>node.testShadow.querySelector('button'));
+  return page;
+}
+test('focus mode does not analyze while simply browsing; explicit clicks show only one selected card',()=>{
+  const page=focusFixture();page.tick(60000);page.elapse(60000);
+  assert.equal(page.port.sent.filter(m=>m.type==='ANALYZE').length,0);
+  assert.equal(page.displayedCards().length,0);
+  const [first,second]=page.focusButtons();assert.ok(first);assert.ok(second);
+  first.emit('click');page.flush();first.emit('click');page.flush();
+  const request=page.port.sent.find(m=>m.type==='ANALYZE');assert.equal(request.force,true);assert.equal(request.post.id,'100');
+  assert.equal(page.port.sent.filter(m=>m.type==='ANALYZE').length,1);
+  assert.equal(page.displayedCards().length,1);
+  second.emit('click');page.flush();assert.equal(page.displayedCards().length,1);
+  assert.equal(page.port.sent.filter(m=>m.type==='ANALYZE').length,2);
+});
+test('focus hover fills only for continuous dwell and cancels on exit, scrolling and backgrounding',()=>{
+  const page=focusFixture(),article=page.articles[0];
+  article.emit('pointerenter',{pointerType:'mouse'});page.elapse(999);
+  assert.equal(page.port.sent.filter(m=>m.type==='ANALYZE').length,0);
+  article.emit('pointerleave');page.elapse(1001);
+  assert.equal(page.port.sent.filter(m=>m.type==='ANALYZE').length,0);
+  article.emit('pointerenter',{pointerType:'mouse'});page.scroll(0);page.elapse(1001);
+  assert.equal(page.port.sent.filter(m=>m.type==='ANALYZE').length,0);
+  article.emit('pointermove',{pointerType:'mouse'});page.document.hidden=true;page.document.emit('visibilitychange');page.elapse(1001);
+  assert.equal(page.port.sent.filter(m=>m.type==='ANALYZE').length,0);
+  page.document.hidden=false;page.document.emit('visibilitychange');
+  article.emit('pointerenter',{pointerType:'touch'});page.elapse(1001);
+  assert.equal(page.port.sent.filter(m=>m.type==='ANALYZE').length,0);
+  article.emit('pointerenter',{pointerType:'mouse'});page.elapse(1000);
+  assert.equal(page.port.sent.filter(m=>m.type==='ANALYZE').length,1);
+  page.elapse(60000);assert.equal(page.port.sent.filter(m=>m.type==='ANALYZE').length,1);
+});
+test('focus selection survives virtualization and cannot submit recycled post data',()=>{
+  const page=focusFixture();page.focusButtons()[0].emit('click');page.flush();
+  const request=page.port.sent.find(m=>m.type==='ANALYZE');page.port.onMessage.emit({type:'START',requestId:request.requestId});
+  page.articles[0].remove();page.mutate();assert.equal(page.displayedCards().length,0);
+  page.primary.append(page.articles[0]);page.mutate();assert.equal(page.displayedCards().length,1);
+  page.articles[1].postData.id='999';page.focusButtons()[0].emit('click');page.flush();
+  assert.equal(page.port.sent.filter(m=>m.type==='ANALYZE').length,1);
+});
+test('switching back to automatic removes focus buttons and resumes the original behavior',()=>{
+  const page=focusFixture();page.configure({checkMode:'auto',dwellMs:0});
+  assert.equal(page.focusButtons().length,0);assert.equal(page.port.sent.filter(m=>m.type==='ANALYZE').length,2);
+});
 // its own shadow roots. Geometry arithmetic is covered by overlay-layout.test.
 function fixture({postCount=2,connectError=null,historyAck=true}={}) {
   const writes = [], nodes = [], timeouts = new Map(), frames = new Map(), intervals = [];
@@ -172,6 +224,7 @@ function fixture({postCount=2,connectError=null,historyAck=true}={}) {
       }
     }
     appendChild(child) { this.append(child); return child; }
+    insertBefore(child, anchor) { if(child.parentNode)child.remove();const index=this.childNodes.indexOf(anchor);child.parentNode=this;this.childNodes.splice(index<0?this.childNodes.length:index,0,child);return child; }
     prepend(...children) { record(this, 'prepend'); for (const child of [...children].reverse()) { if (child.parentNode) child.remove(); child.parentNode = this; this.childNodes.unshift(child); } }
     replaceChildren(...children) { record(this, 'replaceChildren'); for (const child of this.childNodes) child.parentNode = null; this.childNodes = []; this._text = ''; this.append(...children); }
     remove() { if (this.parentNode) { record(this.parentNode, 'removeChild'); this.parentNode.childNodes = this.parentNode.childNodes.filter(node => node !== this); this.parentNode = null; } }
@@ -2972,7 +3025,7 @@ test('completed answers show token consumption above the answer and move repeate
     const {page,request,card}=tokenFixture();
     page.port.onMessage.emit({type:'RESULT',requestId:request.requestId,cached,result:{provider:'api',text:'Complete answer.',sources:[],searched,verificationStatus:'completed',usage:{total_tokens:140},model:'actual-response-model'}});page.flush();
     const header=assertTokenCount(card,140),status=card.testShadow.querySelector('.status'),box=card.testShadow.querySelector('.card');
-    assert.equal(box.children[0],header,'Usage remains visible before long answer content without a duplicate footer');
+    assert.ok(box.children[0].contains(header),'Usage remains visible before long answer content without a duplicate footer');
     assert.equal(card.testShadow.querySelectorAll('.token-usage').length,1);
     assert.equal(status.hidden,true,'Completed provenance does not repeat as a visible heading for every answer');
     assert.ok(header.title.includes(ui.t(searched?'status.searched':'status.unverified','zh-CN')));
@@ -3688,4 +3741,84 @@ test('individual subscription stream, usage and permission failures never freeze
 
 test('a running subscription partial survives virtualization and returns as the same paid job',()=>{
   const page=fixture({postCount:1});oauthFeedConfig(page);const request=page.port.sent.find(message=>message.type==='ANALYZE'),card=page.cards()[0],original=page.articles[0];page.port.onMessage.emit({type:'START',requestId:request.requestId});page.port.onMessage.emit({type:'UPDATE',requestId:request.requestId,phase:'verify',text:'Subscription partial before scroll.',usage:{total_tokens:15}});page.flush();const before=page.port.sent.length;original.remove();page.mutate();page.tick(2000);page.port.onMessage.emit({type:'UPDATE',requestId:request.requestId,phase:'verify',text:'Subscription continues while detached.',usage:{total_tokens:24}});page.flush();remountPost(page,original);page.mutate();page.intersect();page.tick(2000);assert.equal(page.cards()[0],card);assert.equal(card.testShadow.querySelector('.answer').textContent,'Subscription continues while detached.');assertTokenCount(card,24);assert.equal(card.testShadow.querySelector('.retry').disabled,true);assert.equal(page.port.sent.slice(before).some(message=>['ANALYZE','CANCEL','CANCEL_IF_QUEUED'].includes(message.type)),false);page.port.onMessage.emit({type:'RESULT',requestId:request.requestId,result:{provider:'oauth',text:'The original subscription job completed.',sources:[],verificationStatus:'completed',usage:{total_tokens:37},model:'grok-4.3'}});page.flush();assert.equal(card.testShadow.querySelector('.answer').textContent,'The original subscription job completed.');assertTokenCount(card,37);assert.equal(page.port.sent.filter(message=>message.type==='ANALYZE').length,1);
+});
+
+
+test('repeated pointer movement inside a post keeps one bounded timer and clicks bypass the dwell',()=>{
+  const page=focusFixture({dwellMs:5000}),article=page.articles[0];article.emit('pointerenter',{pointerType:'mouse'});
+  const timers=page.pendingTimeouts().length;
+  for(let i=0;i<500;i++)article.emit('pointermove',{pointerType:'mouse'});
+  assert.equal(page.pendingTimeouts().length,timers);
+  page.focusButtons()[0].emit('click');page.flush();
+  assert.equal(page.port.sent.filter(m=>m.type==='ANALYZE').length,1);
+  assert.equal(article.querySelector('superx-post-check').hasAttribute('data-waiting'),false);
+  page.elapse(5001);assert.equal(page.port.sent.filter(m=>m.type==='ANALYZE').length,1);
+});
+
+
+test('focus result follows its selected post, respects search space and restores without a new request',()=>{
+  const page=focusFixture(),search=page.document.createElement('form');
+  search.original=true;search.rect={left:900,right:1250,top:6,bottom:50,width:350,height:44};page.sidebar.prepend(search);
+  page.focusButtons()[0].emit('click');page.flush();
+  const request=page.port.sent.find(m=>m.type==='ANALYZE');page.port.onMessage.emit({type:'START',requestId:request.requestId});
+  const header=page.nodes.find(n=>n.className==='rail-head');assert.equal(header.style.top,'90px');
+  page.scroll(20);assert.equal(header.style.top,'70px');
+  page.scroll(40);assert.equal(header.style.top,'58px');
+  const card=page.displayedCards()[0];assert.ok(parseFloat(card.style.top)>=58);
+  assert.ok(parseFloat(card.style.top)+parseFloat(card.style.height)<=page.articles[0].rect.bottom);
+  page.scroll(500);assert.equal(page.displayedCards().length,0);
+  page.scroll(-560);assert.equal(page.displayedCards().length,1);assert.equal(header.style.top,'90px');
+  assert.equal(page.port.sent.filter(m=>m.type==='ANALYZE').length,1);
+});
+
+test('focus button mounts inside the native action row instead of shrinking the author as a third column',()=>{
+  const page=focusFixture(),article=page.articles[0],caret=article.querySelector('[data-testid="caret"]'),header=caret.parentElement;
+  const actions=page.document.createElement('div');actions.computed={display:'flex',flexDirection:'row',alignItems:'center'};
+  actions.append(caret);header.append(actions);page.mutate();
+  const host=article.querySelector('superx-post-check');assert.equal(host.parentElement,actions);
+  assert.equal(header.children.length,2);assert.equal(actions.children[0],host);
+});
+
+
+test('scrolling keeps focus dwell while the pointer stays inside the same post and cancels when it leaves',()=>{
+  const page=focusFixture({dwellMs:1000}),article=page.articles[0];
+  article.emit('pointerenter',{pointerType:'mouse',clientX:500,clientY:180});page.elapse(600);
+  page.scroll(40);page.elapse(160);page.elapse(400);assert.equal(page.port.sent.filter(m=>m.type==='ANALYZE').length,1);
+  const next=page.articles[1];next.emit('pointerenter',{pointerType:'mouse',clientX:500,clientY:400});page.elapse(600);
+  page.scroll(500);page.elapse(400);assert.equal(page.port.sent.filter(m=>m.type==='ANALYZE').length,1);
+});
+
+test('scroll pauses at the prior fraction and resumes with only the remaining dwell',()=>{
+  const page=focusFixture({dwellMs:1000}),article=page.articles[0];
+  article.emit('pointerenter',{pointerType:'mouse',clientX:500,clientY:180});page.elapse(400);
+  page.window.emit('wheel',{target:article});page.scroll(20);
+  const host=article.querySelector('superx-post-check');assert.equal(host.style.getPropertyValue('--start-progress'),'0.4');assert.equal(host.hasAttribute('data-waiting'),false);
+  page.elapse(160);assert.equal(host.hasAttribute('data-waiting'),true);assert.equal(host.style.getPropertyValue('--wait-ms'),'600ms');
+  page.elapse(599);assert.equal(page.port.sent.filter(m=>m.type==='ANALYZE').length,0);
+  page.elapse(1);assert.equal(page.port.sent.filter(m=>m.type==='ANALYZE').length,1);
+});
+
+test('completed score is shown beside usage while streaming metadata stays out of the answer',()=>{
+  const page=focusFixture();page.focusButtons()[0].emit('click');page.flush();
+  const request=page.port.sent.find(m=>m.type==='ANALYZE'),card=page.displayedCards()[0];
+  page.port.onMessage.emit({type:'START',requestId:request.requestId});
+  page.port.onMessage.emit({type:'UPDATE',requestId:request.requestId,text:'Evidence.\n<SUPERX_REVIEW>{"score":82'});page.flush();
+  assert.equal(card.testShadow.querySelector('.answer').textContent,'Evidence.');
+  const text='Evidence.\n<SUPERX_REVIEW>{"score":82,"status":"scored","confidence":"high","reason":"Contradicted by primary evidence."}</SUPERX_REVIEW>';
+  page.port.onMessage.emit({type:'RESULT',requestId:request.requestId,result:{text,usage:{total_tokens:100},sources:[],verificationStatus:'completed'}});page.flush();
+  assert.equal(card.testShadow.querySelector('.answer').textContent,'Evidence.');
+  assert.match(card.testShadow.querySelector('.review-score').textContent,/82/);
+  assert.equal(card.testShadow.querySelector('.review-score').style.color,'var(--gf-score-4)');
+  assert.equal(page.focusButtons()[0].textContent,'已审查');
+});
+
+
+test('focus result scrolling never hides the active scroll container or reintroduces the blue post preview',()=>{
+  const page=focusFixture();page.focusButtons()[0].emit('click');page.flush();
+  const card=page.displayedCards()[0],box=card.testShadow.querySelector('.card');
+  assert.equal(box.querySelector('.selected-post'),null);box.scrollTop=123;
+  let hidden=false,hideCount=0;Object.defineProperty(card,'hidden',{get(){return hidden;},set(value){hidden=value;if(value)hideCount++;}});
+  const overlay=page.nodes.find(n=>n.id==='grokfirst-overlay');
+  page.window.emit('scroll',{target:box,composedPath:()=>[box,card,overlay]});page.flush();
+  assert.equal(hideCount,0);assert.equal(box.scrollTop,123);
 });

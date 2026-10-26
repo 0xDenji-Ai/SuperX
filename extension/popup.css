@@ -32,6 +32,12 @@ dl { margin: 15px 0 0; }
 dl div { display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, 1.2fr); gap: 12px; align-items: start; font-size: 12px; line-height: 1.45; }
 dt { min-width: 0; color: var(--muted); }
 dd { min-width: 0; margin: 0; color: var(--foreground); text-align: end; }
+.mode-switch { display:grid;grid-template-columns:1fr 1fr;gap:3px;padding:3px;margin-top:14px;border:1px solid var(--line);border-radius:999px;background:var(--hover); }
+.mode-switch button { min-height:32px;padding:6px 8px;border:0;color:var(--muted);background:transparent;font-size:12px;white-space:nowrap; }
+.mode-switch button[aria-pressed="true"] { color:var(--background);background:var(--foreground); }
+.mode-switch button:hover:not(:disabled):not([aria-pressed="true"]) { color:var(--foreground); }
+.dwell-control{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:12px;font-size:12px;color:var(--muted)}
+.dwell-value{display:flex;align-items:center;gap:7px}.dwell-value input{box-sizing:border-box;width:64px;height:32px;padding:5px 8px;border:1px solid var(--button-line);border-radius:8px;background:var(--background);color:var(--foreground);font:inherit;font-variant-numeric:tabular-nums;text-align:center}.dwell-value input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 button { display: block; width: 100%; min-width: 0; min-height: 40px; padding: 9px 14px; border-radius: 999px; cursor: pointer; font: inherit; font-size: 14px; line-height: 1.45; font-weight: 700; }
 .primary-button { margin-top: 20px; border: 1px solid var(--foreground); background: var(--foreground); color: var(--background); }
 .primary-button:hover:not(:disabled) { border-color: var(--button-hover); background: var(--button-hover); }

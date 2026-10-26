@@ -1996,6 +1996,16 @@
     "ru": ["{label} (Рекомендуется)","Для просмотра ленты подходит Grok 4.3 без рассуждений: ответы обычно быстрее и короче, расход токенов ниже."],
     "hi": ["{label} (अनुशंसित)","फ़ीड देखते समय Grok 4.3 बिना तर्क-विचार के उपयुक्त है: आम तौर पर तेज़, संक्षिप्त जवाब और कम टोकन।"]
   });
+  const focusCopy={
+    en:['Checking mode','Focus check','Automatic checks','Click SuperX to check, or keep the pointer over a post until the button fills. Leaving or scrolling resets progress. Only the selected post opens in the sidebar.','Check','Focus check enabled','Focus check paused'],
+    'zh-CN':['核查模式','专注核查','自动核查','点击 SuperX 立即核查，或将鼠标停留在帖子内，等按钮进度充满后核查。移开或滚动即重置，仅为选中的帖子打开侧栏。','审查','专注核查已开启','专注核查已暂停'],
+    'zh-TW':['查核模式','專注查核','自動查核','點擊 SuperX 立即查核，或將滑鼠停留在貼文內，等按鈕進度填滿後查核。移開或捲動即重設，只為選中的貼文開啟側欄。','審查','專注查核已開啟','專注查核已暫停']
+  };
+  for(const language of SUPPORTED_LANGUAGES){
+    ['mode.label','mode.manual','mode.auto','mode.help','mode.check','mode.enabled','mode.paused'].forEach((key,index)=>{catalog[language][key]=(focusCopy[language]||focusCopy.en)[index];});
+  }
+  for(const language of SUPPORTED_LANGUAGES){catalog[language]['mode.delay']=language==='zh-CN'?'停留时间':language==='zh-TW'?'停留時間':'Dwell time';catalog[language]['mode.seconds']=language.startsWith('zh')?'秒':'s';}
+  for(const language of SUPPORTED_LANGUAGES)catalog[language]['mode.checked']=language==='zh-CN'?'已审查':language==='zh-TW'?'已審查':'Reviewed';
   const aliases = {'common.auto':'lang.auto','common.failed':'status.failed','tooltip.collapse':'common.collapse','tooltip.expand':'common.expand','build.imageUnavailable':'draft.imageUnavailable','build.imageLimit':'error.mediaLimit'};
   for (const language of SUPPORTED_LANGUAGES) {
     for (const [key, source] of Object.entries(aliases)) catalog[language][key] = catalog[language][source];
